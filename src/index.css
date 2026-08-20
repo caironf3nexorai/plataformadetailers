@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html, body {
+    max-width: 100vw;
+    overflow-x: hidden;
+    color-scheme: dark;
+    @apply bg-graphite-900 text-vapor-100;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
+
+/* Remove spinners from number inputs project-wide */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Custom Dark Scrollbar System - Replaces default Windows scrollbars everywhere */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+::-webkit-scrollbar-track {
+  background: #0F1216; /* graphite-900 */
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2B323C; /* graphite-600 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5D6773; /* vapor-600 */
+}
+
+::-webkit-scrollbar-corner {
+  background: #0F1216;
+}
+
+/* Firefox standard scrollbar styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2B323C #0F1216;
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Archivo', sans-serif;
+    font-variation-settings: 'wdth' 115;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  
+  .animate-shine {
+    animation: shine-sweep 6s infinite linear;
+  }
+}
+
+@keyframes shine-sweep {
+  0% { transform: translateX(-100%); }
+  20% { transform: translateX(400%); }
+  100% { transform: translateX(400%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shine {
+    animation: none !important;
+  }
+}
+
+/* Custom global focus visible ring for accessibility */
+*:focus-visible {
+  @apply outline-none ring-2 ring-amber-500 ring-offset-2 ring-offset-graphite-900;
+}
