@@ -16,7 +16,10 @@ export const BottomNav: React.FC = () => {
   const visibleItems = mainNavItems.filter((i) => i.visible);
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-graphite-800 border-t border-graphite-600 z-50 flex items-center justify-around pb-safe-area-inset-bottom h-[64px] min-h-[64px] px-2">
+    <nav 
+      className="lg:hidden fixed bottom-0 left-0 right-0 bg-graphite-800 border-t border-graphite-600 z-50 flex items-center justify-around h-[64px] min-h-[64px] px-2"
+      style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}
+    >
       {visibleItems.map((item) => (
         <NavLink
           key={item.path}

@@ -1,0 +1,18 @@
+{
+  "name": "Plataforma Detailers",
+  "short_name": "Detailers",
+  "description": "Sistema de Gestão e Operações para Estética Automotiva",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1216",
+  "theme_color": "#0F1216",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
