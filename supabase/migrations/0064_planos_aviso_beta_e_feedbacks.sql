@@ -526,7 +526,7 @@ GRANT EXECUTE ON FUNCTION public.obter_meus_feedbacks() TO authenticated;
 -- 5. TRIGGERS DE BLOQUEIO NO BANCO DE DADOS (CRIAÇÃO DE ATENDIMENTO, CLIENTE, MEMBRO)
 -- ------------------------------------------------------------------------------
 
-DROP FUNCTION IF EXISTS public.checar_limite_trigger();
+DROP FUNCTION IF EXISTS public.checar_limite_trigger() CASCADE;
 CREATE OR REPLACE FUNCTION public.checar_limite_trigger()
 RETURNS TRIGGER
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
