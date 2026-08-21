@@ -194,7 +194,6 @@ RETURNS JSONB
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_tenants UUID[];
   v_tenant_id UUID;
   v_plano TEXT;
   v_limite INTEGER;
@@ -203,11 +202,10 @@ DECLARE
   v_bloqueio_ativo BOOLEAN := false;
   v_permitido BOOLEAN := true;
 BEGIN
-  v_tenants := public.meus_tenants();
-  IF array_length(v_tenants, 1) IS NULL OR array_length(v_tenants, 1) = 0 THEN
+  v_tenant_id := (SELECT public.meus_tenants() LIMIT 1);
+  IF v_tenant_id IS NULL THEN
     RETURN jsonb_build_object('limite', NULL, 'usado', 0, 'excedido', false, 'permitido', true);
   END IF;
-  v_tenant_id := v_tenants[1];
 
   SELECT plano INTO v_plano FROM public.tenants WHERE id = v_tenant_id;
   IF v_plano IS NULL THEN
@@ -321,7 +319,6 @@ RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_tenants UUID[];
   v_tenant_id UUID;
   v_user_id UUID;
   v_papel TEXT;
@@ -333,11 +330,10 @@ BEGIN
     RAISE EXCEPTION 'Usuário não autenticado';
   END IF;
 
-  v_tenants := public.meus_tenants();
-  IF array_length(v_tenants, 1) IS NULL OR array_length(v_tenants, 1) = 0 THEN
+  v_tenant_id := (SELECT public.meus_tenants() LIMIT 1);
+  IF v_tenant_id IS NULL THEN
     RAISE EXCEPTION 'Nenhuma oficina associada';
   END IF;
-  v_tenant_id := v_tenants[1];
 
   -- Obter o papel do usuario na oficina
   SELECT role INTO v_papel
@@ -497,15 +493,13 @@ RETURNS JSONB
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 AS $$
 DECLARE
-  v_tenants UUID[];
   v_tenant_id UUID;
   v_res JSONB;
 BEGIN
-  v_tenants := public.meus_tenants();
-  IF array_length(v_tenants, 1) IS NULL OR array_length(v_tenants, 1) = 0 THEN
+  v_tenant_id := (SELECT public.meus_tenants() LIMIT 1);
+  IF v_tenant_id IS NULL THEN
     RETURN '[]'::jsonb;
   END IF;
-  v_tenant_id := v_tenants[1];
 
   SELECT jsonb_agg(jsonb_build_object(
     'id', f.id,
