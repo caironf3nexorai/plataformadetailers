@@ -866,7 +866,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex flex-col gap-1 text-xs text-vapor-400 font-sans leading-relaxed">
           <strong className="text-vapor-200 font-semibold">Auditoria de Schema & Estado de Entrega:</strong>
           <span>
-            Os status de atendimento auditados no banco são agendamento (<code className="font-mono text-amber-500">agendado</code>, <code className="font-mono text-amber-500">confirmado</code>, <code className="font-mono text-amber-500">em_andamento</code>, <code className="font-mono text-amber-500">concluido</code>) e execução (<code className="font-mono text-amber-500">em_andamento</code>, <code className="font-mono text-amber-500">pausado</code>, <code className="font-mono text-amber-500">finalizado</code>). A conclusão da execução marca o atendimento como <code className="font-mono text-amber-500">concluido</code> instantaneamente. Como não há coluna intermediária de <code className="font-mono text-amber-500">entregue_em</code> no banco, os atendimentos concluídos são consolidados em "Concluídos Hoje" com total integridade.
+            Os status de atendimento auditados no banco acompanham o ciclo de agendamento (Agendado, Confirmado, Em andamento, Concluído) e execução (Em andamento, Pausado, Finalizado). A conclusão da execução marca o atendimento como Concluído instantaneamente, consolidando a produtividade do dia com total integridade.
           </span>
         </div>
       </footer>

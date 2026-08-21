@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { MessageSquarePlus, X, Send, AlertTriangle, Lightbulb, Heart, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { obterNomeDaTela } from '../../utils/nomesDeTela';
 
 export const BotaoFeedbackFlutuante: React.FC = () => {
   const location = useLocation();
@@ -13,6 +14,20 @@ export const BotaoFeedbackFlutuante: React.FC = () => {
   const [mensagem, setMensagem] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [enviadoComSucesso, setEnviadoComSucesso] = useState(false);
+
+  useEffect(() => {
+    const handleSuporteEvent = (e: any) => {
+      if (e.detail) {
+        setTipo(e.detail.tipo || 'erro');
+        if (e.detail.mensagem) {
+          setMensagem(e.detail.mensagem);
+        }
+        setIsOpen(true);
+      }
+    };
+    window.addEventListener('abrir-feedback-suporte', handleSuporteEvent);
+    return () => window.removeEventListener('abrir-feedback-suporte', handleSuporteEvent);
+  }, []);
 
   // Não exibe o botão se estiver no painel /admin
   if (location.pathname.startsWith('/admin')) {
@@ -146,8 +161,8 @@ export const BotaoFeedbackFlutuante: React.FC = () => {
                   />
                 </div>
 
-                <div className="text-[10px] text-vapor-500 font-mono">
-                  Tela atual ({location.pathname}) capturada automaticamente.
+                <div className="text-[11px] text-vapor-400 font-sans">
+                  Enviando a partir de: <strong className="text-vapor-200 font-semibold">{obterNomeDaTela(location.pathname)}</strong>
                 </div>
 
                 {/* Botões */}

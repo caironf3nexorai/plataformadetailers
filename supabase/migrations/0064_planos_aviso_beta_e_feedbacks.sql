@@ -155,7 +155,7 @@ DECLARE
   v_antigo BOOLEAN;
 BEGIN
   IF NOT public.is_platform_admin_editor() THEN
-    RAISE EXCEPTION 'Acesso negado: permissao de escrita requerida';
+    RAISE EXCEPTION 'Apenas o administrador da plataforma pode alterar as configurações do sistema.';
   END IF;
 
   SELECT bloqueio_planos_ativo INTO v_antigo
@@ -420,7 +420,7 @@ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
   IF NOT public.is_platform_admin() THEN
-    RAISE EXCEPTION 'Acesso negado';
+    RAISE EXCEPTION 'Apenas o administrador da plataforma pode visualizar o painel de feedbacks.';
   END IF;
 
   RETURN QUERY
@@ -468,7 +468,7 @@ DECLARE
   v_respondido TIMESTAMPTZ := NULL;
 BEGIN
   IF NOT public.is_platform_admin_editor() THEN
-    RAISE EXCEPTION 'Acesso negado: permissão de escrita requerida';
+    RAISE EXCEPTION 'Apenas o administrador da plataforma pode atualizar ou responder feedbacks.';
   END IF;
 
   IF p_resposta_admin IS NOT NULL AND trim(p_resposta_admin) <> '' THEN

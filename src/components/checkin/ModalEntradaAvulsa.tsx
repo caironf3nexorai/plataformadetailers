@@ -4,8 +4,9 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { User, Car, Wrench, AlertTriangle, Plus, ChevronDown, Check } from 'lucide-react';
+import { User, Car, Wrench, Plus, ChevronDown, Check } from 'lucide-react';
 import { SeletorServicos, type ItemSelecionado } from '../servicos/SeletorServicos';
+import { AlertaErro } from '../ui/AlertaErro';
 
 interface ModalEntradaAvulsaProps {
   isOpen: boolean;
@@ -296,10 +297,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
         </div>
 
         {error && (
-          <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded text-flare-400 text-[12px] flex items-center gap-2">
-            <AlertTriangle size={15} className="shrink-0" />
-            <span>{error}</span>
-          </div>
+          <AlertaErro erro={error} />
         )}
 
         {/* PASSO 1: Selecionar ou Criar Cliente */}

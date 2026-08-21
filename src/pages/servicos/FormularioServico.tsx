@@ -28,6 +28,7 @@ import {
   getFotoPublicUrl,
   DEFAULT_SERVICE_PLACEHOLDER
 } from '../../utils/imagens';
+import { AlertaErro } from '../../components/ui/AlertaErro';
 
 const GRUPOS_SUGESTOES = [
   'Lavagem',
@@ -358,10 +359,7 @@ export const FormularioServico: React.FC = () => {
       </div>
 
       {errorMsg && (
-        <div className="p-3.5 bg-flare-400/10 border border-flare-400/30 rounded flex items-center gap-2 text-flare-400 text-[13px]">
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
+        <AlertaErro erro={errorMsg} />
       )}
 
       {successMsg && (

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
+import { traduzirErro } from '../utils/erros';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -11,7 +12,7 @@ export interface ToastItem {
 
 interface ToastContextData {
   showToast: (message: string, type?: ToastType) => void;
-  showError: (message: string, rawError?: any) => void;
+  showError: (message: string | any, rawError?: any) => void;
   showSuccess: (message: string) => void;
 }
 
@@ -33,22 +34,18 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, 4000);
   }, [removeToast]);
 
-  const showError = useCallback((userMsg: string, rawError?: any) => {
-    if (rawError) {
-      console.error('[Plataforma Detailers Error]', userMsg, rawError);
-    }
-    // Traduz mensagens de banco de dados para português amigável
-    let finalMsg = userMsg;
-    if (rawError?.message) {
-      const dbErr = String(rawError.message).toLowerCase();
-      if (dbErr.includes('does not exist') || dbErr.includes('relation') || dbErr.includes('column')) {
-        finalMsg = `${userMsg} (Ocorreu um erro no servidor. Tente novamente.)`;
-      } else if (dbErr.includes('permission') || dbErr.includes('policy') || dbErr.includes('acesso negado')) {
-        finalMsg = 'Você não possui permissão para realizar esta ação.';
-      } else if (dbErr.includes('network') || dbErr.includes('fetch')) {
-        finalMsg = 'Erro de conexão. Verifique sua internet e tente novamente.';
+  const showError = useCallback((userMsg: string | any, rawError?: any) => {
+    const erroAlvo = rawError || userMsg;
+    const traduzido = traduzirErro(erroAlvo);
+    
+    let finalMsg = traduzido.mensagem;
+    if (typeof userMsg === 'string' && userMsg && !userMsg.includes('SELECT') && !userMsg.includes('ERROR:')) {
+      if (userMsg !== traduzido.mensagem && traduzido.ehInesperado) {
+        finalMsg = `${userMsg}: ${traduzido.mensagem}`;
       }
     }
+    
+    console.error('[Plataforma Detailers Error]', traduzido.codigoRef, rawError || userMsg);
     showToast(finalMsg, 'error');
   }, [showToast]);
 

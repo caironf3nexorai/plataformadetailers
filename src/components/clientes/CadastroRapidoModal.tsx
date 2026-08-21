@@ -6,6 +6,7 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { formatTelefone, formatPlaca } from '../../utils/formatters';
 import { AlertTriangle, Car, Check, UserCheck } from 'lucide-react';
+import { AlertaErro } from '../ui/AlertaErro';
 
 interface CadastroRapidoModalProps {
   isOpen: boolean;
@@ -153,10 +154,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
       maxWidth="lg"
     >
       {errorMsg && (
-        <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded flex items-center gap-2 text-flare-400 text-[13px]">
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>{errorMsg}</span>
-        </div>
+        <AlertaErro erro={errorMsg} />
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
