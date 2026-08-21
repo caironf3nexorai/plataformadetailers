@@ -8,17 +8,17 @@
   }
 
   html, body {
-    max-width: 100vw;
+    width: 100%;
+    min-height: 100vh;
     overflow-x: hidden;
-    overscroll-behavior-y: contain;
+    overflow-y: auto;
     color-scheme: dark;
     @apply bg-graphite-900 text-vapor-100;
   }
 
   #root {
     width: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
+    min-height: 100vh;
   }
 
   /* Prevent automatic zoom on iOS Safari when tapping inputs/selects/textareas */
