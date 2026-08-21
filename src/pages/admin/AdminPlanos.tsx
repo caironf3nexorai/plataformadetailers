@@ -84,8 +84,43 @@ export const AdminPlanos: React.FC = () => {
     }
   };
 
+  const [bloqueioAtivo, setBloqueioAtivo] = useState(false);
+  const [alterandoBloqueio, setAlterandoBloqueio] = useState(false);
+
+  const fetchConfigPlataforma = async () => {
+    try {
+      const { data } = await supabase.rpc('obter_config_plataforma');
+      if (data && typeof data.bloqueio_planos_ativo === 'boolean') {
+        setBloqueioAtivo(data.bloqueio_planos_ativo);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar configuracao da plataforma:', err);
+    }
+  };
+
+  const handleToggleBloqueio = async (novoValor: boolean) => {
+    if (isReadOnly) return;
+    setAlterandoBloqueio(true);
+    try {
+      const { error } = await supabase.rpc('admin_alterar_bloqueio_planos', {
+        p_ativo: novoValor
+      });
+      if (error) throw error;
+      setBloqueioAtivo(novoValor);
+      setMsg({
+        type: 'success',
+        text: `Modo de bloqueio de planos ${novoValor ? 'ATIVADO' : 'DESATIVADO (Modo Aviso)'} com sucesso. Registro salvo na auditoria.`
+      });
+    } catch (err: any) {
+      setMsg({ type: 'error', text: 'Erro ao alterar chave de bloqueio: ' + err.message });
+    } finally {
+      setAlterandoBloqueio(false);
+    }
+  };
+
   useEffect(() => {
     fetchPlanos();
+    fetchConfigPlataforma();
   }, []);
 
   const handleSavePlan = async (codigo: string) => {
@@ -187,6 +222,45 @@ export const AdminPlanos: React.FC = () => {
           <Plus className="w-4 h-4" />
           <span>Criar Novo Plano</span>
         </button>
+      </div>
+
+      {/* Banner da Chave Central Beta */}
+      <div className={`p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+        bloqueioAtivo
+          ? 'bg-rose-500/10 border-rose-500/40 shadow-lg shadow-rose-500/5'
+          : 'bg-amber-500/10 border-amber-500/30 shadow-lg shadow-amber-500/5'
+      }`}>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
+              bloqueioAtivo ? 'bg-rose-500 text-slate-950' : 'bg-amber-500 text-slate-950'
+            }`}>
+              {bloqueioAtivo ? 'Modo Bloqueio Rígido Ativo' : 'Modo Aviso (Beta)'}
+            </span>
+            <span className="text-xs text-slate-400 font-mono">Chave Central da Plataforma</span>
+          </div>
+          <p className="text-xs text-slate-300 font-sans max-w-2xl">
+            {bloqueioAtivo
+              ? 'O bloqueio está ATIVADO. Oficinas Free/Pro que atingirem os limites de atendimentos, clientes ou membros serão impedidas de criar novos registros.'
+              : 'O sistema está em MODO AVISO (Beta). Recursos fora do plano exibidam faixas de orientação âmbar, mas nenhuma funcionalidade está bloqueada para as oficinas em produção.'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={bloqueioAtivo}
+              disabled={isReadOnly || alterandoBloqueio}
+              onChange={(e) => handleToggleBloqueio(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+          </label>
+          <span className="text-xs font-bold text-slate-200">
+            {bloqueioAtivo ? 'Bloqueio Ligado' : 'Chave Desligada'}
+          </span>
+        </div>
       </div>
 
 

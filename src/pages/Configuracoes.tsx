@@ -18,12 +18,13 @@ import { AbaAgendamentoOnline } from '../components/configuracoes/AbaAgendamento
 import { AbaArquivosDigitais } from '../components/configuracoes/AbaArquivosDigitais';
 import { AbaPersonalizacaoPDF } from '../components/configuracoes/AbaPersonalizacaoPDF';
 import { AbaMetaMensal } from './configuracoes/AbaMetaMensal';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FolderArchive, FileText, Target } from 'lucide-react';
+import { AbaFeedbacks } from './configuracoes/AbaFeedbacks';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FolderArchive, FileText, Target, MessageSquare } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { validateImageFile, getFotoPublicUrl } from '../utils/imagens';
 
 interface ConfiguracoesProps {
-  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'arquivos' | 'pdf' | 'meta';
+  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'arquivos' | 'pdf' | 'meta' | 'feedbacks';
 }
 
 export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
@@ -38,7 +39,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     return 'oficina';
   };
 
-  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'arquivos' | 'pdf' | 'meta'>(getTabPadrao());
+  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'arquivos' | 'pdf' | 'meta' | 'feedbacks'>(getTabPadrao());
 
   useEffect(() => {
     if (location.pathname.includes('arquivos-digitais')) {
@@ -541,10 +542,24 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
             Meta Mensal
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('feedbacks')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
+            activeTab === 'feedbacks'
+              ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
+              : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
+          }`}
+        >
+          <MessageSquare size={18} />
+          Meus Feedbacks
+        </button>
       </div>
 
       {/* Conteúdo das Abas */}
       {activeTab === 'meta' && <AbaMetaMensal />}
+      {activeTab === 'feedbacks' && <AbaFeedbacks />}
 
       {activeTab === 'oficina' && (
         <div className="flex flex-col lg:flex-row items-start gap-6">

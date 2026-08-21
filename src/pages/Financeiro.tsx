@@ -33,6 +33,7 @@ import {
 import { useNavigate, Link } from 'react-router-dom';
 
 import { NavegacaoFinanceiro } from '../components/financeiro/NavegacaoFinanceiro';
+import { AvisoRecursoForaDoPlano } from '../components/planos/AvisoRecursoForaDoPlano';
 
 export const Financeiro: React.FC = () => {
   const navigate = useNavigate();
@@ -141,6 +142,7 @@ export const Financeiro: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 pb-12">
+      <AvisoRecursoForaDoPlano featureNome="Financeiro Completo e Margens" planoMinimo="Pro" />
       <PageHeader title="DRE & Saúde Financeira" />
       <NavegacaoFinanceiro />
 

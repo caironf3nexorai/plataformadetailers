@@ -19,6 +19,7 @@ import { formatarCustoUnitario } from '../utils/formatters';
 import { ModalProduto } from '../components/estoque/ModalProduto';
 import { ModalEntradaEstoque } from '../components/estoque/ModalEntradaEstoque';
 import { ModalAjusteEstoque } from '../components/estoque/ModalAjusteEstoque';
+import { AvisoRecursoForaDoPlano } from '../components/planos/AvisoRecursoForaDoPlano';
 
 export const Estoque: React.FC = () => {
   const { tenant, membership } = useAuth();
@@ -213,6 +214,7 @@ export const Estoque: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
+      <AvisoRecursoForaDoPlano featureNome="Controle de Estoque" planoMinimo="Pro" />
       <PageHeader
         title="Estoque & Custos de Produtos"
         action={

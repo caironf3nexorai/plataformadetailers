@@ -25,12 +25,17 @@ export const SidebarNav: React.FC = () => {
   const { isOperador, podeVerFinanceiro, podeGerirEstoque, podeGerirServicos } = usePermissao();
   const { nomePlano } = usePlano();
   const [isPlatformAdminUser, setIsPlatformAdminUser] = useState(false);
+  const [feedbacksNovos, setFeedbacksNovos] = useState(0);
 
   useEffect(() => {
     async function checkAdmin() {
       try {
         const { data } = await supabase.rpc('is_platform_admin');
-        if (data) setIsPlatformAdminUser(true);
+        if (data) {
+          setIsPlatformAdminUser(true);
+          const { data: countData } = await supabase.rpc('admin_obter_contador_feedbacks_novos');
+          if (countData) setFeedbacksNovos(Number(countData));
+        }
       } catch (err) {
         // Silently fail if not admin
       }
@@ -86,14 +91,21 @@ export const SidebarNav: React.FC = () => {
           )}
         </div>
 
-        {/* Botão de Atalho para o Painel Admin da Plataforma */}
+        {/* Botão de Atalho para o Painel Admin da Plataforma com Badge em Âmbar */}
         {isPlatformAdminUser && (
           <NavLink
             to="/admin"
-            className="mt-1 flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-500/20 to-amber-600/20 border border-amber-500/40 text-amber-400 font-bold text-xs py-2 px-3 rounded-lg hover:bg-amber-500/30 transition shadow-inner"
+            className="mt-1 flex items-center justify-between space-x-2 bg-gradient-to-r from-amber-500/20 to-amber-600/20 border border-amber-500/40 text-amber-400 font-bold text-xs py-2 px-3 rounded-lg hover:bg-amber-500/30 transition shadow-inner"
           >
-            <ShieldCheck size={16} className="text-amber-400" />
-            <span>PAINEL ADMIN</span>
+            <div className="flex items-center space-x-2">
+              <ShieldCheck size={16} className="text-amber-400" />
+              <span>PAINEL ADMIN</span>
+            </div>
+            {feedbacksNovos > 0 && (
+              <span className="bg-amber-500 text-graphite-950 font-extrabold px-1.5 py-0.5 rounded-full text-[10px] shadow">
+                {feedbacksNovos}
+              </span>
+            )}
           </NavLink>
         )}
       </div>

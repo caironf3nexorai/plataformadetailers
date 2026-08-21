@@ -30,6 +30,7 @@ import { ContasReceber } from './pages/financeiro/ContasReceber';
 import { ConfigFormasPagamento } from './pages/financeiro/ConfigFormasPagamento';
 import { Configuracoes } from './pages/Configuracoes';
 import { DiluicaoInterna } from './pages/DiluicaoInterna';
+import { PaginaPlanos } from './pages/planos/PaginaPlanos';
 
 // Páginas de Serviços
 import { Servicos } from './pages/Servicos';
@@ -50,6 +51,7 @@ const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then(m =
 const AdminOficinas = lazy(() => import('./pages/admin/AdminOficinas').then(m => ({ default: m.AdminOficinas })));
 const AdminPlanos = lazy(() => import('./pages/admin/AdminPlanos').then(m => ({ default: m.AdminPlanos })));
 const AdminPermissoes = lazy(() => import('./pages/admin/AdminPermissoes').then(m => ({ default: m.AdminPermissoes })));
+const AdminFeedbacks = lazy(() => import('./pages/admin/AdminFeedbacks').then(m => ({ default: m.AdminFeedbacks })));
 const AdminStorage = lazy(() => import('./pages/admin/AdminStorage').then(m => ({ default: m.AdminStorage })));
 const AdminAdmins = lazy(() => import('./pages/admin/AdminAdmins').then(m => ({ default: m.AdminAdmins })));
 
@@ -88,6 +90,7 @@ function App() {
             <Route path="oficinas" element={<AdminOficinas />} />
             <Route path="planos" element={<AdminPlanos />} />
             <Route path="planos/permissoes" element={<AdminPermissoes />} />
+            <Route path="feedbacks" element={<AdminFeedbacks />} />
             <Route path="storage" element={<AdminStorage />} />
             <Route path="administradores" element={<AdminAdmins />} />
           </Route>
@@ -114,6 +117,7 @@ function App() {
               <Route path="atendimento/:id" element={<VisualizarAtendimento />} />
               {/* Rotas restritas para Dono e Gerente (Operador recebe AcessoNegado) */}
               <Route element={<RotaProtegida allowedRoles={['dono', 'gerente']} />}>
+                <Route path="planos" element={<PaginaPlanos />} />
                 <Route path="orcamentos" element={<Orcamentos />} />
                 <Route path="orcamentos/:id" element={<DetalheOrcamento />} />
                 <Route path="estoque" element={<Estoque />} />

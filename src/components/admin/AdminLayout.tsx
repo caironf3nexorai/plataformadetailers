@@ -7,6 +7,7 @@ import {
   ShieldCheck, 
   HardDrive, 
   Users,
+  MessageSquare,
   LogOut, 
   Lock
 } from 'lucide-react';
@@ -19,6 +20,7 @@ export const AdminLayout: React.FC = () => {
     { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
     { label: 'Planos', path: '/admin/planos', icon: CreditCard },
     { label: 'Permissões', path: '/admin/planos/permissoes', icon: ShieldCheck },
+    { label: 'Feedbacks', path: '/admin/feedbacks', icon: MessageSquare },
     { label: 'Storage', path: '/admin/storage', icon: HardDrive },
     { label: 'Administradores', path: '/admin/administradores', icon: Users },
   ];

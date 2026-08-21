@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { SidebarNav } from './SidebarNav';
 import { BottomNav } from './BottomNav';
 import { TopBar } from './TopBar';
+import { BotaoFeedbackFlutuante } from '../feedback/BotaoFeedbackFlutuante';
 
 export const AppShell: React.FC = () => {
   return (
@@ -17,6 +18,7 @@ export const AppShell: React.FC = () => {
         </main>
         
         <BottomNav />
+        <BotaoFeedbackFlutuante />
       </div>
     </div>
   );
