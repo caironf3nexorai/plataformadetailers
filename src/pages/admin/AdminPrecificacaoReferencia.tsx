@@ -16,7 +16,7 @@ import {
 interface ServicoModelo {
   codigo: string;
   nome: string;
-  categoria_padrao: string;
+  grupo?: string;
 }
 
 interface ReferenciaPreco {
@@ -74,7 +74,7 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
       // 1. Carrega serviços modelo
       const { data: modData, error: modErr } = await supabase
         .from('servicos_modelo')
-        .select('codigo, nome, categoria_padrao')
+        .select('codigo, nome, grupo')
         .order('codigo');
       
       if (modErr) throw modErr;
