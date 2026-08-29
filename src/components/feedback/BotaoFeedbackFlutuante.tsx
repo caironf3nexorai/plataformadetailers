@@ -66,15 +66,18 @@ export const BotaoFeedbackFlutuante: React.FC = () => {
 
   return (
     <>
-      {/* Botão Flutuante Discreto no Canto Inferior Direito */}
+      {/* Botão Flutuante Discreto no Canto Inferior Direito (acima da BottomNav no mobile e com safe-area) */}
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40 bg-graphite-800/90 hover:bg-amber-500 text-vapor-200 hover:text-graphite-950 p-3 sm:px-4 sm:py-2.5 rounded-full sm:rounded-lg border border-graphite-600 shadow-xl backdrop-blur-md transition-all flex items-center gap-2 group cursor-pointer"
+        className="fixed right-4 lg:bottom-6 lg:right-6 z-40 bg-graphite-800/90 hover:bg-amber-500 text-vapor-200 hover:text-graphite-950 p-3 lg:px-4 lg:py-2.5 rounded-full lg:rounded-lg border border-graphite-600 shadow-xl backdrop-blur-md transition-all flex items-center gap-2 group cursor-pointer"
+        style={{
+          bottom: 'calc(68px + max(12px, env(safe-area-inset-bottom, 0px)))',
+        }}
         title="Enviar Feedback ou Sugestão"
       >
         <MessageSquarePlus className="w-5 h-5 text-amber-400 group-hover:text-graphite-950 transition-colors" />
-        <span className="hidden sm:inline text-xs font-semibold">Feedback</span>
+        <span className="hidden lg:inline text-xs font-semibold">Feedback</span>
       </button>
 
       {/* Modal de Envio */}
