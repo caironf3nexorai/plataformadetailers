@@ -2,6 +2,7 @@ import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Menu, FlaskConical } from 'lucide-react';
 import { usePermissao } from '../../hooks/usePermissao';
+import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 
 interface TopBarProps {
   onOpenMenu?: () => void;
@@ -63,7 +64,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenMenu, isMenuOpen }) => {
         {title}
       </h1>
 
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         <Link
           to="/diluicao"
           title="Calculadora de Diluição"
@@ -75,6 +76,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenMenu, isMenuOpen }) => {
         >
           <FlaskConical size={20} />
         </Link>
+        <CentralNotificacoesMenu align="right" />
         <button 
           type="button"
           onClick={onOpenMenu}

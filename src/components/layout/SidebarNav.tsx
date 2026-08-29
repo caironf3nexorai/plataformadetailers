@@ -22,6 +22,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
 import { usePlano } from '../../hooks/usePlano';
 import { Badge } from '../ui/Badge';
+import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 import { supabase } from '../../lib/supabase';
 
 interface NavItem {
@@ -100,26 +101,30 @@ export const SidebarNav: React.FC = () => {
     <aside className="hidden lg:flex flex-col w-[240px] h-screen fixed left-0 top-0 bg-graphite-800 border-r border-graphite-600 z-10">
       {/* Header do Tenant e Seletor se houver múltiplos */}
       <div className="p-5 border-b border-graphite-600 flex flex-col gap-2">
-        {userTenants.length > 1 ? (
-          <div className="relative">
-            <select
-              value={tenant?.id || ''}
-              onChange={(e) => trocarTenant(e.target.value)}
-              className="w-full bg-graphite-900 border border-graphite-600 rounded px-2.5 py-1.5 font-display text-[14px] text-amber-500 font-bold outline-none cursor-pointer appearance-none pr-8"
-            >
-              {userTenants.map((ut) => (
-                <option key={ut.tenant.id} value={ut.tenant.id}>
-                  {ut.tenant.nome}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={16} className="absolute right-2.5 top-2.5 text-vapor-400 pointer-events-none" />
-          </div>
-        ) : (
-          <h1 className="font-display text-[16px] text-vapor-100 font-bold tracking-wider truncate">
-            {tenant?.nome || 'Plataforma Detailers'}
-          </h1>
-        )}
+        <div className="flex items-center justify-between gap-2">
+          {userTenants.length > 1 ? (
+            <div className="relative flex-1">
+              <select
+                value={tenant?.id || ''}
+                onChange={(e) => trocarTenant(e.target.value)}
+                className="w-full bg-graphite-900 border border-graphite-600 rounded px-2.5 py-1.5 font-display text-[14px] text-amber-500 font-bold outline-none cursor-pointer appearance-none pr-8"
+              >
+                {userTenants.map((ut) => (
+                  <option key={ut.tenant.id} value={ut.tenant.id}>
+                    {ut.tenant.nome}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={16} className="absolute right-2.5 top-2.5 text-vapor-400 pointer-events-none" />
+            </div>
+          ) : (
+            <h1 className="font-display text-[15.5px] text-vapor-100 font-bold tracking-wider truncate flex-1">
+              {tenant?.nome || 'Plataforma Detailers'}
+            </h1>
+          )}
+
+          <CentralNotificacoesMenu align="left" />
+        </div>
 
         <div className="flex items-center justify-between">
           <Badge tone="amber">Plano {nomePlano}</Badge>

@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Tv
 } from 'lucide-react';
+import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 
 export const AdminLayout: React.FC = () => {
   const { adminLevel, adminEmail } = useAdminAuth();
@@ -88,8 +89,9 @@ export const AdminLayout: React.FC = () => {
               })}
             </nav>
 
-            {/* User info & Exit (Fixed Right) */}
+            {/* User info, Notifications & Exit (Fixed Right) */}
             <div className="flex items-center space-x-2 shrink-0">
+              <CentralNotificacoesMenu align="right" />
               <span className="hidden xl:inline text-[11px] text-slate-400 font-mono max-w-[150px] truncate">
                 {adminEmail}
               </span>
