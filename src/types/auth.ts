@@ -18,6 +18,7 @@ export interface Tenant {
   telefone?: string | null;
   cidade?: string | null;
   uf?: string | null;
+  fuso_horario?: string | null;
   criado_por: string;
   capa_path?: string | null;
   logo_path?: string | null;

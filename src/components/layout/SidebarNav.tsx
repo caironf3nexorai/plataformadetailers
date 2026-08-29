@@ -8,17 +8,34 @@ import {
   FileText,
   Package,
   TrendingUp,
-  Settings,
   LogOut,
   ChevronDown,
   ShieldCheck,
   FlaskConical,
+  Gift,
+  DollarSign,
+  GraduationCap,
+  FolderArchive,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
 import { usePlano } from '../../hooks/usePlano';
 import { Badge } from '../ui/Badge';
 import { supabase } from '../../lib/supabase';
+
+interface NavItem {
+  path: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  visible: boolean;
+  badge?: string | number;
+}
+
+interface NavGroup {
+  titulo: string;
+  itens: NavItem[];
+}
 
 export const SidebarNav: React.FC = () => {
   const { tenant, userTenants, trocarTenant, signOut, profile, membership } = useAuth();
@@ -43,19 +60,41 @@ export const SidebarNav: React.FC = () => {
     checkAdmin();
   }, []);
 
-  const allNavItems = [
-    { path: '/', label: 'Dashboard', icon: LayoutDashboard, visible: !isOperador },
-    { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true },
-    { path: '/clientes', label: 'Clientes', icon: Users, visible: true },
-    { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro() },
-    { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos() },
-    { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque() },
-    { path: '/diluicao', label: 'Diluição', icon: FlaskConical, visible: true },
-    { path: '/financeiro', label: 'Financeiro', icon: TrendingUp, visible: podeVerFinanceiro() },
-    { path: '/configuracoes', label: 'Ajustes', icon: Settings, visible: true },
+  const navGroups: NavGroup[] = [
+    {
+      titulo: 'OPERAÇÃO',
+      itens: [
+        { path: '/', label: 'Dashboard', icon: LayoutDashboard, visible: !isOperador },
+        { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true },
+        { path: '/clientes', label: 'Clientes', icon: Users, visible: true },
+        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro() },
+        { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos() },
+        { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque() },
+      ],
+    },
+    {
+      titulo: 'FINANCEIRO & ESTRATÉGIA',
+      itens: [
+        { path: '/financeiro', label: 'Financeiro', icon: TrendingUp, visible: podeVerFinanceiro() },
+        { path: '/servicos/precificacao', label: 'Precificação', icon: DollarSign, visible: podeVerFinanceiro() },
+      ],
+    },
+    {
+      titulo: 'RECURSOS & CONTEÚDO',
+      itens: [
+        { path: '/treinamentos', label: 'Academia Detailer', icon: GraduationCap, visible: true },
+        { path: '/arquivos-digitais', label: 'Arquivos Digitais', icon: FolderArchive, visible: podeGerirServicos() },
+        { path: '/diluicao', label: 'Diluição', icon: FlaskConical, visible: true },
+        { path: '/indique', label: 'Indique e Ganhe', icon: Gift, visible: true },
+      ],
+    },
+    {
+      titulo: 'GESTÃO & SISTEMA',
+      itens: [
+        { path: '/configuracoes', label: 'Minha Oficina', icon: Building2, visible: true },
+      ],
+    },
   ];
-
-  const visibleItems = allNavItems.filter((i) => i.visible);
 
   return (
     <aside className="hidden lg:flex flex-col w-[240px] h-screen fixed left-0 top-0 bg-graphite-800 border-r border-graphite-600 z-10">
@@ -110,31 +149,49 @@ export const SidebarNav: React.FC = () => {
         )}
       </div>
 
-      {/* Menus Filtrados por Permissão */}
-      <nav className="flex-1 py-4 flex flex-col gap-1 overflow-y-auto">
-        {visibleItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              `relative flex items-center gap-3 px-6 py-3 min-h-[48px] font-sans text-[14px] transition-colors ${
-                isActive
-                  ? 'text-amber-500 font-medium'
-                  : 'text-vapor-400 hover:text-vapor-100'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {isActive && (
-                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-amber-500" />
-                )}
-                <item.icon size={20} className={isActive ? 'text-amber-500' : 'text-vapor-400'} />
-                {item.label}
-              </>
-            )}
-          </NavLink>
-        ))}
+      {/* Menus Filtrados por Permissão e Agrupados por Categoria */}
+      <nav className="flex-1 py-3 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
+        {navGroups.map((grupo) => {
+          const itensVisiveis = grupo.itens.filter((item) => item.visible);
+          if (itensVisiveis.length === 0) return null;
+
+          return (
+            <div key={grupo.titulo} className="flex flex-col">
+              <div className="px-6 pb-1.5 pt-1">
+                <span className="font-mono text-[10px] uppercase font-semibold tracking-wider text-vapor-400/80">
+                  {grupo.titulo}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-0.5">
+                {itensVisiveis.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === '/'}
+                    className={({ isActive }) =>
+                      `relative flex items-center gap-3 px-6 py-2.5 min-h-[40px] font-sans text-[13.5px] transition-colors ${
+                        isActive
+                          ? 'text-amber-500 font-medium bg-graphite-700/40'
+                          : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-700/20'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <div className="absolute left-0 top-0 bottom-0 w-[2.5px] bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
+                        )}
+                        <item.icon size={18} className={isActive ? 'text-amber-500' : 'text-vapor-400'} />
+                        <span className="truncate">{item.label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </nav>
 
       {/* Footer com usuário e logout */}

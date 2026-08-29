@@ -1,12 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Check, X, Sparkles, MessageSquare, ShieldCheck, Zap } from 'lucide-react';
+import { Check, X, Sparkles, ShieldCheck, Zap, CreditCard } from 'lucide-react';
 import { usePermissao } from '../../hooks/usePermissao';
 import { useAuth } from '../../contexts/AuthContext';
+import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
 
 export const PaginaPlanos: React.FC = () => {
   const { isOperador } = usePermissao();
   const { tenant } = useAuth();
+
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [selectedPlano, setSelectedPlano] = useState<{
+    codigo: 'pro' | 'studio';
+    nome: string;
+    preco: string;
+  }>({
+    codigo: 'pro',
+    nome: 'Pro',
+    preco: 'R$ 67',
+  });
 
   // Restrição estrita: Operadores não têm acesso à página de planos
   if (isOperador) {
@@ -18,9 +30,11 @@ export const PaginaPlanos: React.FC = () => {
   const planos = [
     {
       id: 'free',
+      codigo: 'free',
       nome: 'Free',
       descricao: 'Para quem está começando e quer substituir o caderno com segurança.',
       preco: 'R$ 0',
+      precoMensal: 'R$ 0,00',
       periodo: '/mês',
       destaque: false,
       limites: [
@@ -45,9 +59,11 @@ export const PaginaPlanos: React.FC = () => {
     },
     {
       id: 'pro',
+      codigo: 'pro',
       nome: 'Pro',
       descricao: 'Ideal para oficinas em crescimento que buscam mais clientes e lucro real.',
-      preco: 'R$ 147',
+      preco: 'R$ 67',
+      precoMensal: 'R$ 67,00',
       periodo: '/mês',
       destaque: true,
       limites: [
@@ -72,9 +88,11 @@ export const PaginaPlanos: React.FC = () => {
     },
     {
       id: 'studio',
+      codigo: 'studio',
       nome: 'Studio',
       descricao: 'Para operações consolidadas e equipes de alta performance.',
-      preco: 'R$ 297',
+      preco: 'R$ 147',
+      precoMensal: 'R$ 147,00',
       periodo: '/mês',
       destaque: false,
       limites: [
@@ -99,11 +117,14 @@ export const PaginaPlanos: React.FC = () => {
     },
   ];
 
-  const handleContatoSuporte = (planoNome: string) => {
-    const msg = encodeURIComponent(
-      `Olá! Gostaria de saber mais informações sobre o upgrade para o plano ${planoNome} na Plataforma Detailers.`
-    );
-    window.open(`https://wa.me/5511999999999?text=${msg}`, '_blank');
+  const handleAbrirCheckout = (p: typeof planos[0]) => {
+    if (p.codigo === 'free') return;
+    setSelectedPlano({
+      codigo: p.codigo as 'pro' | 'studio',
+      nome: p.nome,
+      preco: p.precoMensal,
+    });
+    setCheckoutModalOpen(true);
   };
 
   return (
@@ -112,9 +133,9 @@ export const PaginaPlanos: React.FC = () => {
       <div className="text-center max-w-3xl mx-auto space-y-3">
         <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
           <Zap className="w-3.5 h-3.5" />
-          Planos e Recursos
+          Planos e Cobrança Recorrente Asaas
         </div>
-        <h1 className="text-2xl sm:text-4xl font-extrabold font-display tracking-tight text-vapor-100">
+        <h1 className="text-2xl sm:text-4xl font-extrabold font-display tracking-tight text-vapor-100 uppercase">
           Escolha o Plano Ideal para a Sua Oficina
         </h1>
         <p className="text-sm sm:text-base text-vapor-400">
@@ -201,17 +222,24 @@ export const PaginaPlanos: React.FC = () => {
                   >
                     Plano Ativo
                   </button>
+                ) : p.codigo === 'free' ? (
+                  <button
+                    disabled
+                    className="w-full py-2.5 rounded-lg bg-graphite-800 text-vapor-500 font-semibold text-sm cursor-default border border-graphite-700"
+                  >
+                    Plano Básico Gratuito
+                  </button>
                 ) : (
                   <button
-                    onClick={() => handleContatoSuporte(p.nome)}
+                    onClick={() => handleAbrirCheckout(p)}
                     className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
                       p.destaque
-                        ? 'bg-amber-500 text-graphite-950 hover:bg-amber-400 shadow-md shadow-amber-500/20'
+                        ? 'bg-amber-500 text-graphite-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 font-bold'
                         : 'bg-graphite-700 text-vapor-100 hover:bg-graphite-600 border border-graphite-500'
                     }`}
                   >
-                    <MessageSquare className="w-4 h-4" />
-                    Falar com Suporte
+                    <CreditCard className="w-4 h-4" />
+                    Assinar {p.nome} ({p.precoMensal}/mês)
                   </button>
                 )}
               </div>
@@ -219,6 +247,16 @@ export const PaginaPlanos: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Modal de Checkout */}
+      <CheckoutModal
+        isOpen={checkoutModalOpen}
+        onClose={() => setCheckoutModalOpen(false)}
+        planoCodigo={selectedPlano.codigo}
+        planoNome={selectedPlano.nome}
+        precoMensal={selectedPlano.preco}
+        onSuccess={() => setCheckoutModalOpen(false)}
+      />
     </div>
   );
 };

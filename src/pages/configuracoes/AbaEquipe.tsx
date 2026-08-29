@@ -278,7 +278,7 @@ export const AbaEquipe: React.FC = () => {
                       {m.email}
                     </span>
                     <Badge tone={m.role === 'dono' ? 'amber' : m.role === 'gerente' ? 'glass' : 'vapor'}>
-                      {m.role.toUpperCase()}
+                      {m.role === 'dono' ? '👑 DONO / ADMIN' : m.role === 'gerente' ? '🛡️ GERENTE' : 'OPERADOR'}
                     </Badge>
                     <Badge tone={m.status === 'ativo' ? 'mint' : m.status === 'convidado' ? 'amber' : 'flare'}>
                       {m.status.toUpperCase()}
@@ -454,9 +454,9 @@ export const AbaEquipe: React.FC = () => {
                 onChange={(e) => setInviteRole(e.target.value as AppRole)}
                 className="min-h-[44px] px-3 bg-graphite-900 border border-graphite-600 rounded text-vapor-100 font-sans text-[14px]"
               >
-                <option value="operador">Operador (Executa serviços, sem valores financeiro)</option>
+                <option value="dono">Dono / Administrador (Acesso total + gestão de equipe)</option>
                 <option value="gerente">Gerente (Gestão de estoque, orçamentos e financeiro)</option>
-                <option value="dono">Dono (Acesso total + gestão de equipe)</option>
+                <option value="operador">Operador (Executa serviços, sem valores financeiros)</option>
               </select>
             </div>
 

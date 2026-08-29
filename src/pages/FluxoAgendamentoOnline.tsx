@@ -88,6 +88,7 @@ export function FluxoAgendamentoOnline() {
   );
   const [slotSelecionadoObj, setSlotSelecionadoObj] = useState<SlotHorarioPublico | null>(null);
   const [transbordoAceito, setTransbordoAceito] = useState<boolean>(false);
+  const [consentimentoPrivacidade, setConsentimentoPrivacidade] = useState<boolean>(false);
 
   // Reseta aceite do pernoite ao mudar data ou horario
   useEffect(() => {
@@ -730,6 +731,28 @@ export function FluxoAgendamentoOnline() {
               </div>
             </div>
 
+            {/* Consentimento Legal LGPD */}
+            <label className="flex items-start gap-3 p-3.5 bg-slate-900 border border-slate-800 rounded-xl cursor-pointer select-none text-xs text-slate-300 hover:border-slate-700 transition">
+              <input
+                type="checkbox"
+                checked={consentimentoPrivacidade}
+                onChange={(e) => setConsentimentoPrivacidade(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500 cursor-pointer shrink-0"
+              />
+              <span className="leading-relaxed">
+                Autorizo a oficina a guardar meus dados e as fotos do meu veículo para registro do atendimento.{' '}
+                <a
+                  href="/politica-de-privacidade"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-400 hover:text-emerald-300 underline font-medium"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Política de Privacidade
+                </a>
+              </span>
+            </label>
+
             <div className="flex gap-3 pt-4">
               <button
                 type="button"
@@ -740,12 +763,12 @@ export function FluxoAgendamentoOnline() {
               </button>
               <button
                 type="button"
-                disabled={enviando || nome.trim().length < 2 || telefone.replace(/\D/g, '').length < 10}
+                disabled={enviando || nome.trim().length < 2 || telefone.replace(/\D/g, '').length < 10 || !consentimentoPrivacidade}
                 onClick={handleFinalizarAgendamento}
                 className={`w-2/3 min-h-[56px] font-bold rounded-xl flex items-center justify-center gap-2 transition ${
-                  enviando || nome.trim().length < 2 || telefone.replace(/\D/g, '').length < 10
+                  enviando || nome.trim().length < 2 || telefone.replace(/\D/g, '').length < 10 || !consentimentoPrivacidade
                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20'
                 }`}
               >
                 {enviando ? (
@@ -854,6 +877,22 @@ export function FluxoAgendamentoOnline() {
           </div>
         )}
       </main>
+
+      {/* Rodapé Legal Público */}
+      <footer className="py-6 px-4 text-center text-xs text-slate-500 border-t border-slate-900 mt-8">
+        <div className="max-w-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <span>{tenant?.nome || 'Oficina'} • Plataforma Detailers</span>
+          <div className="flex items-center gap-4">
+            <Link to="/termos-de-uso" target="_blank" className="hover:text-slate-300 transition-colors">
+              Termos de Uso
+            </Link>
+            <span>•</span>
+            <Link to="/politica-de-privacidade" target="_blank" className="hover:text-slate-300 transition-colors">
+              Política de Privacidade
+            </Link>
+          </div>
+        </div>
+      </footer>
 
       {/* Painel Fixo no Rodapé para o Passo 1 */}
       {passo === 1 && (

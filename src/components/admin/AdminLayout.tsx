@@ -9,7 +9,12 @@ import {
   Users,
   MessageSquare,
   LogOut, 
-  Lock
+  Lock,
+  DollarSign,
+  Gift,
+  Award,
+  TrendingUp,
+  Tv
 } from 'lucide-react';
 
 export const AdminLayout: React.FC = () => {
@@ -18,11 +23,16 @@ export const AdminLayout: React.FC = () => {
 
   const navItems = [
     { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
+    { label: 'Assinaturas & MRR', path: '/admin/assinaturas', icon: DollarSign },
+    { label: 'Treinamentos', path: '/admin/treinamentos', icon: Tv },
+    { label: 'Ref. Mercado', path: '/admin/referencias-preco', icon: TrendingUp },
+    { label: 'Indicações', path: '/admin/indicacoes', icon: Gift },
+    { label: 'Parceiros', path: '/admin/parceiros', icon: Award },
     { label: 'Planos', path: '/admin/planos', icon: CreditCard },
     { label: 'Permissões', path: '/admin/planos/permissoes', icon: ShieldCheck },
     { label: 'Feedbacks', path: '/admin/feedbacks', icon: MessageSquare },
     { label: 'Storage', path: '/admin/storage', icon: HardDrive },
-    { label: 'Administradores', path: '/admin/administradores', icon: Users },
+    { label: 'Admins', path: '/admin/administradores', icon: Users },
   ];
 
   return (
@@ -30,29 +40,32 @@ export const AdminLayout: React.FC = () => {
       {/* Top Header Bar */}
       <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur border-b border-amber-500/20 shadow-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex items-center justify-between h-16 gap-3">
             
-            {/* Logo / Badge */}
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/40 px-3 py-1.5 rounded-lg shadow-inner">
-                <ShieldCheck className="w-5 h-5 text-amber-400" />
-                <span className="font-heading font-black tracking-wider text-xs sm:text-sm text-amber-400 uppercase">
+            {/* Logo / Badge (Fixed Left) */}
+            <div className="flex items-center space-x-2 shrink-0">
+              <div className="flex items-center space-x-2 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/40 px-2.5 py-1.5 rounded-lg shadow-inner">
+                <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
+                <span className="font-heading font-black tracking-wider text-xs text-amber-400 uppercase hidden xl:inline">
                   PAINEL DA PLATAFORMA
+                </span>
+                <span className="font-heading font-black tracking-wider text-xs text-amber-400 uppercase xl:hidden">
+                  ADMIN
                 </span>
               </div>
               
               {/* Admin level badge */}
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold border ${
+              <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-mono font-semibold border shrink-0 ${
                 adminLevel === 'admin' 
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                   : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
               }`}>
-                {adminLevel === 'admin' ? 'ADMINISTRADOR' : 'SUPORTE (LEITURA)'}
+                {adminLevel === 'admin' ? 'ADMIN' : 'LEITURA'}
               </span>
             </div>
 
-            {/* Navigation Tabs (Desktop) */}
-            <nav className="hidden md:flex items-center space-x-1">
+            {/* Navigation Tabs (Desktop Scrollable Container) */}
+            <nav className="hidden md:flex items-center space-x-1 overflow-x-auto py-1 scrollbar-none max-w-xl xl:max-w-3xl">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -61,39 +74,39 @@ export const AdminLayout: React.FC = () => {
                     to={item.path}
                     end={true}
                     className={({ isActive }) =>
-                      `flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
+                      `flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-150 shrink-0 ${
                         isActive
                           ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-bold'
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       }`
                     }
                   >
-                    <Icon className="w-4 h-4" />
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
                     <span>{item.label}</span>
                   </NavLink>
                 );
               })}
             </nav>
 
-            {/* User info & Exit */}
-            <div className="flex items-center space-x-3">
-              <span className="hidden lg:inline text-xs text-slate-400 font-mono">
+            {/* User info & Exit (Fixed Right) */}
+            <div className="flex items-center space-x-2 shrink-0">
+              <span className="hidden xl:inline text-[11px] text-slate-400 font-mono max-w-[150px] truncate">
                 {adminEmail}
               </span>
               <button
                 onClick={() => navigate('/')}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition"
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition shrink-0 shadow-sm"
                 title="Sair do Painel Admin e voltar para a Oficina"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Voltar ao App</span>
+                <span>Voltar ao App</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* Mobile Navigation Strip */}
-        <div className="md:hidden border-t border-slate-800 bg-slate-900/90 px-2 py-1.5 flex justify-around">
+        <div className="md:hidden border-t border-slate-800 bg-slate-900/90 px-2 py-1.5 flex items-center space-x-1 overflow-x-auto scrollbar-none">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -102,12 +115,12 @@ export const AdminLayout: React.FC = () => {
                 to={item.path}
                 end={true}
                 className={({ isActive }) =>
-                  `flex flex-col items-center py-1 px-2 rounded text-xs font-medium ${
-                    isActive ? 'text-amber-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+                  `flex items-center space-x-1 py-1 px-2.5 rounded text-xs font-medium whitespace-nowrap shrink-0 ${
+                    isActive ? 'bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30' : 'text-slate-400 hover:text-slate-200'
                   }`
                 }
               >
-                <Icon className="w-4 h-4 mb-0.5" />
+                <Icon className="w-3.5 h-3.5" />
                 <span>{item.label}</span>
               </NavLink>
             );

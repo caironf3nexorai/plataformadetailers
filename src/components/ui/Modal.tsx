@@ -57,20 +57,20 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 md:p-8 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <Card
-        className={`w-full ${maxWidthClasses[maxWidth]} bg-graphite-800 border-graphite-600 rounded-xl shadow-2xl overflow-hidden [overscroll-behavior:contain] animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] ${className}`}
+        className={`w-full ${maxWidthClasses[maxWidth]} my-auto bg-graphite-800 border-graphite-600 rounded-2xl shadow-2xl overflow-hidden [overscroll-behavior:contain] animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] ${className}`}
       >
         {/* Header */}
         {(title || showCloseButton) && (
-          <div className="px-6 py-4 border-b border-graphite-700 bg-graphite-800/90 flex items-start justify-between gap-4 shrink-0">
+          <div className="px-6 py-4.5 sm:px-7 sm:py-5 border-b border-graphite-700 bg-graphite-800/95 flex items-start justify-between gap-4 shrink-0">
             <div className="flex flex-col gap-0.5">
               {title && (
-                <div className="flex items-center gap-2 text-vapor-100">
+                <div className="flex items-center gap-2.5 text-vapor-100">
                   {icon && <span className="shrink-0">{icon}</span>}
                   <h3 className="font-display text-[18px] uppercase tracking-wide">
                     {title}
@@ -98,11 +98,11 @@ export const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] flex-1 flex flex-col gap-4">{children}</div>
+        <div className="p-6 sm:p-7 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] flex-1 flex flex-col gap-4.5">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-6 py-4 border-t border-graphite-700 bg-graphite-900/40 flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <div className="px-6 py-4 sm:px-7 sm:py-4.5 border-t border-graphite-700 bg-graphite-900/50 flex flex-wrap items-center justify-end gap-3 shrink-0">
             {footer}
           </div>
         )}

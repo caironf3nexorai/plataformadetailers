@@ -36,6 +36,7 @@ import { useMilestoneCheck } from '../hooks/useMilestoneCheck';
 import { Cronometro } from '../components/execucao/Cronometro';
 import { ModalFinalizarExecucao } from '../components/execucao/ModalFinalizarExecucao';
 import { obterAcaoAgendamento } from '../utils/acaoAgendamento';
+import { BannerAlertaLimites } from '../components/layout/BannerAlertaLimites';
 import { obterNivelAlertaTempo } from '../utils/cronometro';
 
 export const Hoje: React.FC = () => {
@@ -609,6 +610,9 @@ export const Hoje: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 lg:gap-8">
+      {/* Banner de aviso de limite de plano (se estiver próximo dos 80% ou atingido) */}
+      <BannerAlertaLimites />
+
       {/* Topo com Botão de Entrada Avulsa (56px) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader title="Resumo de Hoje" />

@@ -66,12 +66,19 @@ export const NovaOficina: React.FC = () => {
         return;
       }
 
-      // Chamada RPC para criação atômica da oficina e do membro dono
+      // Obter código de convite ou de parceiro do localStorage ou URL
+      const searchParams = new URLSearchParams(window.location.search);
+      const conviteCodigo = searchParams.get('convite') || localStorage.getItem('convite_codigo');
+      const parceiroCodigo = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
+
+      // Chamada RPC para criação atômica da oficina e do membro dono com convite/parceiro
       const { data: _tenantId, error } = await supabase.rpc('criar_oficina', {
         p_nome: nome.trim(),
         p_cidade: cidade.trim() || null,
         p_uf: uf.trim().toUpperCase() || null,
         p_telefone: telefone.trim() || null,
+        p_codigo_indicacao: conviteCodigo ? conviteCodigo.trim().toUpperCase() : null,
+        p_codigo_parceiro: parceiroCodigo ? parceiroCodigo.trim().toUpperCase() : null,
       });
 
       if (error) {
@@ -79,6 +86,8 @@ export const NovaOficina: React.FC = () => {
         setErrorMsg(error.message || 'Erro ao cadastrar oficina.');
         setLoading(false);
       } else {
+        localStorage.removeItem('convite_codigo');
+        localStorage.removeItem('parceiro_codigo');
         await refetchTenantData();
         navigate('/');
       }

@@ -78,6 +78,33 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
       <main className="flex-1 px-4 sm:px-6 py-8 max-w-6xl mx-auto w-full">
         {children}
       </main>
+
+      {/* Rodapé Público Padrão */}
+      <footer className="border-t border-graphite-800 bg-graphite-900/60 py-6 px-4 sm:px-8 mt-auto text-xs text-vapor-500">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="font-display font-semibold text-vapor-300 tracking-wider">
+              Plataforma Detailers
+            </span>
+            <span>&copy; {new Date().getFullYear()}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/termos-de-uso"
+              className="text-vapor-400 hover:text-amber-400 transition-colors font-medium"
+            >
+              Termos de Uso
+            </Link>
+            <span>•</span>
+            <Link
+              to="/politica-de-privacidade"
+              className="text-vapor-400 hover:text-amber-400 transition-colors font-medium"
+            >
+              Política de Privacidade
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

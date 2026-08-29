@@ -72,6 +72,7 @@ export const VistoriaPublica: React.FC = () => {
   // Formulário de assinatura
   const [assinanteNome, setAssinanteNome] = useState('');
   const [declaracaoAceita, setDeclaracaoAceita] = useState(false);
+  const [consentimentoPrivacidade, setConsentimentoPrivacidade] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -578,15 +579,37 @@ export const VistoriaPublica: React.FC = () => {
               </div>
 
               {/* Declaração Legal */}
-              <label className="flex items-start gap-3 p-3 bg-graphite-900 rounded-lg border border-graphite-700 cursor-pointer">
+              <label className="flex items-start gap-3 p-3 bg-graphite-900 rounded-lg border border-graphite-700 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={declaracaoAceita}
                   onChange={(e) => setDeclaracaoAceita(e.target.checked)}
-                  className="mt-0.5 w-5 h-5 rounded border-graphite-600 text-amber-500 focus:ring-amber-500 bg-graphite-950 shrink-0"
+                  className="mt-0.5 w-5 h-5 rounded border-graphite-600 text-amber-500 focus:ring-amber-500 bg-graphite-950 shrink-0 cursor-pointer"
                 />
                 <span className="font-sans text-[12px] text-vapor-300 leading-relaxed italic">
                   "Declaro que conferi e que as informações e avarias registradas refletem com precisão o estado do meu veículo na entrega à oficina."
+                </span>
+              </label>
+
+              {/* Consentimento Legal LGPD */}
+              <label className="flex items-start gap-3 p-3 bg-graphite-900 rounded-lg border border-graphite-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={consentimentoPrivacidade}
+                  onChange={(e) => setConsentimentoPrivacidade(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 rounded border-graphite-600 text-amber-500 focus:ring-amber-500 bg-graphite-950 shrink-0 cursor-pointer"
+                />
+                <span className="font-sans text-[12px] text-vapor-300 leading-relaxed">
+                  Autorizo a oficina a guardar meus dados e as fotos do meu veículo para registro do atendimento.{' '}
+                  <a
+                    href="/politica-de-privacidade"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-amber-400 hover:text-amber-300 underline font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Política de Privacidade
+                  </a>
                 </span>
               </label>
 
@@ -602,7 +625,7 @@ export const VistoriaPublica: React.FC = () => {
                 type="button"
                 variant="primary"
                 onClick={handleConfirmSignature}
-                disabled={submitting || !hasSignature || !declaracaoAceita || assinanteNome.trim().length < 3}
+                disabled={submitting || !hasSignature || !declaracaoAceita || !consentimentoPrivacidade || assinanteNome.trim().length < 3}
                 className="w-full min-h-[52px] font-bold text-[15px] flex items-center justify-center gap-2 shadow-lg"
               >
                 <Check size={20} />

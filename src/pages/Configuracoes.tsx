@@ -15,39 +15,47 @@ import { AbaHorarios } from './configuracoes/AbaHorarios';
 import { AbaChecklists } from './configuracoes/AbaChecklists';
 import { AbaDespesasFixas } from './configuracoes/AbaDespesasFixas';
 import { AbaAgendamentoOnline } from '../components/configuracoes/AbaAgendamentoOnline';
-import { AbaArquivosDigitais } from '../components/configuracoes/AbaArquivosDigitais';
 import { AbaPersonalizacaoPDF } from '../components/configuracoes/AbaPersonalizacaoPDF';
 import { AbaMetaMensal } from './configuracoes/AbaMetaMensal';
 import { AbaFeedbacks } from './configuracoes/AbaFeedbacks';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FolderArchive, FileText, Target, MessageSquare } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { AbaAssinatura } from './configuracoes/AbaAssinatura';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FileText, Target, MessageSquare } from 'lucide-react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, getFotoPublicUrl } from '../utils/imagens';
 
 interface ConfiguracoesProps {
-  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'arquivos' | 'pdf' | 'meta' | 'feedbacks';
+  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks';
 }
 
 export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { tenant, refetchTenantData } = useAuth();
   const { isDono, podeGerirEquipe, podeGerirServicos } = usePermissao();
   const { planoAtual, nomePlano, limiteDe } = usePlano();
 
   const getTabPadrao = () => {
     if (abaInicial) return abaInicial;
-    if (location.pathname.includes('arquivos-digitais')) return 'arquivos';
     return 'oficina';
   };
 
-  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'arquivos' | 'pdf' | 'meta' | 'feedbacks'>(getTabPadrao());
+  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks'>(getTabPadrao());
 
   useEffect(() => {
-    if (location.pathname.includes('arquivos-digitais')) {
-      setActiveTab('arquivos');
-    } else if (abaInicial) {
+    const queryParams = new URLSearchParams(location.search);
+    const abaParam = queryParams.get('aba');
+    if (abaParam === 'treinamento') {
+      navigate('/treinamentos', { replace: true });
+      return;
+    }
+    if (abaParam === 'arquivos' || location.pathname.includes('arquivos-digitais')) {
+      navigate('/arquivos-digitais', { replace: true });
+      return;
+    }
+    if (abaInicial) {
       setActiveTab(abaInicial);
     }
-  }, [location.pathname, abaInicial]);
+  }, [location.pathname, location.search, abaInicial, navigate]);
   const [uploadingCapa, setUploadingCapa] = useState(false);
   const [capaError, setCapaError] = useState<string | null>(null);
   // Estados da Logo da Oficina
@@ -378,7 +386,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Ajustes e Configurações" />
+      <PageHeader title="Minha Oficina" />
 
       {/* Tabs Switcher */}
       <div className="flex items-center gap-2 border-b border-graphite-600 pb-2 overflow-x-auto">
@@ -501,21 +509,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
         {(isDono || podeGerirServicos()) && (
           <button
             type="button"
-            onClick={() => setActiveTab('arquivos')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'arquivos'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <FolderArchive size={18} />
-            Arquivos Digitais
-          </button>
-        )}
-
-        {(isDono || podeGerirServicos()) && (
-          <button
-            type="button"
             onClick={() => setActiveTab('pdf')}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
               activeTab === 'pdf'
@@ -563,7 +556,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       {activeTab === 'oficina' && (
         <div className="flex flex-col lg:flex-row items-start gap-6">
-          <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-4 max-w-xl flex-1 w-full">
+          <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-4 max-w-2xl flex-1 w-full">
             <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
               Dados da Oficina
             </h3>
@@ -603,8 +596,8 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
             </div>
 
             {/* CONFIGURAÇÃO: Agendamento pelo Cliente no Orçamento */}
-            <div className="flex items-center justify-between p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
-              <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                 <span className="font-sans text-[13px] text-vapor-100 font-bold">
                   Cliente escolhe o horário ao aprovar o orçamento
                 </span>
@@ -632,8 +625,8 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
             </div>
 
             {/* CONFIGURAÇÃO: Validade Padrão dos Orçamentos */}
-            <div className="flex items-center justify-between p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
-              <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                 <span className="font-sans text-[13px] text-vapor-100 font-bold">
                   Validade Padrão dos Orçamentos (dias)
                 </span>
@@ -664,6 +657,114 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                   wrapperClassName="w-20 min-h-[40px]"
                 />
                 <span className="font-sans text-[12px] text-vapor-400 font-medium">dias</span>
+              </div>
+            </div>
+
+            {/* CONFIGURAÇÃO: Fuso Horário da Oficina */}
+            <div className="flex flex-col gap-2.5 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[13px] text-vapor-100 font-bold">
+                  Fuso Horário Local da Oficina
+                </span>
+                <span className="font-sans text-[12px] text-vapor-400">
+                  Define o fuso para fechamentos financeiros, limites mensais e agenda.
+                </span>
+              </div>
+              <select
+                value={tenant?.fuso_horario || 'America/Sao_Paulo'}
+                onChange={async (e) => {
+                  const novoFuso = e.target.value;
+                  if (!tenant) return;
+                  try {
+                    await supabase
+                      .from('tenants')
+                      .update({ fuso_horario: novoFuso })
+                      .eq('id', tenant.id);
+                    await refetchTenantData();
+                  } catch (err) {
+                    console.error('[Configuracoes] Erro ao salvar fuso horario:', err);
+                  }
+                }}
+                className="bg-graphite-950 border border-graphite-600 rounded-lg p-2.5 text-vapor-100 font-sans text-[13px] outline-none focus:border-amber-500 min-h-[40px] cursor-pointer w-full"
+              >
+                <option value="America/Sao_Paulo">America/Sao_Paulo (Brasília - UTC-3)</option>
+                <option value="America/Manaus">America/Manaus (Amazonas - UTC-4)</option>
+                <option value="America/Cuiaba">America/Cuiaba (Mato Grosso - UTC-4)</option>
+                <option value="America/Campo_Grande">America/Campo_Grande (Mato Grosso do Sul - UTC-4)</option>
+                <option value="America/Fortaleza">America/Fortaleza (Ceará / Nordeste - UTC-3)</option>
+                <option value="America/Belem">America/Belem (Pará / Amapá - UTC-3)</option>
+                <option value="America/Recife">America/Recife (Pernambuco - UTC-3)</option>
+                <option value="America/Rio_Branco">America/Rio_Branco (Acre - UTC-5)</option>
+                <option value="America/Noronha">America/Noronha (Fernando de Noronha - UTC-2)</option>
+              </select>
+            </div>
+
+            {/* CONFIGURAÇÃO: Porte da Cidade (Precificação de Mercado) */}
+            <div className="flex flex-col gap-2.5 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[13px] text-vapor-100 font-bold">
+                  Porte da Cidade (Referência de Mercado)
+                </span>
+                <span className="font-sans text-[12px] text-vapor-400">
+                  Usado para calibrar a faixa de preços praticada na sua região.
+                </span>
+              </div>
+              <select
+                value={(tenant as any)?.porte_cidade || 'interior'}
+                onChange={async (e) => {
+                  const novoPorte = e.target.value;
+                  if (!tenant) return;
+                  try {
+                    await supabase
+                      .from('tenants')
+                      .update({ porte_cidade: novoPorte })
+                      .eq('id', tenant.id);
+                    await refetchTenantData();
+                  } catch (err) {
+                    console.error('[Configuracoes] Erro ao salvar porte da cidade:', err);
+                  }
+                }}
+                className="bg-graphite-950 border border-graphite-600 rounded-lg p-2.5 text-vapor-100 font-sans text-[13px] outline-none focus:border-amber-500 min-h-[40px] cursor-pointer w-full"
+              >
+                <option value="interior">Interior / Cidade de Médio Porte</option>
+                <option value="capital">Capital do Estado</option>
+                <option value="metropolitana">Região Metropolitana / Grande Centro</option>
+                <option value="nacional">Referência Nacional Geral</option>
+              </select>
+            </div>
+
+            {/* CONFIGURAÇÃO: Margem Alvo de Lucro (%) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <span className="font-sans text-[13px] text-vapor-100 font-bold">
+                  Margem Alvo de Lucro (%)
+                </span>
+                <span className="font-sans text-[12px] text-vapor-400">
+                  Margem desejada sobre o preço de venda para recalcular preços ideais (padrão: 40%).
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <CampoNumerico
+                  integerOnly
+                  value={(tenant as any)?.margem_alvo_percentual ?? 40}
+                  onChange={async (val) => {
+                    const novaMargem = val || 40;
+                    if (!tenant) return;
+                    try {
+                      await supabase
+                        .from('tenants')
+                        .update({ margem_alvo_percentual: novaMargem })
+                        .eq('id', tenant.id);
+                      await refetchTenantData();
+                    } catch (err) {
+                      console.error('[Configuracoes] Erro ao salvar margem alvo:', err);
+                    }
+                  }}
+                  align="center"
+                  placeholder="40"
+                  wrapperClassName="w-20 min-h-[40px]"
+                />
+                <span className="font-sans text-[12px] text-vapor-400 font-medium">%</span>
               </div>
             </div>
 
@@ -968,54 +1069,78 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       {activeTab === 'checklists' && (isDono || podeGerirEquipe()) && <AbaChecklists />}
 
       {activeTab === 'plano' && (
-        <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 max-w-xl">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
-              Seu Plano Atual
-            </h3>
-            <Badge tone={planoAtual === 'studio' ? 'mint' : planoAtual === 'pro' ? 'amber' : 'glass'}>
-              {nomePlano.toUpperCase()}
-            </Badge>
-          </div>
+        <div className="flex flex-col gap-6">
+          <AbaAssinatura />
 
-          <div className="flex flex-col gap-3 font-sans text-[14px]">
-            <div className="flex justify-between py-2 border-b border-graphite-700">
-              <span className="text-vapor-400">Usuários permitidos:</span>
-              <strong className="text-vapor-100 font-mono">
-                {limiteDe('usuarios') !== null ? `${limiteDe('usuarios')} pessoa(s)` : 'Ilimitado'}
-              </strong>
+          <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 max-w-3xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
+                Limites do Plano {nomePlano.toUpperCase()}
+              </h3>
+              <Badge tone={planoAtual === 'studio' ? 'mint' : planoAtual === 'pro' ? 'amber' : 'glass'}>
+                {nomePlano.toUpperCase()}
+              </Badge>
             </div>
-            <div className="flex justify-between py-2 border-b border-graphite-700">
-              <span className="text-vapor-400">Serviços / Mês:</span>
-              <strong className="text-vapor-100 font-mono">
-                {limiteDe('servicos_mes') !== null ? `${limiteDe('servicos_mes')} por mês` : 'Ilimitado'}
-              </strong>
+
+            <div className="flex flex-col gap-3 font-sans text-[14px]">
+              <div className="flex justify-between py-2 border-b border-graphite-700">
+                <span className="text-vapor-400">Usuários permitidos:</span>
+                <strong className="text-vapor-100 font-mono">
+                  {limiteDe('usuarios') !== null ? `${limiteDe('usuarios')} pessoa(s)` : 'Ilimitado'}
+                </strong>
+              </div>
+              <div className="flex justify-between py-2 border-b border-graphite-700">
+                <span className="text-vapor-400">Serviços / Mês:</span>
+                <strong className="text-vapor-100 font-mono">
+                  {limiteDe('servicos_mes') !== null ? `${limiteDe('servicos_mes')} por mês` : 'Ilimitado'}
+                </strong>
+              </div>
+              <div className="flex justify-between py-2 border-b border-graphite-700">
+                <span className="text-vapor-400">Orçamentos / Mês:</span>
+                <strong className="text-vapor-100 font-mono">
+                  {limiteDe('orcamentos_mes') !== null ? `${limiteDe('orcamentos_mes')} por mês` : 'Ilimitado'}
+                </strong>
+              </div>
+              <div className="flex justify-between py-2 border-b border-graphite-700">
+                <span className="text-vapor-400">Módulo de Estoque e Produtos:</span>
+                <strong className="text-vapor-100 font-mono">
+                  {limiteDe('produtos') === 0 ? 'Não incluso no Free' : 'Incluso'}
+                </strong>
+              </div>
             </div>
-            <div className="flex justify-between py-2 border-b border-graphite-700">
-              <span className="text-vapor-400">Orçamentos / Mês:</span>
-              <strong className="text-vapor-100 font-mono">
-                {limiteDe('orcamentos_mes') !== null ? `${limiteDe('orcamentos_mes')} por mês` : 'Ilimitado'}
-              </strong>
-            </div>
-            <div className="flex justify-between py-2 border-b border-graphite-700">
-              <span className="text-vapor-400">Módulo de Estoque e Produtos:</span>
-              <strong className="text-vapor-100 font-mono">
-                {limiteDe('produtos') === 0 ? 'Não incluso no Free' : 'Incluso'}
-              </strong>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        </div>
       )}
 
       {activeTab === 'despesas' && isDono && <AbaDespesasFixas />}
 
       {activeTab === 'agendamento' && isDono && <AbaAgendamentoOnline />}
 
-      {activeTab === 'arquivos' && (isDono || podeGerirServicos()) && <AbaArquivosDigitais />}
-
       {activeTab === 'pdf' && (isDono || podeGerirServicos()) && (
         <AbaPersonalizacaoPDF onNavigateToPlano={() => setActiveTab('plano')} />
       )}
+
+      {/* Rodapé de Conformidade e Documentos Legais */}
+      <div className="mt-12 pt-6 border-t border-graphite-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-vapor-500 font-sans">
+        <span>Plataforma Detailers • Software de Gestão para Estética Automotiva</span>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/termos-de-uso"
+            target="_blank"
+            className="text-vapor-400 hover:text-amber-400 transition-colors font-medium"
+          >
+            Termos de Uso
+          </Link>
+          <span>•</span>
+          <Link
+            to="/politica-de-privacidade"
+            target="_blank"
+            className="text-vapor-400 hover:text-amber-400 transition-colors font-medium"
+          >
+            Política de Privacidade
+          </Link>
+        </div>
+      </div>
     </div>
   );
 };

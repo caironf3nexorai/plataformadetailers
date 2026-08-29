@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -900,6 +900,22 @@ export const OrcamentoPublico: React.FC = () => {
             </Card>
           );
         })()}
+
+        {/* Rodapé Legal Público */}
+        <footer className="py-8 text-center text-xs text-vapor-500 border-t border-graphite-800/80 mt-8 max-w-3xl mx-auto w-full">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span>{data.oficina?.nome || 'Oficina'} • Plataforma Detailers</span>
+            <div className="flex items-center gap-4">
+              <Link to="/termos-de-uso" target="_blank" className="text-vapor-400 hover:text-amber-400 transition-colors">
+                Termos de Uso
+              </Link>
+              <span>•</span>
+              <Link to="/politica-de-privacidade" target="_blank" className="text-vapor-400 hover:text-amber-400 transition-colors">
+                Política de Privacidade
+              </Link>
+            </div>
+          </div>
+        </footer>
       </div>
 
       {/* MODAL DE ASSINATURA DIGITAL DE ACEITE DO ORÇAMENTO */}

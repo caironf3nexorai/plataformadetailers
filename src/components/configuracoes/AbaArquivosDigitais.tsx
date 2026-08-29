@@ -45,7 +45,8 @@ export const AbaArquivosDigitais: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
   const { isDono, podeGerirServicos } = usePermissao();
-  const { nomePlano, limiteDe } = usePlano();
+  const { nomePlano, limiteDe, temFeature } = usePlano();
+  const podeAcessar = temFeature('arquivos_digitais');
 
   const [loading, setLoading] = useState(true);
   const [atendimentosAcervo, setAtendimentosAcervo] = useState<AtendimentoAcervo[]>([]);
@@ -335,6 +336,18 @@ export const AbaArquivosDigitais: React.FC = () => {
       setDownloadingId(null);
     }
   };
+
+  if (!podeAcessar) {
+    return (
+      <Card className="p-8 bg-graphite-900 border-graphite-800 text-center flex flex-col items-center justify-center gap-3">
+        <FolderArchive size={48} className="text-amber-500" />
+        <h3 className="text-base font-bold text-vapor-200">Módulo de Arquivos Digitais Bloqueado</h3>
+        <p className="text-xs text-vapor-400 max-w-md">
+          O armazenamento de arquivos digitais e acervo de fotos da oficina não está liberado para o seu plano atual ({nomePlano}). Entre em contato com a administração ou faça upgrade de plano para desbloquear.
+        </p>
+      </Card>
+    );
+  }
 
   if (!podeGerirServicos() && !isDono) {
     return (

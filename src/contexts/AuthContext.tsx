@@ -53,6 +53,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(profileData as Profile);
       }
 
+      // Atualiza atividade do usuário (touch last_seen_at) para rastreamento de acesso real
+      await supabase.rpc('touch_user_activity');
+
       // 2. Busca vínculos de tenant ativos do usuário
       const { data: membersData } = await supabase
         .from('tenant_members')

@@ -20,7 +20,8 @@ import {
   Pencil,
   Upload,
   Trash,
-  Package
+  Package,
+  TrendingUp
 } from 'lucide-react';
 import { GerenciadorCombos } from '../components/servicos/GerenciadorCombos';
 import {
@@ -441,6 +442,16 @@ export const Servicos: React.FC = () => {
         
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <CopyLinkButton slug={tenant?.slug} />
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => navigate('/servicos/precificacao')}
+            className="flex-1 sm:flex-initial text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 font-bold"
+          >
+            <TrendingUp size={16} />
+            Precificação
+          </Button>
 
           <Button
             type="button"

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../contexts/ToastContext';
 import { 
   Search, 
   Filter, 
@@ -9,7 +10,9 @@ import {
   AlertTriangle,
   X,
   Eye,
-  Activity
+  Activity,
+  Edit2,
+  Shield
 } from 'lucide-react';
 
 interface TenantItem {
@@ -53,6 +56,8 @@ interface TenantDetail {
 }
 
 export const AdminOficinas: React.FC = () => {
+  const { showSuccess, showError } = useToast();
+
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
@@ -63,6 +68,13 @@ export const AdminOficinas: React.FC = () => {
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState<TenantDetail | null>(null);
+
+  // Estado para Modal de Alteração Manual de Plano
+  const [modalPlanoOpen, setModalPlanoOpen] = useState(false);
+  const [targetTenant, setTargetTenant] = useState<{ id: string; nome: string; planoAtual: string } | null>(null);
+  const [novoPlano, setNovoPlano] = useState<'free' | 'pro' | 'studio'>('pro');
+  const [motivoAudit, setMotivoAudit] = useState('');
+  const [salvandoPlano, setSalvandoPlano] = useState(false);
 
   const fetchTenants = async () => {
     try {
@@ -101,6 +113,50 @@ export const AdminOficinas: React.FC = () => {
     }
   };
 
+  const handleAbrirModalPlano = (tenantId: string, tenantNome: string, planoAtual: string) => {
+    setTargetTenant({ id: tenantId, nome: tenantNome, planoAtual });
+    setNovoPlano((planoAtual as any) || 'pro');
+    setMotivoAudit('');
+    setModalPlanoOpen(true);
+  };
+
+  const handleSalvarAlteracaoPlano = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetTenant) return;
+
+    if (!motivoAudit.trim()) {
+      showError('Informe a justificativa da alteração para auditoria.');
+      return;
+    }
+
+    setSalvandoPlano(true);
+    try {
+      const { error } = await supabase.rpc('admin_alterar_plano_manual', {
+        p_tenant_id: targetTenant.id,
+        p_novo_plano: novoPlano,
+        p_motivo: motivoAudit.trim(),
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Plano da oficina "${targetTenant.nome}" alterado para ${novoPlano.toUpperCase()} com sucesso!`);
+      setModalPlanoOpen(false);
+      setTargetTenant(null);
+
+      // Recarrega lista principal
+      fetchTenants();
+      // Recarrega modal de detalhes se estiver aberto para este mesmo tenant
+      if (selectedTenantId === targetTenant.id) {
+        handleOpenDetail(targetTenant.id);
+      }
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao alterar plano:', err);
+      showError(err.message || 'Erro ao alterar plano da oficina');
+    } finally {
+      setSalvandoPlano(false);
+    }
+  };
+
   const isChurnRisk = (ultimoAcesso: string | null) => {
     if (!ultimoAcesso) return true;
     const dias = (new Date().getTime() - new Date(ultimoAcesso).getTime()) / (1000 * 3600 * 24);
@@ -123,7 +179,7 @@ export const AdminOficinas: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-heading text-white">Oficinas Cadastradas</h1>
           <p className="text-slate-400 text-sm">
-            Visualização agregada do ecossistema de oficinas parceiras.
+            Visualização agregada do ecossistema de oficinas parceiras e gestão de planos.
           </p>
         </div>
         <div className="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
@@ -153,7 +209,7 @@ export const AdminOficinas: React.FC = () => {
             <select
               value={planoFiltro}
               onChange={(e) => setPlanoFiltro(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50"
+              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
             >
               <option value="">Todos os Planos</option>
               <option value="free">Free</option>
@@ -165,7 +221,7 @@ export const AdminOficinas: React.FC = () => {
           <select
             value={ordenacao}
             onChange={(e) => setOrdenacao(e.target.value as any)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50"
+            className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
           >
             <option value="created_at">Ordenar por Cadastro</option>
             <option value="ultimo_acesso">Ordenar por Último Acesso</option>
@@ -243,10 +299,19 @@ export const AdminOficinas: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3.5 text-right">
+                      <td className="px-4 py-3.5 text-right space-x-2">
+                        <button
+                          onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
+                          className="inline-flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 transition"
+                          title="Alterar plano da oficina"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Mudar Plano</span>
+                        </button>
+
                         <button
                           onClick={() => handleOpenDetail(t.id)}
-                          className="inline-flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-slate-700 transition"
+                          className="inline-flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded text-xs font-medium border border-slate-700 transition"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Detalhes</span>
@@ -307,12 +372,22 @@ export const AdminOficinas: React.FC = () => {
                       )}
                     </div>
 
-                    <button
-                      onClick={() => handleOpenDetail(t.id)}
-                      className="bg-slate-800 hover:bg-slate-700 text-amber-400 px-3 py-1 rounded text-xs font-semibold border border-slate-700"
-                    >
-                      Ver Detalhes
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
+                        className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 flex items-center space-x-1"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>Plano</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenDetail(t.id)}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs font-semibold border border-slate-700"
+                      >
+                        Detalhes
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -350,12 +425,21 @@ export const AdminOficinas: React.FC = () => {
                 {/* Basic info card */}
                 <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-bold text-white">{detailData.tenant.nome}</span>
-                    <span className="text-xs font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
-                      Plano {detailData.tenant.plano}
-                    </span>
+                    <div>
+                      <span className="text-sm font-bold text-white block">{detailData.tenant.nome}</span>
+                      <span className="text-xs font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded mt-1 inline-block">
+                        Plano {detailData.tenant.plano}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleAbrirModalPlano(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.plano)}
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Alterar Plano</span>
+                    </button>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-400 pt-1">
                     Cidade: {detailData.tenant.cidade ? `${detailData.tenant.cidade} - ${detailData.tenant.uf}` : 'Não cadastrada'}
                   </p>
                   <p className="text-xs text-slate-400">
@@ -383,7 +467,7 @@ export const AdminOficinas: React.FC = () => {
                             <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase">
                               {m.role} ({m.status})
                             </span>
-                            <div className="text-[10px] text-slate-500 mt-0.5">
+                            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
                               Acesso: {m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
                             </div>
                           </div>
@@ -424,6 +508,63 @@ export const AdminOficinas: React.FC = () => {
               </div>
             ) : null}
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Alteração Manual de Plano */}
+      {modalPlanoOpen && targetTenant && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
+                <Shield className="text-amber-500" size={18} />
+                Alteração Manual de Plano
+              </h3>
+              <button onClick={() => setModalPlanoOpen(false)} className="text-slate-400 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSalvarAlteracaoPlano} className="flex flex-col gap-4">
+              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300">
+                Oficina: <strong className="text-white">{targetTenant.nome}</strong> (Atual: <span className="uppercase font-mono text-amber-400">{targetTenant.planoAtual}</span>)
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Novo Plano</label>
+                <select
+                  value={novoPlano}
+                  onChange={(e) => setNovoPlano(e.target.value as any)}
+                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-amber-500 outline-none cursor-pointer"
+                >
+                  <option value="free">FREE (R$ 0/mês)</option>
+                  <option value="pro">PRO (R$ 67/mês)</option>
+                  <option value="studio">STUDIO (R$ 147/mês)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase">
+                  Motivo / Justificativa (Obrigatório para Auditoria)
+                </label>
+                <textarea
+                  rows={3}
+                  value={motivoAudit}
+                  onChange={(e) => setMotivoAudit(e.target.value)}
+                  placeholder="Ex: Cortesia de upgrade aprovada ou alteração comercial."
+                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-amber-500 outline-none resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={salvandoPlano || !motivoAudit.trim()}
+                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg"
+              >
+                {salvandoPlano ? 'Salvando...' : 'Confirmar e Auditar Alteração'}
+              </button>
+            </form>
           </div>
         </div>
       )}

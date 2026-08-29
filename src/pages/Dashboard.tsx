@@ -28,7 +28,8 @@ import {
   Info,
   CreditCard,
   X,
-  ExternalLink
+  ExternalLink,
+  Tv
 } from 'lucide-react';
 
 interface DashboardData {
@@ -102,6 +103,38 @@ export const Dashboard: React.FC = () => {
     tipo: 'vistorias' | 'estoque' | 'orcamentos' | 'contas' | 'sem_confirmacao' | 'taxas';
     itens: any[];
   } | null>(null);
+
+  const [treinamentoOnboarding, setTreinamentoOnboarding] = useState<{
+    total: number;
+    concluidos: number;
+  } | null>(null);
+  const [dismissedTreinamento, setDismissedTreinamento] = useState(() => {
+    return localStorage.getItem('dismiss_onboarding_treinamento') === 'true';
+  });
+
+  useEffect(() => {
+    const fetchTreinamentosOnboarding = async () => {
+      try {
+        const { data: vids } = await supabase.rpc('obter_treinamentos_assinante');
+        if (vids && Array.isArray(vids)) {
+          const essenciais = vids.filter((v: any) => v.essencial);
+          if (essenciais.length > 0) {
+            const concluidos = essenciais.filter((v: any) => v.concluido).length;
+            setTreinamentoOnboarding({
+              total: essenciais.length,
+              concluidos
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[Dashboard] Erro ao carregar treinamentos de onboarding:', err);
+      }
+    };
+
+    if (!isOperador && tenant) {
+      fetchTreinamentosOnboarding();
+    }
+  }, [tenant?.id, isOperador]);
 
   // Se o usuário for operador, redireciona para a visão do dia na Agenda
   useEffect(() => {
@@ -195,6 +228,53 @@ export const Dashboard: React.FC = () => {
       <PageHeader
         title="Cabine de Gestão"
       />
+
+      {/* WIDGET DISCRETO: PRIMEIROS PASSOS DA OFICINA (TREINAMENTO ESSENCIAL) */}
+      {treinamentoOnboarding &&
+        !dismissedTreinamento &&
+        treinamentoOnboarding.concluidos < treinamentoOnboarding.total && (
+          <Card className="p-5 bg-graphite-800 border-amber-500/40 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-500 shrink-0">
+                  <Tv size={24} />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display text-base text-vapor-100 uppercase tracking-wide">
+                      Primeiros Passos da Oficina
+                    </h3>
+                    <Badge tone="amber" className="text-[11px]">
+                      {treinamentoOnboarding.concluidos} de {treinamentoOnboarding.total} concluídos
+                    </Badge>
+                  </div>
+                  <p className="font-sans text-xs text-vapor-300">
+                    Assista aos treinamentos essenciais para acelerar a configuração da sua oficina e aproveitar ao máximo a plataforma.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
+                <Button
+                  onClick={() => navigate('/ajustes?aba=treinamento')}
+                  className="text-xs min-h-[38px] px-3.5 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold"
+                >
+                  Assistir Treinamentos
+                </Button>
+                <button
+                  onClick={() => {
+                    localStorage.setItem('dismiss_onboarding_treinamento', 'true');
+                    setDismissedTreinamento(true);
+                  }}
+                  className="text-xs text-vapor-400 hover:text-vapor-200 underline px-1 py-1"
+                  title="Dispensar aviso de onboarding"
+                >
+                  Dispensar
+                </button>
+              </div>
+            </div>
+          </Card>
+      )}
 
       {/* GUIA DE BOAS-VINDAS / EMPTY STATE PARA NOVOS TENANTS */}
       {isTenantNovo && (

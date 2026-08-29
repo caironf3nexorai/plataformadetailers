@@ -32,6 +32,7 @@ const ROTAS_MAPEADAS: MapeamentoRota[] = [
   // Serviços e Catálogo
   { padrao: /^\/servicos$/, nome: 'Catálogo de Serviços' },
   { padrao: /^\/servicos\/novo$/, nome: 'Novo Serviço' },
+  { padrao: /^\/servicos\/precificacao$/, nome: 'Precificação Inteligente' },
   { padrao: /^\/servicos\/[^\/]+$/, nome: 'Editar Serviço' },
   { padrao: /^\/servicos\/matriz$/, nome: 'Matriz de Preços' },
 
@@ -40,6 +41,13 @@ const ROTAS_MAPEADAS: MapeamentoRota[] = [
   { padrao: /^\/financeiro\/contas-a-receber$/, nome: 'Contas a Receber' },
   { padrao: /^\/financeiro\/formas-pagamento$/, nome: 'Formas de Pagamento' },
 
+  // Recursos e Treinamentos
+  { padrao: /^\/treinamentos?$/, nome: 'Academia Detailer' },
+  { padrao: /^\/academia$/, nome: 'Academia Detailer' },
+  { padrao: /^\/arquivos-digitais$/, nome: 'Arquivos Digitais' },
+  { padrao: /^\/diluicao$/, nome: 'Calculadora de Diluição' },
+  { padrao: /^\/indique$/, nome: 'Indique e Ganhe' },
+
   // Estoque
   { padrao: /^\/estoque$/, nome: 'Controle de Estoque' },
 
@@ -47,9 +55,14 @@ const ROTAS_MAPEADAS: MapeamentoRota[] = [
   { padrao: /^\/vistorias$/, nome: 'Histórico de Vistorias' },
   { padrao: /^\/vistorias\/expirando$/, nome: 'Fotos Prestes a Expirar' },
 
-  // Configurações
-  { padrao: /^\/configuracoes$/, nome: 'Configurações da Oficina' },
+  // Minha Oficina / Configurações
+  { padrao: /^\/configuracoes$/, nome: 'Minha Oficina' },
+  { padrao: /^\/minha-oficina$/, nome: 'Minha Oficina' },
   { padrao: /^\/configuracoes\/equipe$/, nome: 'Gestão da Equipe' },
+
+  // Páginas Jurídicas
+  { padrao: /^\/termos-(?:de-)?uso$/, nome: 'Termos de Uso' },
+  { padrao: /^\/politica-(?:de-)?privacidade$/, nome: 'Política de Privacidade' },
 
   // Admin da Plataforma
   { padrao: /^\/admin$/, nome: 'Painel Admin' },
@@ -100,8 +113,20 @@ export function obterNomeDaTela(pathname: string): string {
       return 'Catálogo de Serviços';
     case 'financeiro':
       return 'Financeiro';
+    case 'treinamentos':
+    case 'treinamento':
+    case 'academia':
+      return 'Academia Detailer';
+    case 'arquivos-digitais':
+      return 'Arquivos Digitais';
+    case 'diluicao':
+      return 'Calculadora de Diluição';
+    case 'indique':
+      return 'Indique e Ganhe';
     case 'configuracoes':
-      return 'Configurações da Oficina';
+    case 'minha-oficina':
+    case 'ajustes':
+      return 'Minha Oficina';
     default:
       return primeiraParte.charAt(0).toUpperCase() + primeiraParte.slice(1);
   }

@@ -6,7 +6,8 @@ import {
   AlertTriangle, 
   Check, 
   X,
-  Layers
+  Layers,
+  Plus
 } from 'lucide-react';
 
 interface FeatureItem {
@@ -33,6 +34,14 @@ export const AdminPermissoes: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Modal para cadastrar nova funcionalidade dinamicamente
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [novaChave, setNovaChave] = useState('');
+  const [novoNome, setNovoNome] = useState('');
+  const [novaDesc, setNovaDesc] = useState('');
+  const [novoGrupo, setNovoGrupo] = useState('Personalização');
+  const [creating, setCreating] = useState(false);
 
   const fetchFeatures = async () => {
     try {
@@ -116,6 +125,38 @@ export const AdminPermissoes: React.FC = () => {
     }
   };
 
+  const handleCreateFeature = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novaChave.trim() || !novoNome.trim()) {
+      alert('Informe o código identificador e o nome da funcionalidade.');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const { error } = await supabase.rpc('admin_cadastrar_feature_catalogo', {
+        p_chave: novaChave.trim().toLowerCase().replace(/\s+/g, '_'),
+        p_nome: novoNome.trim(),
+        p_descricao: novaDesc.trim() || null,
+        p_grupo: novoGrupo.trim() || 'Geral',
+        p_ordem: catalogo.length + 1
+      });
+
+      if (error) throw error;
+
+      setMsg({ type: 'success', text: `Nova funcionalidade "${novoNome}" cadastrada no sistema!` });
+      setShowAddModal(false);
+      setNovaChave('');
+      setNovoNome('');
+      setNovaDesc('');
+      await fetchFeatures();
+    } catch (err: any) {
+      alert('Erro ao cadastrar funcionalidade: ' + err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // Group features by category 'grupo'
   const grupos = Array.from(new Set(catalogo.map((c) => c.grupo)));
 
@@ -126,18 +167,30 @@ export const AdminPermissoes: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-heading text-white">Matriz de Permissões (Features)</h1>
           <p className="text-slate-400 text-sm">
-            Defina quais funcionalidades estão disponíveis em cada plano de assinatura.
+            Defina quais funcionalidades estão disponíveis em cada plano de assinatura ou cadastre novas.
           </p>
         </div>
 
-        <button
-          onClick={handleSaveAll}
-          disabled={saving || isReadOnly}
-          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 shadow-lg shadow-amber-500/10"
-        >
-          <Save className="w-4 h-4" />
-          <span>{saving ? 'Salvando...' : 'Salvar Matriz em Lote'}</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          {!isReadOnly && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-slate-800 hover:bg-slate-700 text-white font-semibold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 border border-slate-700"
+            >
+              <Plus className="w-4 h-4 text-amber-400" />
+              <span>Cadastrar Nova Funcionalidade</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleSaveAll}
+            disabled={saving || isReadOnly}
+            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 shadow-lg shadow-amber-500/10"
+          >
+            <Save className="w-4 h-4" />
+            <span>{saving ? 'Salvando...' : 'Salvar Matriz em Lote'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Warning Notice */}
@@ -223,6 +276,102 @@ export const AdminPermissoes: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal: Cadastrar Nova Funcionalidade */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-150">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                <Plus className="w-5 h-5 text-amber-400" />
+                <span>Cadastrar Nova Funcionalidade</span>
+              </h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateFeature} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Nome da Funcionalidade *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Personalização de PDF"
+                  value={novoNome}
+                  onChange={(e) => setNovoNome(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Código Identificador (Chave) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: personalizacao_pdf"
+                  value={novaChave}
+                  onChange={(e) => setNovaChave(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-white font-mono text-sm focus:outline-none focus:border-amber-500"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Usado no código e no banco de dados. Ex: personalizacao_pdf, arquivos_digitais.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Grupo / Categoria
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Personalização, Operacional, Vendas, Financeiro"
+                  value={novoGrupo}
+                  onChange={(e) => setNovoGrupo(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Descrição Explicativa
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Explicação do que este recurso libera na oficina..."
+                  value={novaDesc}
+                  onChange={(e) => setNovaDesc(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 hover:text-white transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2 rounded-lg text-sm transition flex items-center space-x-2"
+                >
+                  {creating ? 'Cadastrando...' : 'Cadastrar Funcionalidade'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

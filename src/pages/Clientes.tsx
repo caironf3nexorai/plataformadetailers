@@ -10,8 +10,9 @@ import { usePermissao } from '../hooks/usePermissao';
 import { supabase } from '../lib/supabase';
 import type { Cliente } from '../types/clientes';
 import { CadastroRapidoModal } from '../components/clientes/CadastroRapidoModal';
+import { ImportarCSVModal } from '../components/clientes/ImportarCSVModal';
 import { extrairNumeroOS } from '../utils/formatters';
-import { Users, UserPlus, Search, Car, Phone } from 'lucide-react';
+import { Users, UserPlus, Search, Car, Phone, FileSpreadsheet } from 'lucide-react';
 
 export const Clientes: React.FC = () => {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export const Clientes: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const [abaAtiva, setAbaAtiva] = useState<'todos' | 'incompletos'>('todos');
 
@@ -114,15 +116,26 @@ export const Clientes: React.FC = () => {
         title="Clientes"
         action={
           !isOperador ? (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => setIsModalOpen(true)}
-              className="min-h-[44px] px-4 font-semibold"
-            >
-              <UserPlus size={18} />
-              Novo cliente
-            </Button>
+            <div className="flex items-center gap-2.5">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setIsImportModalOpen(true)}
+                className="min-h-[44px] px-3.5 font-semibold text-xs border-graphite-600 hover:border-amber-500/50"
+              >
+                <FileSpreadsheet size={17} className="text-amber-500" />
+                Importar CSV
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setIsModalOpen(true)}
+                className="min-h-[44px] px-4 font-semibold text-xs"
+              >
+                <UserPlus size={18} />
+                Novo cliente
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -263,6 +276,13 @@ export const Clientes: React.FC = () => {
       <CadastroRapidoModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSuccess={() => fetchClientes()}
+      />
+
+      {/* Modal Importação CSV */}
+      <ImportarCSVModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
         onSuccess={() => fetchClientes()}
       />
     </div>

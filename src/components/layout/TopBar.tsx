@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Menu, Package, Settings, X, FlaskConical, FileText, ShieldCheck } from 'lucide-react';
+import { Menu, Package, Building2, X, FlaskConical, FileText, ShieldCheck, DollarSign, GraduationCap, FolderArchive, Gift } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const routeNames: Record<string, string> = {
@@ -10,11 +10,17 @@ const routeNames: Record<string, string> = {
   '/clientes': 'Clientes',
   '/orcamentos': 'Orçamentos',
   '/servicos': 'Serviços',
+  '/servicos/precificacao': 'Precificação',
   '/estoque': 'Estoque',
   '/financeiro': 'Financeiro',
   '/financeiro/contas-a-receber': 'Contas a Receber',
   '/financeiro/taxas': 'Formas & Taxas',
-  '/configuracoes': 'Ajustes',
+  '/treinamentos': 'Academia Detailer',
+  '/treinamento': 'Academia Detailer',
+  '/arquivos-digitais': 'Arquivos Digitais',
+  '/indique': 'Indique e Ganhe',
+  '/configuracoes': 'Minha Oficina',
+  '/minha-oficina': 'Minha Oficina',
   '/ajustes/arquivos-digitais': 'Arquivos Digitais',
   '/configuracoes/arquivos-digitais': 'Arquivos Digitais',
   '/diluicao': 'Diluição',
@@ -67,51 +73,81 @@ export const TopBar: React.FC = () => {
             <Link 
               to="/orcamentos" 
               onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-3 px-6 py-3.5 min-h-[48px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
             >
-              <FileText size={20} className="text-vapor-400" />
+              <FileText size={18} className="text-vapor-400" />
               Orçamentos
             </Link>
-            <div className="h-[1px] bg-graphite-600/60 mx-6" />
             <Link 
               to="/servicos" 
               onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-3 px-6 py-3.5 min-h-[48px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
             >
-              <Package size={20} className="text-vapor-400" />
+              <Package size={18} className="text-vapor-400" />
               Serviços
             </Link>
-            <div className="h-[1px] bg-graphite-600/60 mx-6" />
+            <Link 
+              to="/servicos/precificacao" 
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+            >
+              <DollarSign size={18} className="text-vapor-400" />
+              Precificação Inteligente
+            </Link>
             <Link 
               to="/estoque" 
               onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-3 px-6 py-3.5 min-h-[48px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
             >
-              <Package size={20} className="text-vapor-400" />
+              <Package size={18} className="text-vapor-400" />
               Estoque
             </Link>
-            <div className="h-[1px] bg-graphite-600/60 mx-6" />
+            <div className="h-[1px] bg-graphite-600/60 mx-6 my-1" />
+            <Link 
+              to="/treinamentos" 
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+            >
+              <GraduationCap size={18} className="text-amber-500" />
+              Academia Detailer
+            </Link>
+            <Link 
+              to="/arquivos-digitais" 
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+            >
+              <FolderArchive size={18} className="text-vapor-400" />
+              Arquivos Digitais
+            </Link>
             <Link 
               to="/diluicao" 
               onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-3 px-6 py-3.5 min-h-[48px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
             >
-              <FlaskConical size={20} className="text-vapor-400" />
+              <FlaskConical size={18} className="text-vapor-400" />
               Calculadora de Diluição
             </Link>
-            <div className="h-[1px] bg-graphite-600/60 mx-6" />
+            <Link 
+              to="/indique" 
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 px-6 py-3 min-h-[44px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
+            >
+              <Gift size={18} className="text-vapor-400" />
+              Indique e Ganhe
+            </Link>
+            <div className="h-[1px] bg-graphite-600/60 mx-6 my-1" />
             <Link 
               to="/configuracoes" 
               onClick={() => setMenuOpen(false)}
               className="flex items-center gap-3 px-6 py-3.5 min-h-[48px] text-vapor-100 font-sans font-medium hover:bg-graphite-700/50"
             >
-              <Settings size={20} className="text-vapor-400" />
-              Ajustes
+              <Building2 size={18} className="text-amber-500" />
+              Minha Oficina
             </Link>
 
             {isAdmin && (
               <>
-                <div className="h-[1px] bg-graphite-600 mx-6" />
+                <div className="h-[1px] bg-graphite-600 mx-6 my-1" />
                 <Link 
                   to="/admin" 
                   onClick={() => setMenuOpen(false)}

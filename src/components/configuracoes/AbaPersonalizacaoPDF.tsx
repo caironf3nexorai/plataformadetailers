@@ -56,9 +56,11 @@ const PRESET_CORES_SECOES = [
 
 export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNavigateToPlano }) => {
   const { tenant, refetchTenantData } = useAuth();
-  const { nomePlano } = usePlano();
+  const { nomePlano, temFeature } = usePlano();
 
-  const isFree = tenant?.plano === 'free';
+  // Verifica se a funcionalidade esta liberada no plano atual do tenant
+  const podePersonalizar = temFeature('personalizacao_pdf');
+  const isFree = !podePersonalizar;
 
   // Estados dos campos de personalização
   const [corPrimaria, setCorPrimaria] = useState(tenant?.pdf_cor_primaria || '#f59e0b');

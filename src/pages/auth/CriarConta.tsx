@@ -23,6 +23,7 @@ export const CriarConta: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false);
+  const [aceitouTermos, setAceitouTermos] = useState(false);
 
   // E-mail pré-preenchido e travado para convites
   useEffect(() => {
@@ -211,11 +212,52 @@ export const CriarConta: React.FC = () => {
                 />
               </div>
 
+              {/* Quadro de Aceite de Termos e Privacidade (LGPD) */}
+              <div className="p-3.5 bg-graphite-900/90 border border-graphite-700/80 rounded-xl space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={aceitouTermos}
+                    onChange={(e) => setAceitouTermos(e.target.checked)}
+                    required
+                    className="mt-0.5 w-4 h-4 rounded border-graphite-600 text-amber-500 focus:ring-amber-500 bg-graphite-950 shrink-0 cursor-pointer"
+                  />
+                  <span className="font-sans text-[12px] text-vapor-300 leading-relaxed">
+                    Li e concordo com os{' '}
+                    <a
+                      href="/termos-de-uso"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-400 hover:text-amber-300 underline font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Termos de Uso
+                    </a>{' '}
+                    e a{' '}
+                    <a
+                      href="/politica-de-privacidade"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-400 hover:text-amber-300 underline font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Política de Privacidade
+                    </a>{' '}
+                    da Plataforma Detailers.
+                  </span>
+                </label>
+                <p className="text-[11px] text-vapor-500 font-mono pl-6">
+                  Trial de 14 dias sem cartão • Isolamento de dados LGPD • Cancele quando quiser
+                </p>
+              </div>
+
               <Button
                 type="submit"
                 variant="primary"
-                disabled={loading}
-                className="mt-2 min-h-[48px] w-full font-semibold"
+                disabled={loading || !aceitouTermos}
+                className={`mt-2 min-h-[48px] w-full font-semibold ${
+                  !aceitouTermos ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 {loading ? (
                   'Criando conta...'
