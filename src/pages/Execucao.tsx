@@ -32,6 +32,15 @@ import { uploadExecucaoFoto, getEvidenciaSignedUrl } from '../utils/evidencias';
 import { downloadFotosAtendimentoZip } from '../utils/zipFotos';
 import type { Execucao, ExecucaoItem, ExecucaoFoto, ExecucaoExecutor } from '../types/execucao';
 
+interface MembroEquipeExecucao {
+  member_id: string;
+  rotulo: string;
+  email: string;
+  papel: string;
+  status: string;
+  ja_executor: boolean;
+}
+
 export const ExecucaoPage: React.FC = () => {
   const { id: execucaoId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -43,7 +52,9 @@ export const ExecucaoPage: React.FC = () => {
   const [itens, setItens] = useState<ExecucaoItem[]>([]);
   const [fotos, setFotos] = useState<ExecucaoFoto[]>([]);
   const [executores, setExecutores] = useState<ExecucaoExecutor[]>([]);
-  const [membrosTenant, setMembrosTenant] = useState<any[]>([]);
+  const [membrosTenant, setMembrosTenant] = useState<MembroEquipeExecucao[]>([]);
+  const [teamLoadError, setTeamLoadError] = useState<string | null>(null);
+  const [actionExecutorLoading, setActionExecutorLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [pauseActionLoading, setPauseActionLoading] = useState(false);
@@ -76,25 +87,21 @@ export const ExecucaoPage: React.FC = () => {
           .from('execucoes')
           .select('*')
           .eq('id', execucaoId)
-          .maybeSingle();
+          .single();
 
-        if (data) {
+        if (!error && data) {
           execData = data;
-          execErr = null;
           break;
         }
 
         execErr = error;
         if (attempt < maxAttempts) {
-          await new Promise((res) => setTimeout(res, 300));
+          await new Promise((r) => setTimeout(r, 300));
         }
       }
 
       if (!execData) {
-        console.error('[Execucao load error after retries]:', execErr);
-        setErrorMsg('Não foi possível abrir o atendimento. Tente novamente.');
-        setLoading(false);
-        return;
+        throw execErr || new Error('Não foi possível encontrar a execução.');
       }
       setExecucao(execData);
 
@@ -139,13 +146,16 @@ export const ExecucaoPage: React.FC = () => {
         .eq('execucao_id', execucaoId);
       setExecutores(execsData || []);
 
-      // 6. Membros da oficina (para adicionar co-executores)
-      if (execData.tenant_id) {
-        const { data: mems } = await supabase
-          .from('tenant_members')
-          .select('*, user:auth_users(email)')
-          .eq('tenant_id', execData.tenant_id)
-          .eq('status', 'ativo');
+      // 6. Membros da oficina (via RPC sem embed)
+      const { data: mems, error: memsErr } = await supabase.rpc('listar_membros_execucao', {
+        p_execucao_id: execucaoId,
+      });
+
+      if (memsErr) {
+        console.error('[listar_membros_execucao error]:', memsErr);
+        setTeamLoadError('Não foi possível carregar a equipe. Tente de novo.');
+      } else {
+        setTeamLoadError(null);
         setMembrosTenant(mems || []);
       }
     } catch (err: any) {
@@ -293,35 +303,23 @@ export const ExecucaoPage: React.FC = () => {
     }
   };
 
-  // Abrir modal de finalização congelando o tempo imediatamente
+  // Abrir modal de finalização pausando o cronômetro se estiver rodando
   const handleAbrirModalFinalizar = async () => {
     if (!execucao) return;
-    const nowIso = new Date().toISOString();
 
     try {
-      // 1. Grava finalizado_em no banco imediatamente para congelar tempo
-      const { error } = await supabase
-        .from('execucoes')
-        .update({ finalizado_em: nowIso })
-        .eq('id', execucao.id);
+      if (execucao.status === 'em_andamento') {
+        const { error } = await supabase.rpc('pausar_execucao', { p_execucao: execucao.id });
+        if (error) throw error;
+        setExecucao((prev) => (prev ? { ...prev, status: 'pausado', contando_desde: null } : null));
+        notificarAtualizacaoTempo(execucao.id);
+      }
 
-      if (error) throw error;
-
-      // 2. Atualiza estado local para o Cronometro travar instantaneamente
-      setExecucao((prev) => (prev ? { ...prev, finalizado_em: nowIso } : null));
-      notificarAtualizacaoTempo(execucao.id);
-
-      // 3. Abre o modal
       setModalFinalizarOpen(true);
     } catch (err: any) {
       console.error('[Abrir Modal Finalizar Error]:', err);
-      setErrorMsg(err?.message || 'Erro ao congelar tempo da execução.');
+      setErrorMsg(err?.message || 'Erro ao pausar cronômetro para finalização.');
     }
-  };
-
-  const handleRevertFinalizadoEmState = () => {
-    setExecucao((prev) => (prev ? { ...prev, finalizado_em: null, status: 'em_andamento' } : null));
-    loadExecucaoData();
   };
 
   const [uploadProgressText, setUploadProgressText] = useState<string>('');
@@ -409,41 +407,47 @@ export const ExecucaoPage: React.FC = () => {
     } catch (err: any) {
       console.error('[Preservar fotos error]:', err);
       setErrorMsg(err?.message || 'Erro ao alterar preservação das fotos.');
-    } finally {
-      setPreservarLoading(false);
     }
   };
 
   // Adicionar Co-Executor
   const handleAddExecutor = async (memberId: string) => {
-    if (!execucaoId) return;
+    if (!execucaoId || actionExecutorLoading) return;
+    setActionExecutorLoading(true);
+    setErrorMsg(null);
     try {
-      const { error } = await supabase.rpc('adicionar_executor', {
-        p_execucao: execucaoId,
-        p_member: memberId,
+      const { error } = await supabase.rpc('adicionar_executor_execucao', {
+        p_execucao_id: execucaoId,
+        p_member_id: memberId,
       });
       if (error) throw error;
-      setShowAddExecutor(false);
-      loadExecucaoData();
+      await loadExecucaoData();
     } catch (err: any) {
       console.error('[Add executor error]:', err);
-      setErrorMsg(err?.message || 'Erro ao adicionar executor.');
+      setErrorMsg('Não foi possível adicionar o membro à equipe. Tente novamente.');
+    } finally {
+      setActionExecutorLoading(false);
     }
   };
 
   // Remover Executor
   const handleRemoveExecutor = async (memberId: string) => {
-    if (!execucaoId) return;
+    if (!execucaoId || actionExecutorLoading) return;
+    if (!window.confirm('Remover este executor do atendimento?')) return;
+    setActionExecutorLoading(true);
+    setErrorMsg(null);
     try {
-      const { error } = await supabase.rpc('remover_executor', {
-        p_execucao: execucaoId,
-        p_member: memberId,
+      const { error } = await supabase.rpc('remover_executor_execucao', {
+        p_execucao_id: execucaoId,
+        p_member_id: memberId,
       });
       if (error) throw error;
-      loadExecucaoData();
+      await loadExecucaoData();
     } catch (err: any) {
       console.error('[Remove executor error]:', err);
-      setErrorMsg(err?.message || 'Erro ao remover executor.');
+      setErrorMsg('Não foi possível remover o executor. Tente novamente.');
+    } finally {
+      setActionExecutorLoading(false);
     }
   };
 
@@ -568,37 +572,39 @@ export const ExecucaoPage: React.FC = () => {
               )}
             </div>
 
-            {/* BOTÃO DE PAUSA / RETOMADA */}
-            <Button
-              type="button"
-              variant={estadoDerivado !== 'rodando' ? 'primary' : 'secondary'}
-              onClick={handleTogglePausa}
-              disabled={pauseActionLoading || execucao?.status === 'finalizado'}
-              className={`w-full sm:w-auto min-h-[52px] px-5 font-bold text-[14px] flex items-center justify-center gap-2 shrink-0 ${
-                estadoDerivado === 'pausado_auto'
-                  ? 'bg-amber-500 hover:bg-amber-400 text-graphite-950 shadow-lg shadow-amber-500/20'
-                  : ''
-              }`}
-            >
-              {pauseActionLoading ? (
-                <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : estadoDerivado === 'pausado_auto' ? (
-                <>
-                  <Play size={20} className="fill-current text-graphite-950" />
-                  <span className="font-extrabold uppercase">Retomar serviço</span>
-                </>
-              ) : estadoDerivado === 'pausado_manual' ? (
-                <>
-                  <Play size={20} className="fill-current" />
-                  <span>RETOMAR</span>
-                </>
-              ) : (
-                <>
-                  <Pause size={20} className="fill-current" />
-                  <span>PAUSAR</span>
-                </>
-              )}
-            </Button>
+            {/* BOTÃO DE PAUSA / RETOMADA (Oculto quando finalizado) */}
+            {execucao?.status !== 'finalizado' && (
+              <Button
+                type="button"
+                variant={estadoDerivado !== 'rodando' ? 'primary' : 'secondary'}
+                onClick={handleTogglePausa}
+                disabled={pauseActionLoading}
+                className={`w-full sm:w-auto min-h-[52px] px-5 font-bold text-[14px] flex items-center justify-center gap-2 shrink-0 ${
+                  estadoDerivado === 'pausado_auto'
+                    ? 'bg-amber-500 hover:bg-amber-400 text-graphite-950 shadow-lg shadow-amber-500/20'
+                    : ''
+                }`}
+              >
+                {pauseActionLoading ? (
+                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : estadoDerivado === 'pausado_auto' ? (
+                  <>
+                    <Play size={20} className="fill-current text-graphite-950" />
+                    <span className="font-extrabold uppercase">Retomar serviço</span>
+                  </>
+                ) : estadoDerivado === 'pausado_manual' ? (
+                  <>
+                    <Play size={20} className="fill-current" />
+                    <span>RETOMAR</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause size={20} className="fill-current" />
+                    <span>PAUSAR</span>
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -968,59 +974,108 @@ export const ExecucaoPage: React.FC = () => {
               <Users size={18} className="text-amber-500" />
               <span>Equipe na Execução</span>
             </h3>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setShowAddExecutor(!showAddExecutor)}
-              className="text-[12px] h-8 px-3"
-            >
-              <Plus size={14} />
-              <span>Adicionar</span>
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {executores.map((exec) => (
-              <div
-                key={exec.id}
-                className="flex items-center gap-2 px-3 py-1.5 bg-graphite-900 border border-graphite-700 rounded-full text-[13px] text-vapor-200"
+            {execucao?.status !== 'finalizado' && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowAddExecutor(!showAddExecutor)}
+                className="text-[12px] h-8 px-3"
               >
-                <span>{exec.member?.email || 'Membro'}</span>
-                {exec.principal && (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-400 font-bold px-1.5 py-0.2 rounded">
-                    Principal
-                  </span>
-                )}
-                {!exec.principal && (
-                  <button
-                    onClick={() => handleRemoveExecutor(exec.member_id)}
-                    className="text-vapor-400 hover:text-flare-400 transition-colors ml-1"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            ))}
+                <Plus size={14} />
+                <span>{showAddExecutor ? 'Fechar' : 'Adicionar'}</span>
+              </Button>
+            )}
           </div>
 
-          {showAddExecutor && (
-            <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-2">
-              <span className="text-[12px] font-semibold text-vapor-300">Selecionar membro da equipe:</span>
-              <div className="flex flex-wrap gap-2">
-                {membrosTenant
-                  .filter((m) => !executores.some((e) => e.member_id === m.id))
-                  .map((membro) => (
-                    <Button
-                      key={membro.id}
+          {teamLoadError && (
+            <div className="p-3 bg-flare-500/10 border border-flare-500/30 rounded-lg text-flare-400 text-xs">
+              {teamLoadError}
+            </div>
+          )}
+
+          {/* Lista de Executores Atuais */}
+          <div className="flex flex-wrap gap-2">
+            {executores.map((exec) => {
+              const emailMembro = exec.member?.email || (exec as any).email || 'Membro';
+              const papelMembro = exec.member?.role || '';
+              const isConvidado = exec.member?.status === 'convidado';
+              return (
+                <div
+                  key={exec.id}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-graphite-900 border border-graphite-700 rounded-full text-[13px] text-vapor-200"
+                >
+                  <span className="font-sans font-medium">{emailMembro}</span>
+                  {exec.principal && (
+                    <span className="text-[10px] bg-amber-500/20 text-amber-400 font-bold px-1.5 py-0.5 rounded uppercase">
+                      Principal
+                    </span>
+                  )}
+                  {papelMembro && papelMembro !== 'operador' && (
+                    <span className="text-[10px] bg-graphite-800 text-vapor-400 px-1.5 py-0.5 rounded capitalize">
+                      {papelMembro}
+                    </span>
+                  )}
+                  {isConvidado && (
+                    <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 px-1.5 py-0.5 rounded">
+                      não acessa o sistema
+                    </span>
+                  )}
+                  {execucao?.status !== 'finalizado' && executores.length > 1 && (
+                    <button
                       type="button"
-                      variant="secondary"
-                      onClick={() => handleAddExecutor(membro.id)}
-                      className="text-[12px] h-8 px-3"
+                      title="Remover executor"
+                      disabled={actionExecutorLoading}
+                      onClick={() => handleRemoveExecutor(exec.member_id)}
+                      className="text-vapor-400 hover:text-flare-400 transition-colors ml-1 p-0.5"
                     >
-                      {membro.user?.email || 'Membro'}
-                    </Button>
-                  ))}
-              </div>
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Bloco Adicionar Membro da Equipe */}
+          {showAddExecutor && execucao?.status !== 'finalizado' && (
+            <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-2.5">
+              <span className="text-[12px] font-semibold text-vapor-300">
+                Selecionar membro da equipe:
+              </span>
+              {membrosTenant.length === 0 ? (
+                <span className="text-[12px] text-vapor-400 italic">
+                  Nenhum outro membro cadastrado. Cadastre em Ajustes &gt; Equipe.
+                </span>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {membrosTenant.map((membro) => {
+                    const jaExecutor = membro.ja_executor || executores.some((e) => e.member_id === membro.member_id);
+                    return (
+                      <Button
+                        key={membro.member_id}
+                        type="button"
+                        variant={jaExecutor ? 'ghost' : 'secondary'}
+                        disabled={jaExecutor || actionExecutorLoading}
+                        onClick={() => handleAddExecutor(membro.member_id)}
+                        className={`text-[12px] h-8 px-3 flex items-center gap-1.5 ${
+                          jaExecutor ? 'opacity-60 cursor-not-allowed border-graphite-800 text-vapor-500' : ''
+                        }`}
+                      >
+                        <span>{membro.rotulo || membro.email}</span>
+                        {membro.papel && (
+                          <span className="text-[10px] text-vapor-500">({membro.papel})</span>
+                        )}
+                        {membro.status === 'convidado' && (
+                          <span className="text-[10px] text-zinc-400 italic">
+                            (não acessa o sistema)
+                          </span>
+                        )}
+                        {jaExecutor && <span className="text-[10px] text-amber-400 font-bold ml-1">✓ Já adicionado</span>}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -1064,12 +1119,10 @@ export const ExecucaoPage: React.FC = () => {
         <ModalFinalizarExecucao
           isOpen={modalFinalizarOpen}
           onClose={() => setModalFinalizarOpen(false)}
-          onRevertFinalizadoEm={handleRevertFinalizadoEmState}
           execucaoId={execucaoId}
           agendamentoId={agendamento.id}
           tenantId={tenant.id}
           placaVeiculo={agendamento.veiculo?.placa || ''}
-          tempoFormatado={tempoHook.tempoFormatado}
           pendingRequiredCount={pendingRequiredItems.length}
           pendingRequiredNames={pendingRequiredNames}
           agendamentoItens={agendamento.itens || []}

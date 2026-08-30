@@ -1,4 +1,5 @@
 import type { TipoAvaria, VistaDiagrama, NivelSujidade, EstadoIluminacao, EstadoFluido } from '../types/checkin';
+import { supabase } from '../lib/supabase';
 
 export function clampedPercentage(val: number): number {
   if (isNaN(val)) return 0;
@@ -109,4 +110,39 @@ export function formatarFluido(estado: EstadoFluido | string | undefined): strin
     default:
       return estado;
   }
+}
+
+/**
+ * Executa a dispensa de vistoria chamando a RPC dispensar_vistoria.
+ * Possui fallback transparente para iniciar_execucao caso a migration 0083
+ * ainda não tenha sido aplicada no banco ou o cache do PostgREST não tenha atualizado.
+ */
+export async function dispensarVistoriaAgendamento(agendamentoId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('dispensar_vistoria', {
+    p_agendamento: agendamentoId,
+  });
+
+  if (!error && data) {
+    const execId = typeof data === 'string' ? data : (data.execucao_id || data.id);
+    if (execId) return execId;
+  }
+
+  // Se a RPC dispensar_vistoria falhar por ausência no schema cache (função não encontrada),
+  // executa o fallback iniciando a execução diretamente:
+  const isFunctionNotFound = error?.message?.includes('dispensar_vistoria') ||
+                             error?.message?.includes('schema cache') ||
+                             error?.code === 'PGRST202' ||
+                             (error as any)?.details?.includes('dispensar_vistoria');
+
+  if (isFunctionNotFound) {
+    const { data: initData, error: initErr } = await supabase.rpc('iniciar_execucao', {
+      p_agendamento: agendamentoId,
+    });
+    if (initErr) throw initErr;
+    const execId = typeof initData === 'string' ? initData : (initData?.execucao_id || initData?.id);
+    if (execId) return execId;
+  }
+
+  if (error) throw error;
+  throw new Error('Não foi possível iniciar o atendimento.');
 }

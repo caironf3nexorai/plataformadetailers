@@ -99,5 +99,6 @@ export interface ExecucaoExecutor {
     id: string;
     email: string;
     role: AppRole;
+    status?: string;
   };
 }

@@ -96,12 +96,12 @@ export function obterAcaoAgendamento(params: {
     };
   }
 
-  // 4. Status agendado / confirmado com vistoria finalizada -> "Iniciar serviço"
-  if (checkinInfo && checkinInfo.finalizado) {
+  // 4. Status agendado / confirmado com vistoria finalizada OU dispensada -> "Iniciar serviço"
+  if ((checkinInfo && checkinInfo.finalizado) || (agendamento.vistoria_dispensada && (!checkinInfo || !checkinInfo.finalizado))) {
     return {
       tipo: 'iniciar_servico',
       label: 'Iniciar serviço',
-      checkinId: checkinInfo.id,
+      checkinId: checkinInfo?.id,
       execucaoId: execucaoInfo?.id,
     };
   }

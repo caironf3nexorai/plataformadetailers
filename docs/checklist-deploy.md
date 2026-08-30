@@ -12,17 +12,32 @@ Este documento contém todos os passos necessários para preparar, validar, publ
   - Definir uma senha forte para o banco PostgreSQL.
 
 - [ ] **Executar as Migrações SQL na Ordem Correta**:
-  - Garantir que **todas as 56 migrations** (da `0001_fundacao.sql` até a `0056_fix_taxas_cartao_lote.sql`) sejam executadas na ordem numérica sequencial no projeto de produção.
+  - Garantir que **todas as migrations** (da `0001_fundacao.sql` em diante, incluindo a `0082_eliminar_sobrecargas_funcoes_pgrst203.sql`) sejam executadas na ordem numérica sequencial no projeto de produção.
   - *Comando Supabase CLI* (se estiver usando CLI):
     ```bash
     npx supabase db push
     ```
   - *Ou via SQL Editor do Supabase*: Executar sequencialmente os arquivos localizados na pasta `supabase/migrations/`.
 
+- [ ] **Validação Obrigatória Anti-Sobrecarga (PGRST203)**:
+  - Executar a consulta abaixo no SQL Editor do Supabase. O resultado **DEVE SER RIGOROSAMENTE VAZIO (0 LINHAS)**:
+    ```sql
+    select p.proname, count(*) as versoes,
+           array_agg(p.oid::regprocedure::text) as assinaturas
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prokind = 'f'
+      and has_function_privilege('authenticated', p.oid, 'execute')
+    group by 1 having count(*) > 1
+    order by 2 desc;
+    ```
+
 - [ ] **Verificar Triggers e RPCs Críticas**:
   - [ ] `finalizar_execucao_com_pagamentos` (RPC transacional de baixa financeira).
   - [ ] `salvar_taxas_cartao_lote` (RPC de vigência de taxas de maquininha).
   - [ ] `horarios_disponiveis` (RPC do agendamento online público).
+  - [ ] `agendar_cliente_online` / `agendar_online` (RPC de agendamento online).
+  - [ ] `agendar_orcamento_publico` (RPC de conversão de orçamento em agendamento).
+  - [ ] `criar_agendamento` (RPC de balcão).
   - [ ] `trg_validar_taxa_cartao_sobreposta` e `trg_taxas_cartao_imutavel`.
 
 ---

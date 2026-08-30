@@ -5,7 +5,33 @@
 
 ---
 
-## Inventário Geral de Funções RPC
+## ⚠️ REGRA MANDATÓRIA: PROIBIÇÃO ABSOLUTA DE SOBRECARGA DE FUNÇÕES (OVERLOAD) NA API POSTGREST
+
+1. **Incompatibilidade Arquitetural do PostgREST (PGRST203)**:
+   - O PostgREST resolve chamadas RPC inspecionando os **NOMES dos parâmetros** fornecidos na requisição HTTP/JSON, e não a tipagem estrita do PostgreSQL.
+   - Ter duas ou mais funções com o mesmo nome e parâmetros coincidentes ou com valores padrão (*default values*) resulta no erro fatal:
+     `PGRST203: Could not choose the best candidate function`.
+2. **Regra de Ouro do Projeto**:
+   - **UMA ÚNICA ASSINATURA VISÍVEL NA API POR NOME DE FUNÇÃO**.
+   - É expressamente proibido criar "versões sobrecarregadas" ou "wrappers alternativos" com o mesmo nome para atender diferentes telas.
+3. **Mudança de Assinatura**:
+   - Qualquer necessidade de alteração em parâmetros exige a **modificação direta da função canônica existente** e o **ajuste simultâneo do frontend na mesma entrega/migração**.
+   - Nunca crie uma segunda versão.
+4. **Validação Obrigatória em Toda Entrega**:
+   A consulta abaixo DEVE retornar rigorosamente **0 linhas** (vazia) antes de qualquer deploy:
+   ```sql
+   select p.proname, count(*) as versoes,
+          array_agg(p.oid::regprocedure::text) as assinaturas
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.prokind = 'f'
+     and has_function_privilege('authenticated', p.oid, 'execute')
+   group by 1 having count(*) > 1
+   order by 2 desc;
+   ```
+
+---
+
+## Inventário Canônico Geral de Funções RPC
 
 | Nome da Função | Parâmetros | Tipo de Retorno | Grants |
 | :--- | :--- | :--- | :--- |
@@ -13,8 +39,9 @@
 | `adicionar_executor` | `p_execucao uuid, p_member uuid` | `void` | `authenticated` |
 | `adicionar_item_agendamento` | `p_agendamento uuid, p_servico uuid, p_combo uuid default null` | `void` | `authenticated` |
 | `adicionar_item_execucao` | `p_execucao uuid, p_item_nome text, p_obrigatorio boolean default false` | `uuid` | `authenticated` |
-| `agendar_online` | `p_slug text, p_nome text, p_telefone text, p_placa text, p_modelo text, p_categoria uuid, p_itens jsonb, p_inicio timestamptz, p_observacoes text default null, p_marca text default null, p_ano integer default null, p_cor text default null` | `jsonb` | `anon`, `authenticated` |
-| `agendar_orcamento_publico` | `p_token uuid, p_inicio timestamptz` | `jsonb` | `anon`, `authenticated` |
+| `agendar_cliente_online` | `p_slug text, p_cliente_nome text, p_cliente_telefone text, p_veiculo_placa text, p_veiculo_modelo text, p_categoria uuid, p_itens jsonb, p_inicio timestamptz, p_observacoes text default null, p_transbordo_aceito boolean default false, p_user_agent text default null, p_ip text default null` | `jsonb` | `anon`, `authenticated` |
+| `agendar_online` | `p_slug text, p_nome text, p_telefone text, p_placa text, p_modelo text, p_categoria uuid, p_itens jsonb, p_inicio timestamptz, p_observacoes text default null, p_transbordo_aceito boolean default false, p_user_agent text default null, p_ip text default null` | `jsonb` | `anon`, `authenticated` |
+| `agendar_orcamento_publico` | `p_token uuid, p_inicio timestamptz, p_transbordo_aceito boolean default false, p_user_agent text default null, p_ip text default null` | `jsonb` | `anon`, `authenticated` |
 | `ajustar_estoque` | `p_tenant uuid, p_produto uuid, p_nova_qtd numeric, p_motivo text` | `void` | `authenticated` |
 | `aplicar_desconto_orcamento` | `p_orcamento uuid, p_tipo text, p_valor numeric, p_motivo text default null, p_cupom_codigo text default null` | `void` | `authenticated` |
 | `atendimentos_periodo` | `p_tenant uuid, p_inicio date, p_fim date` | `table(...)` | `authenticated` |
@@ -29,19 +56,19 @@
 | `confirmar_alteracao_orcamento` | `p_token uuid, p_novo_titulo text, p_motivo text` | `jsonb` | `anon`, `authenticated` |
 | `confirmar_despesas_variaveis_lote` | `p_tenant uuid, p_mes date, p_despesas jsonb` | `void` | `authenticated` |
 | `converter_orcamento_em_agendamento` | `p_orcamento uuid, p_inicio timestamptz` | `uuid` | `authenticated` |
-| `criar_agendamento` (JSONB) | `p_cliente uuid, p_veiculo uuid, p_itens jsonb, p_categoria uuid, p_inicio timestamptz, p_observacoes text default null, p_forcado boolean default false` | `uuid` | `authenticated` |
-| `criar_agendamento` (UUID) | `p_cliente uuid, p_veiculo uuid, p_servico uuid, p_categoria uuid, p_inicio timestamptz, p_observacoes text default null, p_forcado boolean default false` | `uuid` | `authenticated` |
+| `criar_agendamento` | `p_cliente uuid, p_veiculo uuid, p_itens jsonb, p_categoria uuid, p_inicio timestamptz, p_observacoes text default null, p_forcado boolean default false` | `uuid` | `authenticated` |
+| `criar_oficina` | `p_nome text, p_cidade text, p_uf text, p_telefone text, p_codigo_indicacao text default null, p_codigo_parceiro text default null, p_documento text default null` | `uuid` | `authenticated` |
 | `criar_orcamento` | `p_tenant uuid, p_cliente uuid, p_veiculo uuid, p_categoria uuid, p_titulo text, p_observacoes text default null` | `uuid` | `authenticated` |
 | `custo_hora_operacao` | `p_tenant uuid, p_mes date` | `numeric` | `authenticated` |
 | `entrada_avulsa` | `p_cliente uuid, p_veiculo uuid, p_itens jsonb, p_categoria uuid, p_observacoes text default null` | `uuid` | `authenticated` |
 | `enviar_orcamento` | `p_orcamento uuid` | `uuid` | `authenticated` |
 | `expirar_orcamentos` | `p_tenant uuid` | `void` | `authenticated` |
-| `expirar_sinais_pendentes` | `p_tenant_id uuid` | `void` | `authenticated` |
+| `expirar_sinais_pendentes` | `p_tenant uuid` | `void` | `authenticated` |
 | `finalizar_execucao` | `p_execucao uuid, p_valor_total numeric, p_itens_cobrados jsonb default null` | `void` | `authenticated` |
+| `finalizar_execucao_com_pagamentos` | `p_execucao uuid, p_pagamentos jsonb default '[]'::jsonb, p_valores jsonb default '[]'::jsonb, p_consumos jsonb default '[]'::jsonb, p_observacoes text default null, p_desconto_tipo text default null, p_desconto_valor numeric default 0, p_desconto_motivo text default null` | `void` | `authenticated` |
 | `gerar_payload_pix` | `p_tenant uuid, p_valor numeric, p_txid text` | `jsonb` | `anon`, `authenticated` |
 | `historico_consumo_veiculo` | `p_veiculo uuid` | `table(...)` | `authenticated` |
-| `horarios_disponiveis` (JSONB) | `p_tenant uuid, p_data date, p_itens jsonb default null, p_categoria uuid default null, p_ignorar_agendamento uuid default null` | `table(horario time, disponivel boolean, motivo text, termino_previsto timestamptz)` | `anon`, `authenticated` |
-| `horarios_disponiveis` (UUID) | `p_tenant uuid, p_data date, p_servico uuid, p_categoria uuid, p_ignorar_agendamento uuid default null` | `table(horario time, disponivel boolean, motivo text, termino_previsto timestamptz)` | `anon`, `authenticated` |
+| `horarios_disponiveis` | `p_tenant uuid, p_data date, p_itens jsonb default null, p_categoria uuid default null, p_ignorar_agendamento uuid default null` | `table(horario time, disponivel boolean, motivo text, termino_previsto timestamptz)` | `anon`, `authenticated` |
 | `horas_disponiveis_mes` | `p_tenant uuid, p_mes date` | `numeric` | `authenticated` |
 | `iniciar_execucao` | `p_agendamento uuid` | `uuid` (ou `jsonb`) | `authenticated` |
 | `limpar_fotos_expiradas` | *(nenhum)* | `integer` | `authenticated` |

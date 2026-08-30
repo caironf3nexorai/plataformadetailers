@@ -143,5 +143,41 @@ export function formatarTempoTrabalhado(val: number | null | undefined, ehMinuto
   return `${horas}h${String(mins).padStart(2, '0')} trabalhadas`;
 }
 
+/**
+ * Converte de forma resiliente números ou strings monetárias/decimais (PT-BR ou formato JS) para float.
+ * Trata casos como: 620.5, "620.5", "620,50", "1.620,50", "1,620.50", "15", null, undefined.
+ */
+export function parseNumeroFlexivel(val: number | string | undefined | null): number {
+  if (val === undefined || val === null) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const str = String(val).trim();
+  if (!str) return 0;
 
+  const hasComma = str.includes(',');
+  const hasDot = str.includes('.');
 
+  if (hasComma && hasDot) {
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+      // PT-BR com milhar: 1.234,56 -> 1234.56
+      const clean = str.replace(/\./g, '').replace(',', '.');
+      const num = parseFloat(clean);
+      return isNaN(num) ? 0 : num;
+    } else {
+      // US com milhar: 1,234.56 -> 1234.56
+      const clean = str.replace(/,/g, '');
+      const num = parseFloat(clean);
+      return isNaN(num) ? 0 : num;
+    }
+  }
+
+  if (hasComma) {
+    // PT-BR sem milhar: 620,50 -> 620.50
+    const clean = str.replace(',', '.');
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  }
+
+  // Decimal JS nativo ou inteiro: "620.50" / "15" -> 620.50 / 15
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}

@@ -10,6 +10,8 @@ import { DiagramaVeiculo } from '../../components/checkin/DiagramaVeiculo';
 import { CanvasAssinatura } from '../../components/checkin/CanvasAssinatura';
 import { uploadEvidenciaFoto } from '../../utils/evidencias';
 import { montarLinkWhatsapp } from '../../utils/whatsapp';
+import { ModalConfirmarSemVistoria } from '../../components/checkin/ModalConfirmarSemVistoria';
+import { dispensarVistoriaAgendamento } from '../../utils/checkin';
 import {
   Car,
   Fuel,
@@ -32,6 +34,9 @@ export const FormularioCheckin: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [savingStep, setSavingStep] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [showModalPularVistoria, setShowModalPularVistoria] = useState(false);
+  const [pularLoading, setPularLoading] = useState(false);
 
   const [step, setStep] = useState<number>(1);
 
@@ -387,6 +392,21 @@ export const FormularioCheckin: React.FC = () => {
     }
   };
 
+  const handleConfirmarPularVistoria = async () => {
+    if (!agendamentoId || pularLoading) return;
+    setPularLoading(true);
+    try {
+      const execId = await dispensarVistoriaAgendamento(agendamentoId);
+      navigate(`/execucao/${execId}`, { replace: true });
+    } catch (err: any) {
+      console.error('[Pular Vistoria Error]:', err);
+      setError(err?.message || 'Erro ao dispensar vistoria.');
+      setShowModalPularVistoria(false);
+    } finally {
+      setPularLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
@@ -411,26 +431,40 @@ export const FormularioCheckin: React.FC = () => {
     <div className="flex flex-col gap-4 w-full max-w-3xl mx-auto pb-12 overflow-x-hidden">
       {/* Topo Fixo Mobile */}
       <div className="sticky top-0 z-20 bg-graphite-950/95 backdrop-blur border-b border-graphite-800 p-3 rounded-lg flex items-center justify-between gap-2 shadow-md w-full">
-        <button
-          type="button"
-          onClick={() => navigate('/')}
-          className="p-2 text-vapor-400 hover:text-vapor-100 rounded-lg hover:bg-graphite-800 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
-        >
-          <ArrowLeft size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="p-2 text-vapor-400 hover:text-vapor-100 rounded-lg hover:bg-graphite-800 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+          >
+            <ArrowLeft size={20} />
+          </button>
 
-        <div className="flex flex-col items-center">
-          <span className="font-display text-[15px] text-vapor-100 uppercase tracking-wide">
-            Vistoria de Entrada
-          </span>
-          <span className="font-mono text-[12px] text-amber-400 font-bold">
-            Passo {step} de 8
-          </span>
+          <div className="flex flex-col">
+            <span className="font-display text-[14px] sm:text-[15px] text-vapor-100 uppercase tracking-wide">
+              Vistoria de Entrada
+            </span>
+            <span className="font-mono text-[11px] sm:text-[12px] text-amber-400 font-bold">
+              Passo {step} de 8
+            </span>
+          </div>
         </div>
 
-        <span className="font-mono text-[11px] text-vapor-500 shrink-0">
-          {savingStep ? 'Salvando...' : 'Autosave ok'}
-        </span>
+        <div className="flex items-center gap-2">
+          {!tenant?.vistoria_obrigatoria && !checkin?.finalizado && (
+            <button
+              type="button"
+              onClick={() => setShowModalPularVistoria(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-graphite-900 hover:bg-graphite-800 text-vapor-400 hover:text-vapor-200 border border-graphite-700 text-[11px] font-medium transition-colors min-h-[38px]"
+            >
+              Iniciar sem vistoria
+            </button>
+          )}
+
+          <span className="hidden sm:inline font-mono text-[11px] text-vapor-500 shrink-0">
+            {savingStep ? 'Salvando...' : 'Autosave ok'}
+          </span>
+        </div>
       </div>
 
       {/* Barra de Progresso em Passos */}
@@ -960,6 +994,26 @@ export const FormularioCheckin: React.FC = () => {
           </Button>
         )}
       </div>
+
+      {step === 1 && !tenant?.vistoria_obrigatoria && !checkin?.finalizado && (
+        <div className="flex justify-center pt-2">
+          <button
+            type="button"
+            onClick={() => setShowModalPularVistoria(true)}
+            className="text-xs text-vapor-400 hover:text-vapor-200 underline text-center py-2 transition-colors"
+          >
+            Prefere pular? Iniciar atendimento sem a vistoria de entrada
+          </button>
+        </div>
+      )}
+
+      {/* Modal de Confirmação para Iniciar Sem Vistoria */}
+      <ModalConfirmarSemVistoria
+        isOpen={showModalPularVistoria}
+        onClose={() => setShowModalPularVistoria(false)}
+        onConfirm={handleConfirmarPularVistoria}
+        loading={pularLoading}
+      />
     </div>
   );
 };

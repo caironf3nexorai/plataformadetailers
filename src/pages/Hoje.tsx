@@ -35,6 +35,8 @@ import { MilestoneCelebrationModal } from '../components/ui/MilestoneCelebration
 import { useMilestoneCheck } from '../hooks/useMilestoneCheck';
 import { Cronometro } from '../components/execucao/Cronometro';
 import { ModalFinalizarExecucao } from '../components/execucao/ModalFinalizarExecucao';
+import { ModalConfirmarSemVistoria } from '../components/checkin/ModalConfirmarSemVistoria';
+import { dispensarVistoriaAgendamento } from '../utils/checkin';
 import { obterAcaoAgendamento } from '../utils/acaoAgendamento';
 import { BannerAlertaLimites } from '../components/layout/BannerAlertaLimites';
 import { obterNivelAlertaTempo } from '../utils/cronometro';
@@ -50,6 +52,9 @@ export const Hoje: React.FC = () => {
   const [execucoesAbertas, setExecucoesAbertas] = useState<any[]>([]);
   const [orcamentosAprovadosCount, setOrcamentosAprovadosCount] = useState<number>(0);
   const [agendamentosPendentes, setAgendamentosPendentes] = useState<any[]>([]);
+
+  const [agendamentoParaPularVistoria, setAgendamentoParaPularVistoria] = useState<Agendamento | null>(null);
+  const [pularLoading, setPularLoading] = useState(false);
 
   const [checkinsMap, setCheckinsMap] = useState<
     Record<
@@ -157,7 +162,11 @@ export const Hoje: React.FC = () => {
       setOrcamentosAprovadosCount(approvedCount || 0);
 
       // Expirar sinais pendentes vencidos (>24h)
-      await supabase.rpc('expirar_sinais_pendentes', { p_tenant_id: tenant.id });
+      try {
+        await supabase.rpc('expirar_sinais_pendentes', { p_tenant: tenant.id });
+      } catch (e) {
+        // Ignora silenciosamente caso rotina de expiração falhe
+      }
 
       // Buscar agendamentos online pendentes de confirmação ou de sinal
       const { data: pendentesData } = await supabase
@@ -379,10 +388,6 @@ export const Hoje: React.FC = () => {
 
       if (error) throw error;
 
-      if (typeof data === 'object' && data?.success === false) {
-        throw new Error(data?.error || 'Não foi possível abrir o atendimento. Tente novamente.');
-      }
-
       const execId = typeof data === 'string' ? data : (data?.execucao_id || data?.id);
 
       if (execId) {
@@ -392,6 +397,14 @@ export const Hoje: React.FC = () => {
       }
     } catch (err: any) {
       console.error('[Iniciar Serviço Error]:', err);
+      let userMessage = 'Não foi possível iniciar o atendimento. Tente novamente.';
+      const msg = err?.message || '';
+      if (msg.includes('já foi finalizado')) {
+        userMessage = 'Este atendimento já foi finalizado.';
+      } else if (msg.includes('sem acesso')) {
+        userMessage = 'Você não tem permissão para acessar esta oficina.';
+      }
+      alert(userMessage);
     } finally {
       setStartingExecId(null);
     }
@@ -428,12 +441,10 @@ export const Hoje: React.FC = () => {
     modoRetroativo = false
   ) => {
     try {
-      await supabase
-        .from('execucoes')
-        .update({ finalizado_em: new Date().toISOString() })
-        .eq('id', exec.id);
-
-      notificarAtualizacaoTempo(exec.id);
+      if (exec?.status === 'em_andamento') {
+        await supabase.rpc('pausar_execucao', { p_execucao: exec.id });
+        notificarAtualizacaoTempo(exec.id);
+      }
 
       setModalFinalizarState({
         execucaoId: exec.id,
@@ -475,6 +486,22 @@ export const Hoje: React.FC = () => {
     return dtIniciado < hojeIsoStr;
   });
 
+  const handleConfirmarPularVistoriaCard = async () => {
+    if (!agendamentoParaPularVistoria || pularLoading) return;
+    setPularLoading(true);
+    try {
+      const execId = await dispensarVistoriaAgendamento(agendamentoParaPularVistoria.id);
+      setAgendamentoParaPularVistoria(null);
+      navigate(`/execucao/${execId}`);
+    } catch (err: any) {
+      console.error('[Hoje Pular Vistoria Error]:', err);
+      alert(err?.message || 'Erro ao dispensar vistoria.');
+      setAgendamentoParaPularVistoria(null);
+    } finally {
+      setPularLoading(false);
+    }
+  };
+
   const renderAcaoBotao = (agendamento: Agendamento) => {
     const checkinInfo = checkinsMap[agendamento.id];
     const execucaoInfo = execucoesMap[agendamento.id];
@@ -503,24 +530,41 @@ export const Hoje: React.FC = () => {
       case 'fazer_vistoria':
       case 'continuar_vistoria':
         return (
-          <button
-            type="button"
-            disabled={isStartingCheckin}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isStartingCheckin) return;
-              setStartingCheckinId(agendamento.id);
-              navigate(`/checkin/${agendamento.id}`);
-            }}
-            className="px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-graphite-950 font-bold font-sans text-[13px] transition-colors flex items-center justify-center gap-1.5 min-h-[48px] shrink-0"
-          >
-            {isStartingCheckin ? (
-              <div className="w-4 h-4 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <ClipboardCheck size={16} />
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={isStartingCheckin}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isStartingCheckin) return;
+                setStartingCheckinId(agendamento.id);
+                navigate(`/checkin/${agendamento.id}`);
+              }}
+              className="px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-graphite-950 font-bold font-sans text-[13px] transition-colors flex items-center justify-center gap-1.5 min-h-[48px] shrink-0"
+            >
+              {isStartingCheckin ? (
+                <div className="w-4 h-4 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <ClipboardCheck size={16} />
+              )}
+              <span>{acao.label}</span>
+            </button>
+
+            {!tenant?.vistoria_obrigatoria && !checkinInfo?.finalizado && (
+              <button
+                type="button"
+                title="Iniciar atendimento sem vistoria"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAgendamentoParaPularVistoria(agendamento);
+                }}
+                className="px-2.5 py-2.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-400 hover:text-vapor-200 border border-graphite-700 text-[12px] font-medium transition-colors min-h-[48px] flex items-center justify-center gap-1"
+              >
+                <Play size={14} className="fill-current text-amber-400" />
+                <span className="hidden md:inline">Iniciar</span>
+              </button>
             )}
-            <span>{acao.label}</span>
-          </button>
+          </div>
         );
 
       case 'iniciar_servico':
@@ -1050,6 +1094,11 @@ export const Hoje: React.FC = () => {
                           label={agendamento.servico?.nome || 'Serviço'}
                           tone={(agendamento.servico?.tom as any) || 'amber'}
                         />
+                        {agendamento.vistoria_dispensada && !checkinsMap[agendamento.id]?.finalizado && (
+                          <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
+                            Sem vistoria
+                          </span>
+                        )}
                         <Badge tone={getBadgeToneFromStatus(agendamento.status)}>
                           {getLabelFromStatus(agendamento.status)}
                         </Badge>
@@ -1107,9 +1156,6 @@ export const Hoje: React.FC = () => {
             setModalFinalizarState(null);
             fetchHojeData();
           }}
-          onRevertFinalizadoEm={() => {
-            fetchHojeData();
-          }}
           execucaoId={modalFinalizarState.execucaoId}
           agendamentoId={modalFinalizarState.agendamento?.id || ''}
           tenantId={tenant.id}
@@ -1138,6 +1184,13 @@ export const Hoje: React.FC = () => {
         isOpen={!!activeMilestone}
         marco={activeMilestone}
         onClose={dismissMilestone}
+      />
+
+      <ModalConfirmarSemVistoria
+        isOpen={!!agendamentoParaPularVistoria}
+        onClose={() => setAgendamentoParaPularVistoria(null)}
+        onConfirm={handleConfirmarPularVistoriaCard}
+        loading={pularLoading}
       />
     </div>
   );

@@ -29,6 +29,7 @@ export interface Tenant {
   orcamento_agendamento_cliente?: boolean;
   orcamento_validade_dias?: number;
   antecedencia_minima_horas?: number;
+  vistoria_obrigatoria?: boolean;
   pdf_cor_primaria?: string | null;
   pdf_cor_fundo_cabecalho?: string | null;
   pdf_cor_texto_cabecalho?: string | null;

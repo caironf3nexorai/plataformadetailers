@@ -12,7 +12,8 @@ import {
   Info, 
   CalendarX, 
   CheckCircle2,
-  Lock
+  Lock,
+  ClipboardCheck
 } from 'lucide-react';
 import type { HorarioFuncionamento, BloqueioAgenda } from '../../types/agenda';
 import { getNomeDiaSemana } from '../../utils/agenda';
@@ -22,12 +23,14 @@ export const AbaHorarios: React.FC = () => {
   const { tenant } = useAuth();
   const [gradeMinutos, setGradeMinutos] = useState<number>(60);
   const [antecedenciaHoras, setAntecedenciaHoras] = useState<number>(2);
+  const [vistoriaObrigatoria, setVistoriaObrigatoria] = useState<boolean>(false);
   const [horarios, setHorarios] = useState<HorarioFuncionamento[]>([]);
   const [bloqueios, setBloqueios] = useState<BloqueioAgenda[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [savingGrade, setSavingGrade] = useState(false);
   const [savingAntecedencia, setSavingAntecedencia] = useState(false);
+  const [savingVistoriaObrigatoria, setSavingVistoriaObrigatoria] = useState(false);
   const [savingHorarios, setSavingHorarios] = useState(false);
 
   // Modal Novo Bloqueio
@@ -49,15 +52,16 @@ export const AbaHorarios: React.FC = () => {
     if (!tenant) return;
     setLoading(true);
     try {
-      // Grade minutos e Antecedência
+      // Grade minutos, Antecedência e Vistoria Obrigatória
       const { data: tData } = await supabase
         .from('tenants')
-        .select('grade_minutos, antecedencia_minima_horas')
+        .select('grade_minutos, antecedencia_minima_horas, vistoria_obrigatoria')
         .eq('id', tenant.id)
         .single();
       if (tData) {
         setGradeMinutos(tData.grade_minutos || 60);
         setAntecedenciaHoras(tData.antecedencia_minima_horas ?? 2);
+        setVistoriaObrigatoria(Boolean(tData.vistoria_obrigatoria));
       }
 
       // Horários de funcionamento
@@ -123,6 +127,30 @@ export const AbaHorarios: React.FC = () => {
       setMessage({ text: 'Erro ao atualizar antecedência: ' + err.message, type: 'error' });
     } finally {
       setSavingAntecedencia(false);
+    }
+  };
+
+  const handleToggleVistoriaObrigatoria = async (obrigatoria: boolean) => {
+    if (!tenant) return;
+    setVistoriaObrigatoria(obrigatoria);
+    setSavingVistoriaObrigatoria(true);
+    setMessage(null);
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ vistoria_obrigatoria: obrigatoria })
+        .eq('id', tenant.id);
+      if (error) throw error;
+      setMessage({
+        text: obrigatoria
+          ? 'Vistoria de entrada configurada como OBRIGATÓRIA para toda a equipe!'
+          : 'Vistoria de entrada configurada como OPCIONAL (pode ser dispensada pelo operador).',
+        type: 'success',
+      });
+    } catch (err: any) {
+      setMessage({ text: 'Erro ao atualizar configuração de vistoria: ' + err.message, type: 'error' });
+    } finally {
+      setSavingVistoriaObrigatoria(false);
     }
   };
 
@@ -336,6 +364,35 @@ export const AbaHorarios: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {/* Card: Obrigatoriedade da Vistoria de Entrada */}
+      <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col gap-1 max-w-xl">
+          <h3 className="font-display text-[15px] text-vapor-100 font-bold uppercase tracking-wider flex items-center gap-2">
+            <ClipboardCheck size={18} className="text-amber-500" />
+            Obrigatoriedade da Vistoria de Entrada
+          </h3>
+          <p className="font-sans text-[13px] text-vapor-400">
+            Quando ativado, a equipe é obrigada a registrar e assinar a vistoria de entrada antes de iniciar qualquer serviço. Quando desativado, o operador tem a liberdade de dispensar a vistoria com 1 clique se desejar iniciar o atendimento imediatamente.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={vistoriaObrigatoria}
+              disabled={savingVistoriaObrigatoria}
+              onChange={(e) => handleToggleVistoriaObrigatoria(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-12 h-6 bg-graphite-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+          </label>
+          <span className="font-mono text-[13px] font-bold text-vapor-200">
+            {vistoriaObrigatoria ? 'Obrigatória' : 'Opcional'}
+          </span>
+        </div>
+      </Card>
 
       {/* Card 2: Horários de Funcionamento & Capacidade de Boxes */}
       <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-6">

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatPlaca, formatTelefone, cleanTelefone, formatarOS, extrairNumeroOS } from './formatters';
+import { formatPlaca, formatTelefone, cleanTelefone, formatarOS, extrairNumeroOS, parseNumeroFlexivel } from './formatters';
 
 describe('formatPlaca', () => {
   it('deve formatar placa Mercosul sem hífen (5º caractere é letra)', () => {
@@ -69,6 +69,35 @@ describe('extrairNumeroOS', () => {
   it('deve retornar null para termos sem números', () => {
     expect(extrairNumeroOS('Lavagem')).toBeNull();
     expect(extrairNumeroOS('')).toBeNull();
+  });
+});
+
+describe('parseNumeroFlexivel', () => {
+  it('deve converter números JS, strings decimais e inteiros', () => {
+    expect(parseNumeroFlexivel(620.5)).toBe(620.5);
+    expect(parseNumeroFlexivel('620.5')).toBe(620.5);
+    expect(parseNumeroFlexivel('620.50')).toBe(620.5);
+    expect(parseNumeroFlexivel('15')).toBe(15);
+    expect(parseNumeroFlexivel(15)).toBe(15);
+  });
+
+  it('deve converter strings no padrão PT-BR com vírgula e milhar com ponto', () => {
+    expect(parseNumeroFlexivel('620,50')).toBe(620.5);
+    expect(parseNumeroFlexivel('620,5')).toBe(620.5);
+    expect(parseNumeroFlexivel('1.620,50')).toBe(1620.5);
+    expect(parseNumeroFlexivel('10.000,00')).toBe(10000);
+  });
+
+  it('deve converter strings no padrão US com vírgula de milhar', () => {
+    expect(parseNumeroFlexivel('1,620.50')).toBe(1620.5);
+  });
+
+  it('deve tratar valores vazios, nulos e inválidos retornando 0', () => {
+    expect(parseNumeroFlexivel('')).toBe(0);
+    expect(parseNumeroFlexivel('   ')).toBe(0);
+    expect(parseNumeroFlexivel(null)).toBe(0);
+    expect(parseNumeroFlexivel(undefined)).toBe(0);
+    expect(parseNumeroFlexivel('invalido')).toBe(0);
   });
 });
 

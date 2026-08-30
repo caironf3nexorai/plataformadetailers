@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import type { ExecucaoFoto } from '../../types/execucao';
 import type { ProdutoParaConsumo, ItemConsumoExecucao } from '../../types/estoque';
-import { formatarMoeda } from '../../utils/formatters';
-import { useTempoExecucao, notificarAtualizacaoTempo } from '../../hooks/useTempoExecucao';
+import { formatarMoeda, parseNumeroFlexivel } from '../../utils/formatters';
+import { notificarAtualizacaoTempo } from '../../hooks/useTempoExecucao';
+import { Cronometro } from './Cronometro';
 
 interface ItemPreco {
   agendamento_item_id: string;
@@ -62,28 +63,9 @@ interface ItemPagamentoLancado {
   observacao?: string;
 }
 
-const parseQtdNumber = (val: number | string | undefined | null): number => {
-  if (val === undefined || val === null) return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : val;
-  if (!val.trim()) return 0;
-  const normalized = val.replace(/\./g, '').replace(',', '.');
-  const num = parseFloat(normalized);
-  return isNaN(num) ? 0 : num;
-};
-
-const parseValNumber = (val: number | string | undefined | null): number => {
-  if (val === undefined || val === null) return 0;
-  if (typeof val === 'number') return isNaN(val) ? 0 : val;
-  if (!val.trim()) return 0;
-  const normalized = val.replace(/\./g, '').replace(',', '.');
-  const num = parseFloat(normalized);
-  return isNaN(num) ? 0 : num;
-};
-
 interface ModalFinalizarExecucaoProps {
   isOpen: boolean;
   onClose: () => void;
-  onRevertFinalizadoEm?: () => void;
   execucaoId: string;
   agendamentoId: string;
   tenantId: string;
@@ -106,12 +88,11 @@ interface ModalFinalizarExecucaoProps {
 export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   isOpen,
   onClose,
-  onRevertFinalizadoEm,
   execucaoId,
   agendamentoId,
   tenantId,
   placaVeiculo,
-  tempoFormatado: tempoProp,
+  tempoFormatado: _tempoProp,
   pendingRequiredCount,
   agendamentoItens,
   fotosSaidaExistentes: _fotosSaidaExistentes,
@@ -126,8 +107,6 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
 }) => {
   const { membership, user: _user } = useAuth();
   const podeVerValor = membership?.role === 'dono' || membership?.role === 'gerente';
-
-  const tempoHook = useTempoExecucao(execucaoId);
 
   const [observacoes] = useState('');
   const [loading, setLoading] = useState(false);
@@ -390,8 +369,8 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
     }
   }, [isOpen, execucaoId, tenantId, podeVerValor]);
 
-  const valorTotalBruto = itensPreco.reduce((acc, curr) => acc + parseValNumber(curr.valor_final), 0);
-  const numDesconto = parseValNumber(descontoValor);
+  const valorTotalBruto = itensPreco.reduce((acc, curr) => acc + parseNumeroFlexivel(curr.valor_final), 0);
+  const numDesconto = parseNumeroFlexivel(descontoValor);
   const valorDesconto = numDesconto > 0
     ? (descontoTipo === 'porcentagem'
         ? Math.round((valorTotalBruto * (numDesconto / 100)) * 100) / 100
@@ -402,12 +381,19 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   const somaPagamentosLancados = pagamentosLancados.reduce((acc, p) => acc + p.valor_bruto, 0);
   const diferencaPagamentos = Math.round((saldoRestante - somaPagamentosLancados) * 100) / 100;
 
-  // Preenche valor inicial no campo de pagamento com o saldo restante se estiver zerado
+  // Se o saldoRestante mudar e houver exatamente 1 pagamento cobrindo o total, ajusta automaticamente
   useEffect(() => {
-    if (saldoRestante > 0 && pagamentosLancados.length === 0 && (!novoValor || parseFloat(novoValor) === 0)) {
-      setNovoValor(String(saldoRestante));
+    if (pagamentosLancados.length === 1) {
+      setPagamentosLancados((prev) => [
+        {
+          ...prev[0],
+          valor_bruto: saldoRestante,
+        },
+      ]);
+    } else if (pagamentosLancados.length === 0) {
+      setNovoValor(saldoRestante > 0 ? (saldoRestante % 1 === 0 ? String(saldoRestante) : saldoRestante.toFixed(2).replace('.', ',')) : '');
     }
-  }, [saldoRestante, pagamentosLancados]);
+  }, [saldoRestante]);
 
   const handleItemValorChange = (agendamento_item_id: string, novoValorStr: string) => {
     setItensPreco((prev) =>
@@ -455,7 +441,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   // Adicionar lançamento de pagamento no frontend
   const handleAddPagamento = async () => {
     if (!novoFormaId) return;
-    const val = parseValNumber(novoValor);
+    const val = parseNumeroFlexivel(novoValor);
     if (val <= 0) {
       setErrorMsg('Informe um valor de pagamento maior que zero.');
       return;
@@ -518,34 +504,6 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
 
   const concluiuRef = useRef(false);
 
-  const handleCancelarFinalizacao = async () => {
-    if (execucaoId && !concluiuRef.current && !modoDefinirValorOnly) {
-      try {
-        await supabase.rpc('cancelar_finalizacao', { p_execucao: execucaoId });
-      } catch (err) {
-        console.error('[cancelar_finalizacao Error]:', err);
-        await supabase
-          .from('execucoes')
-          .update({ finalizado_em: null, contando_desde: new Date().toISOString(), status: 'em_andamento' })
-          .eq('id', execucaoId);
-      }
-      onRevertFinalizadoEm?.();
-      notificarAtualizacaoTempo(execucaoId);
-    }
-  };
-
-  useEffect(() => {
-    if (isOpen) concluiuRef.current = false;
-    return () => {
-      if (isOpen && !concluiuRef.current && execucaoId && !modoDefinirValorOnly) {
-        supabase.rpc('cancelar_finalizacao', { p_execucao: execucaoId }).then(() => {
-          onRevertFinalizadoEm?.();
-          notificarAtualizacaoTempo(execucaoId);
-        });
-      }
-    };
-  }, [isOpen, execucaoId, modoDefinirValorOnly]);
-
   const handleConcluir = async () => {
     if (!modoDefinirValorOnly && pendingRequiredCount > 0) {
       setErrorMsg(`Existem ${pendingRequiredCount} itens obrigatórios pendentes no checklist.`);
@@ -583,16 +541,16 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
 
     try {
       const consumosPayload = consumos
-        .filter((c) => parseQtdNumber(c.quantidade) > 0)
+        .filter((c) => parseNumeroFlexivel(c.quantidade) > 0)
         .map((c) => ({
           produto_id: c.produto_id,
-          quantidade: parseQtdNumber(c.quantidade),
+          quantidade: parseNumeroFlexivel(c.quantidade),
         }));
 
       const payloadValores = podeVerValor && itensPreco.length > 0
         ? itensPreco.map((item) => ({
             agendamento_item_id: item.agendamento_item_id,
-            valor_final: parseValNumber(item.valor_final),
+            valor_final: parseNumeroFlexivel(item.valor_final),
             motivo: item.motivo || null,
           }))
         : [];
@@ -636,22 +594,14 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
     }
   };
 
-  const segundosReais = tempoHook.segundosTotais;
-  const exibeTempoZerado = segundosReais === 0;
-  const textoTempoFormatado = exibeTempoZerado
-    ? 'Tempo não registrado'
-    : tempoHook.tempoFormatado || tempoProp || '00:00:00';
-
   return (
     <Modal
       isOpen={isOpen}
-      onClose={async () => {
-        await handleCancelarFinalizacao();
-        onClose();
-      }}
+      onClose={onClose}
+      maxWidth="xl"
       title={modoDefinirValorOnly ? 'Definir Valor Final do Serviço' : 'Finalizar Execução do Serviço'}
     >
-      <div className="w-full max-w-lg mx-auto flex flex-col gap-5 py-2 max-h-[80vh] overflow-y-auto overflow-x-hidden pr-1">
+      <div className="w-full flex flex-col gap-5 py-2 max-h-[80vh] overflow-y-auto overflow-x-hidden pr-1">
         {/* Resumo Compacto da Execução */}
         <div className="p-3.5 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
@@ -685,12 +635,14 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
         {/* Bloco de Tempo Total */}
         <div className="p-4 bg-graphite-900 border border-graphite-700 rounded-lg flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
-            <Clock size={24} className={`shrink-0 ${exibeTempoZerado ? 'text-amber-500' : 'text-amber-400'}`} />
+            <Clock size={24} className="shrink-0 text-amber-400" />
             <div>
               <span className="text-[11px] uppercase font-sans text-vapor-400 block font-medium">Tempo Total Decorrido</span>
-              <span className="font-mono text-[22px] font-bold text-vapor-100">
-                {textoTempoFormatado}
-              </span>
+              <Cronometro
+                execucaoId={execucaoId}
+                tamanho="medio"
+                exibirAbertoDesde={false}
+              />
             </div>
           </div>
         </div>
@@ -786,37 +738,54 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
             </div>
 
             {/* Bloco de Concessão de Desconto na Finalização */}
-            <div className="p-3 bg-graphite-950 rounded-lg border border-graphite-800 flex flex-col gap-3">
+            <div className="p-3.5 bg-graphite-950 rounded-xl border border-graphite-800 flex flex-col gap-3">
               <span className="text-xs font-bold text-vapor-200 uppercase tracking-wider flex items-center gap-1.5">
                 <Percent size={14} className="text-amber-500" />
                 Desconto na Finalização (Opcional)
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <select
-                  value={descontoTipo}
-                  onChange={(e) => setDescontoTipo(e.target.value as any)}
-                  className="bg-graphite-900 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
-                >
-                  <option value="porcentagem">Percentual (%)</option>
-                  <option value="valor_fixo">Valor Fixo (R$)</option>
-                </select>
+              {/* Linha 1: Tipo de Desconto & Valor */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                    Tipo de Desconto
+                  </label>
+                  <select
+                    value={descontoTipo}
+                    onChange={(e) => setDescontoTipo(e.target.value as any)}
+                    className="w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-xs text-vapor-100 outline-none focus:border-amber-500 font-sans"
+                  >
+                    <option value="porcentagem">Percentual (%)</option>
+                    <option value="valor_fixo">Valor Fixo (R$)</option>
+                  </select>
+                </div>
 
-                <CampoNumerico
-                  prefix={descontoTipo === 'valor_fixo' ? 'R$' : undefined}
-                  suffix={descontoTipo === 'porcentagem' ? '%' : undefined}
-                  placeholder={descontoTipo === 'porcentagem' ? '10' : '0,00'}
-                  value={descontoValor}
-                  onChange={(val) => setDescontoValor(val ? String(val) : '')}
-                  wrapperClassName="min-h-[34px]"
-                />
+                <div>
+                  <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                    {descontoTipo === 'porcentagem' ? 'Porcentagem (%)' : 'Valor do Desconto (R$)'}
+                  </label>
+                  <CampoNumerico
+                    prefix={descontoTipo === 'valor_fixo' ? 'R$' : undefined}
+                    suffix={descontoTipo === 'porcentagem' ? '%' : undefined}
+                    placeholder={descontoTipo === 'porcentagem' ? '10' : '0,00'}
+                    value={descontoValor}
+                    onChange={(_val, str) => setDescontoValor(str)}
+                    wrapperClassName="min-h-[40px] bg-graphite-900"
+                  />
+                </div>
+              </div>
 
+              {/* Linha 2: Motivo do Desconto */}
+              <div>
+                <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                  Motivo do Desconto {numDesconto > 0 ? '(Obrigatório)*' : '(Opcional)'}
+                </label>
                 <input
                   type="text"
-                  placeholder="Motivo do desconto (obrigatório)*"
+                  placeholder="Ex: Cortesia comercial, cliente fidelidade, etc."
                   value={descontoMotivo}
                   onChange={(e) => setDescontoMotivo(e.target.value)}
-                  className={`bg-graphite-900 border rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500 ${
+                  className={`w-full bg-graphite-900 border rounded-lg px-3 py-2.5 text-xs text-vapor-100 placeholder:text-graphite-500 outline-none focus:border-amber-500 ${
                     numDesconto > 0 && !descontoMotivo.trim()
                       ? 'border-amber-500/80 bg-amber-500/5'
                       : 'border-graphite-700'
@@ -826,7 +795,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
             </div>
 
             {/* Total e Abatimento do Sinal */}
-            <div className="p-3 bg-graphite-950 rounded-lg border border-graphite-800 flex flex-col gap-2 font-mono text-xs">
+            <div className="p-3.5 bg-graphite-950 rounded-xl border border-graphite-800 flex flex-col gap-2 font-mono text-xs">
               <div className="flex justify-between items-center text-vapor-300">
                 <span>Total Bruto dos Serviços:</span>
                 <span className="font-bold text-vapor-100">{formatarMoeda(valorTotalBruto)}</span>
@@ -854,7 +823,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
 
             {/* LANÇAMENTO DE PAGAMENTOS */}
             {saldoRestante > 0 && (
-              <div className="flex flex-col gap-3 pt-2 border-t border-graphite-700">
+              <div className="flex flex-col gap-3.5 pt-2 border-t border-graphite-700">
                 <span className="text-xs font-bold text-vapor-200 uppercase tracking-wider flex items-center gap-1.5">
                   <CreditCard size={14} className="text-amber-500" />
                   Recebimento do Saldo
@@ -862,80 +831,90 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
 
                 {/* Lista de pagamentos já lançados */}
                 {pagamentosLancados.map((p) => (
-                  <div key={p.id} className="p-2.5 rounded bg-graphite-800 border border-graphite-700 flex items-center justify-between text-xs font-mono">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-vapor-100">{p.forma_nome} {p.total_parcelas > 1 ? `(${p.total_parcelas}x)` : ''}</span>
+                  <div key={p.id} className="p-3.5 rounded-xl bg-graphite-800 border border-graphite-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs font-mono">
+                    <div className="flex flex-col gap-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-vapor-100 text-sm">{p.forma_nome} {p.total_parcelas > 1 ? `(${p.total_parcelas}x)` : ''}</span>
                         {p.maquininha_nome && (
-                          <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                          <span className="text-[11px] font-sans text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
                             {p.maquininha_nome} {p.bandeira_codigo ? `• ${p.bandeira_codigo.toUpperCase()}` : ''}
                           </span>
                         )}
                         {p.taxa_estimada && (
-                          <span className="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded">
+                          <span className="text-[9px] font-sans font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded whitespace-nowrap">
                             Taxa Estimada (0%)
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-vapor-400">Vencimento: {p.previsto_para.split('-').reverse().join('/')}</span>
+                      <span className="text-[11px] text-vapor-400">Vencimento: {p.previsto_para.split('-').reverse().join('/')}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-amber-400">{formatarMoeda(p.valor_bruto)}</span>
-                      <button type="button" onClick={() => handleRemovePagamento(p.id)} className="text-vapor-400 hover:text-flare-400">
-                        <Trash2 size={14} />
+                    <div className="flex items-center justify-between sm:justify-end gap-3 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-graphite-700/60 shrink-0">
+                      <span className="font-bold text-amber-400 text-base">{formatarMoeda(p.valor_bruto)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePagamento(p.id)}
+                        className="p-2 text-vapor-400 hover:text-flare-400 transition-colors rounded-lg hover:bg-graphite-700"
+                        title="Remover pagamento"
+                      >
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
                 ))}
 
-                {/* Adicionar novo pagamento */}
+                {/* Bloco Adicionar novo pagamento */}
                 {(() => {
                   const formaSelecionada = formasPagamento.find((f) => f.id === novoFormaId);
                   const isCartao = formaSelecionada?.tipo === 'debito' || formaSelecionada?.tipo === 'credito';
 
                   return (
-                    <div className="flex flex-col gap-2 pt-1">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <select
-                          value={novoFormaId}
-                          onChange={(e) => setNovoFormaId(e.target.value)}
-                          className="bg-graphite-950 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
-                        >
-                          {formasPagamento.map((f) => (
-                            <option key={f.id} value={f.id}>{f.nome}</option>
-                          ))}
-                        </select>
-
-                        {formaSelecionada?.permite_parcelar && (
+                    <div className="p-3.5 bg-graphite-950/80 rounded-xl border border-graphite-800 flex flex-col gap-3">
+                      {/* Linha 1: Forma de Pagamento & Parcelas */}
+                      <div className="flex flex-col sm:flex-row gap-2.5">
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                            Forma de Pagamento
+                          </label>
                           <select
-                            value={novoParcelas}
-                            onChange={(e) => setNovoParcelas(e.target.value)}
-                            className="bg-graphite-950 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500 font-mono"
+                            value={novoFormaId}
+                            onChange={(e) => setNovoFormaId(e.target.value)}
+                            className="w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-xs text-vapor-100 outline-none focus:border-amber-500 font-sans"
                           >
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
-                              <option key={num} value={num}>{num}x</option>
+                            {formasPagamento.map((f) => (
+                              <option key={f.id} value={f.id}>{f.nome}</option>
                             ))}
                           </select>
-                        )}
+                        </div>
 
-                        <CampoNumerico
-                          prefix="R$"
-                          placeholder="Valor R$"
-                          value={novoValor}
-                          onChange={(val) => setNovoValor(val ? String(val) : '')}
-                          wrapperClassName="min-h-[34px]"
-                        />
+                        {formaSelecionada?.permite_parcelar && (
+                          <div className="w-full sm:w-28 shrink-0">
+                            <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                              Parcelas
+                            </label>
+                            <select
+                              value={novoParcelas}
+                              onChange={(e) => setNovoParcelas(e.target.value)}
+                              className="w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-xs text-vapor-100 outline-none focus:border-amber-500 font-mono text-center"
+                            >
+                              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
+                                <option key={num} value={num}>{num}x</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Campos adicionais para Cartão (Maquininha e Bandeira) */}
+                      {/* Linha 2 (Cartão): Maquininha & Bandeira */}
                       {isCartao && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2 rounded bg-graphite-950/80 border border-graphite-800">
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] text-vapor-400 font-semibold uppercase">Maquininha</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-graphite-800/80">
+                          <div>
+                            <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                              Maquininha
+                            </label>
                             <select
                               value={novoMaquininhaId}
                               onChange={(e) => setNovoMaquininhaId(e.target.value)}
-                              className="bg-graphite-900 border border-graphite-700 rounded px-2 py-1 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                              className="w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-xs text-vapor-100 outline-none focus:border-amber-500"
                             >
                               {maquininhas.map((m) => (
                                 <option key={m.id} value={m.id}>
@@ -945,12 +924,14 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                             </select>
                           </div>
 
-                          <div className="flex flex-col gap-1">
-                            <label className="text-[10px] text-vapor-400 font-semibold uppercase">Bandeira (Opcional)</label>
+                          <div>
+                            <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                              Bandeira (Opcional)
+                            </label>
                             <select
                               value={novoBandeiraCodigo}
                               onChange={(e) => setNovoBandeiraCodigo(e.target.value)}
-                              className="bg-graphite-900 border border-graphite-700 rounded px-2 py-1 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                              className="w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-xs text-vapor-100 outline-none focus:border-amber-500"
                             >
                               <option value="">Padrão / Não informada</option>
                               {bandeiras.map((b) => (
@@ -962,12 +943,12 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                           {taxaInfoAviso && (
                             <div className="col-span-full pt-1">
                               {taxaInfoAviso.estimada ? (
-                                <span className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 p-1.5 rounded flex items-center gap-1.5 font-mono">
-                                  <AlertTriangle size={12} className="shrink-0 text-amber-400" />
+                                <span className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 p-2 rounded-lg flex items-center gap-1.5 font-mono">
+                                  <AlertTriangle size={14} className="shrink-0 text-amber-400" />
                                   Taxa não cadastrada para {novoParcelas}x. Será considerada 0% (Taxa estimada).
                                 </span>
                               ) : (
-                                <span className="text-[11px] text-mint-400 font-mono flex items-center gap-1">
+                                <span className="text-[11px] text-mint-400 font-mono flex items-center gap-1 bg-mint-500/10 border border-mint-500/20 p-1.5 rounded-lg">
                                   ✓ Taxa aplicável: {taxaInfoAviso.percentual}%
                                 </span>
                               )}
@@ -975,24 +956,50 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                           )}
                         </div>
                       )}
+
+                      {/* Linha 3: Valor a Lançar */}
+                      <div>
+                        <label className="text-[10px] text-vapor-400 font-semibold uppercase tracking-wider block mb-1">
+                          Valor a Lançar nesta Forma
+                        </label>
+                        <CampoNumerico
+                          prefix="R$"
+                          placeholder="0,00"
+                          value={novoValor}
+                          onChange={(_val, str) => setNovoValor(str)}
+                          wrapperClassName="min-h-[42px] bg-graphite-900"
+                          className="text-base font-bold text-amber-400"
+                        />
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={handleAddPagamento}
+                        className="w-full py-2.5 text-xs font-semibold uppercase tracking-wide mt-1"
+                      >
+                        <Plus size={15} />
+                        <span>Adicionar Pagamento</span>
+                      </Button>
                     </div>
                   );
                 })()}
 
-                <Button type="button" variant="secondary" onClick={handleAddPagamento} className="text-xs py-1.5">
-                  <Plus size={14} />
-                  <span>Adicionar Pagamento</span>
-                </Button>
-
                 {/* Status da soma dos pagamentos */}
-                <div className={`p-2.5 rounded text-xs font-mono flex items-center justify-between ${
+                <div className={`p-3 rounded-xl text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
                   Math.abs(diferencaPagamentos) < 0.01
                     ? 'bg-mint-500/10 text-mint-400 border border-mint-500/30'
                     : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
                 }`}>
-                  <span>Lançado: {formatarMoeda(somaPagamentosLancados)} / Restante: {formatarMoeda(saldoRestante)}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span>Lançado: <strong className="text-vapor-100">{formatarMoeda(somaPagamentosLancados)}</strong></span>
+                    <span className="text-vapor-600">•</span>
+                    <span>Restante: <strong className="text-vapor-100">{formatarMoeda(saldoRestante)}</strong></span>
+                  </div>
                   {Math.abs(diferencaPagamentos) >= 0.01 && (
-                    <span className="font-bold text-amber-400">Dif: {formatarMoeda(diferencaPagamentos)}</span>
+                    <span className="font-bold text-amber-400 whitespace-nowrap">
+                      Diferença: {formatarMoeda(diferencaPagamentos)}
+                    </span>
                   )}
                 </div>
               </div>

@@ -43,6 +43,9 @@ import { montarLinkWhatsapp } from '../../utils/whatsapp';
 import { Cronometro } from '../execucao/Cronometro';
 import { ModalFinalizarExecucao } from '../execucao/ModalFinalizarExecucao';
 import { notificarAtualizacaoTempo } from '../../hooks/useTempoExecucao';
+import { useAuth } from '../../contexts/AuthContext';
+import { ModalConfirmarSemVistoria } from '../checkin/ModalConfirmarSemVistoria';
+import { dispensarVistoriaAgendamento } from '../../utils/checkin';
 import { obterAcaoAgendamento, type CheckinInfo, type ExecucaoInfo } from '../../utils/acaoAgendamento';
 
 interface PainelAgendamentoProps {
@@ -59,14 +62,33 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
   onSuccess
 }) => {
   const navigate = useNavigate();
+  const { tenant } = useAuth();
   const { podeGerirServicos } = usePermissao();
   const [checkinInfo, setCheckinInfo] = useState<CheckinInfo | null>(null);
   const [execucaoInfo, setExecucaoInfo] = useState<ExecucaoInfo | null>(null);
   const [startingCheckin, setStartingCheckin] = useState(false);
   const [startingExec, setStartingExec] = useState(false);
+  const [showModalPularVistoria, setShowModalPularVistoria] = useState(false);
+  const [pularLoading, setPularLoading] = useState(false);
   const [pauseActionLoading, setPauseActionLoading] = useState(false);
   const [itensList, setItensList] = useState<any[]>([]);
   const [loadingItens, setLoadingItens] = useState(false);
+
+  const handleConfirmarPularVistoria = async () => {
+    if (!agendamento || pularLoading) return;
+    setPularLoading(true);
+    try {
+      const execId = await dispensarVistoriaAgendamento(agendamento.id);
+      onClose();
+      navigate(`/execucao/${execId}`);
+    } catch (err: any) {
+      console.error('[Painel Pular Vistoria Error]:', err);
+      setErrorMessage(err?.message || 'Erro ao dispensar vistoria.');
+      setShowModalPularVistoria(false);
+    } finally {
+      setPularLoading(false);
+    }
+  };
 
   // Modal de finalização disparado pelo painel
   const [modalFinalizarPanelState, setModalFinalizarPanelState] = useState<{
@@ -178,10 +200,6 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
 
       if (error) throw error;
 
-      if (typeof data === 'object' && data?.success === false) {
-        throw new Error(data?.error || 'Não foi possível abrir o atendimento. Tente novamente.');
-      }
-
       const execId = typeof data === 'string' ? data : (data?.execucao_id || data?.id);
 
       if (execId) {
@@ -192,7 +210,14 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
       }
     } catch (err: any) {
       console.error('[PainelAgendamento] erro ao iniciar servico:', err);
-      setErrorMessage(err?.message || 'Não foi possível abrir o atendimento. Tente novamente.');
+      let userMessage = 'Não foi possível iniciar o atendimento. Tente novamente.';
+      const msg = err?.message || '';
+      if (msg.includes('já foi finalizado')) {
+        userMessage = 'Este atendimento já foi finalizado.';
+      } else if (msg.includes('sem acesso')) {
+        userMessage = 'Você não tem permissão para acessar esta oficina.';
+      }
+      setErrorMessage(userMessage);
     } finally {
       setStartingExec(false);
     }
@@ -805,43 +830,74 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                 </div>
               )}
 
-              {/* BOTÃO ÚNICO DE AÇÃO */}
+              {/* BOTÕES DE AÇÃO PRINCIPAIS */}
               {acao.tipo === 'fazer_vistoria' || acao.tipo === 'continuar_vistoria' ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={startingCheckin}
-                  onClick={() => {
-                    if (startingCheckin) return;
-                    setStartingCheckin(true);
-                    onClose();
-                    navigate(`/checkin/${agendamento.id}`);
-                  }}
-                  className="w-full min-h-[50px] font-bold flex items-center justify-center gap-2"
-                >
-                  <ClipboardCheck size={18} />
-                  <span>{startingCheckin ? 'Carregando vistoria...' : acao.label}</span>
-                </Button>
-              ) : acao.tipo === 'iniciar_servico' ? (
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={startingExec}
-                  onClick={handleIniciarServico}
-                  className="w-full min-h-[50px] font-bold flex items-center justify-center gap-2 shadow-md"
-                >
-                  {startingExec ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
-                      <span>Iniciando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={18} className="fill-current" />
-                      <span>{acao.label}</span>
-                    </>
+                <div className="flex flex-col gap-2 w-full">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={startingCheckin}
+                    onClick={() => {
+                      if (startingCheckin) return;
+                      setStartingCheckin(true);
+                      onClose();
+                      navigate(`/checkin/${agendamento.id}`);
+                    }}
+                    className="w-full min-h-[50px] font-bold flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <ClipboardCheck size={18} />
+                    <span>{startingCheckin ? 'Carregando vistoria...' : acao.label}</span>
+                  </Button>
+
+                  {!tenant?.vistoria_obrigatoria && !checkinInfo?.finalizado && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setShowModalPularVistoria(true)}
+                      className="w-full min-h-[44px] text-xs font-medium text-vapor-400 hover:text-vapor-200 border border-graphite-700 hover:bg-graphite-800 flex items-center justify-center gap-1.5"
+                    >
+                      <span>Iniciar sem vistoria</span>
+                    </Button>
                   )}
-                </Button>
+                </div>
+              ) : acao.tipo === 'iniciar_servico' ? (
+                <div className="flex flex-col gap-2 w-full">
+                  {agendamento.vistoria_dispensada && !checkinInfo?.finalizado && (
+                    <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs flex items-center justify-between gap-2">
+                      <span className="font-sans">Atendimento sem vistoria de entrada registrada.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          navigate(`/checkin/${agendamento.id}`);
+                        }}
+                        className="text-amber-400 hover:text-amber-300 font-bold underline shrink-0"
+                      >
+                        Fazer agora
+                      </button>
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="primary"
+                    disabled={startingExec}
+                    onClick={handleIniciarServico}
+                    className="w-full min-h-[50px] font-bold flex items-center justify-center gap-2 shadow-md"
+                  >
+                    {startingExec ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
+                        <span>Iniciando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={18} className="fill-current" />
+                        <span>{acao.label}</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               ) : acao.tipo === 'continuar_servico' ? (
                 <div className="flex flex-col gap-2.5 w-full">
                   {/* 1. FINALIZAR (Ação primária - Amber, 48px) */}
@@ -849,8 +905,10 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                     type="button"
                     onClick={async () => {
                       if (!execucaoInfo?.id) return;
-                      await supabase.from('execucoes').update({ finalizado_em: new Date().toISOString() }).eq('id', execucaoInfo.id);
-                      notificarAtualizacaoTempo(execucaoInfo.id);
+                      if (execucaoInfo.status === 'em_andamento') {
+                        await supabase.rpc('pausar_execucao', { p_execucao: execucaoInfo.id });
+                        notificarAtualizacaoTempo(execucaoInfo.id);
+                      }
 
                       const servicosNomes = itensList.map((i: any) => i.servicos?.nome || i.servico_nome || 'Serviço');
                       setModalFinalizarPanelState({
@@ -1051,9 +1109,6 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
               setModalFinalizarPanelState(null);
               onSuccess();
             }}
-            onRevertFinalizadoEm={() => {
-              onSuccess();
-            }}
             execucaoId={modalFinalizarPanelState.execucaoId}
             agendamentoId={modalFinalizarPanelState.agendamentoId}
             tenantId={modalFinalizarPanelState.tenantId}
@@ -1075,6 +1130,13 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
             }}
           />
         )}
+
+        <ModalConfirmarSemVistoria
+          isOpen={showModalPularVistoria}
+          onClose={() => setShowModalPularVistoria(false)}
+          onConfirm={handleConfirmarPularVistoria}
+          loading={pularLoading}
+        />
       </div>
     </Modal>
   );

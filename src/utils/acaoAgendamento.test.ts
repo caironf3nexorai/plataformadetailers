@@ -102,4 +102,14 @@ describe('obterAcaoAgendamento', () => {
     expect(res.tipo).toBe('ver_atendimento');
     expect(res.label).toBe('Ver atendimento');
   });
+
+  it('retorna iniciar_servico quando vistoria foi dispensada e não há vistoria finalizada', () => {
+    const res = obterAcaoAgendamento({
+      agendamento: { ...mockAgendamento, vistoria_dispensada: true },
+      checkinInfo: null,
+      execucaoInfo: null,
+    });
+    expect(res.tipo).toBe('iniciar_servico');
+    expect(res.label).toBe('Iniciar serviço');
+  });
 });

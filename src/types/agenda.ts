@@ -82,6 +82,9 @@ export interface Agendamento {
   transbordo_aceito_em?: string | null;
   transbordo_aceite_user_agent?: string | null;
   transbordo_aceite_ip?: string | null;
+  vistoria_dispensada?: boolean;
+  vistoria_dispensada_em?: string | null;
+  vistoria_dispensada_por?: string | null;
   created_at: string;
   updated_at: string;
   cliente?: {

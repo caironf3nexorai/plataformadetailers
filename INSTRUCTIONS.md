@@ -35,7 +35,13 @@ Toda alteração de interface, em qualquer módulo, **deve funcionar em 375px de
      - **Recomendado**: Inclui itens intermediários e replica para **Completo**.
      - **Completo**: Pacote premium completo.
 
-4. **Verificação de Compilação e Testes**:
+4. **Proibição Absoluta de Sobrecarga de Funções na API (Anti-PGRST203)**:
+   - O PostgREST não suporta sobrecarga de funções (resolve chamadas por nomes de parâmetros, gerando erro `PGRST203: Could not choose the best candidate function`).
+   - Cada RPC exposta à API **DEVE** possuir **UMA ÚNICA ASSINATURA CANÔNICA** por nome.
+   - Mudança de assinatura exige atualizar a função existente e o frontend na mesma entrega. Nunca crie sobrecargas.
+   - A query de verificação de sobrecargas em `public` deve retornar rigorosamente **0 linhas** em toda validação.
+
+5. **Verificação de Compilação e Testes**:
    - Antes de considerar qualquer tarefa pronta, executar:
      - `npm run build`
      - `npx vitest run`

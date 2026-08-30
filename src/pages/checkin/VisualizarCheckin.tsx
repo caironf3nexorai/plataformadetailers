@@ -23,6 +23,7 @@ import {
   User,
   AlertTriangle,
   Camera,
+  Play,
 } from 'lucide-react';
 
 export const VisualizarCheckin: React.FC = () => {
@@ -32,6 +33,7 @@ export const VisualizarCheckin: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [startingExec, setStartingExec] = useState(false);
 
   const [checkin, setCheckin] = useState<Checkin | null>(null);
   const [agendamento, setAgendamento] = useState<any>(null);
@@ -44,6 +46,51 @@ export const VisualizarCheckin: React.FC = () => {
   const [pdfProgress, setPdfProgress] = useState<string>('');
 
   const svgRefs = useRef<{ [key in VistaDiagrama]?: SVGSVGElement | null }>({});
+
+  const handleIniciarServicoAgora = async () => {
+    if (!agendamento || startingExec) return;
+    setStartingExec(true);
+    setError(null);
+    try {
+      // 1. Verifica se já existe execução
+      const { data: execData } = await supabase
+        .from('execucoes')
+        .select('id')
+        .eq('agendamento_id', agendamento.id)
+        .maybeSingle();
+
+      if (execData?.id) {
+        navigate(`/execucao/${execData.id}`);
+        return;
+      }
+
+      // 2. Se não existir, chama iniciar_execucao
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('iniciar_execucao', {
+        p_agendamento: agendamento.id,
+      });
+
+      if (rpcErr) throw rpcErr;
+
+      const execId = typeof rpcData === 'string' ? rpcData : (rpcData?.execucao_id || rpcData?.id);
+      if (!execId) {
+        throw new Error('Não foi possível iniciar o atendimento.');
+      }
+
+      navigate(`/execucao/${execId}`);
+    } catch (err: any) {
+      console.error('[Iniciar Servico Agora Error]:', err);
+      let userMessage = 'Não foi possível iniciar o serviço. Tente novamente.';
+      const msg = err?.message || '';
+      if (msg.includes('já foi finalizado')) {
+        userMessage = 'Este atendimento já foi finalizado.';
+      } else if (msg.includes('sem acesso')) {
+        userMessage = 'Você não tem permissão para acessar esta oficina.';
+      }
+      setError(userMessage);
+    } finally {
+      setStartingExec(false);
+    }
+  };
 
   useEffect(() => {
     if (id && tenant) {
@@ -197,18 +244,19 @@ export const VisualizarCheckin: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto pb-12">
       {/* Topo e Ações */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-graphite-900 p-4 rounded-xl border border-graphite-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-graphite-900 p-4 rounded-xl border border-graphite-800">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => navigate('/')}
             className="p-2 text-vapor-400 hover:text-vapor-100 rounded-lg hover:bg-graphite-800 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+            title="Voltar à agenda"
           >
             <ArrowLeft size={20} />
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-display text-[20px] text-vapor-100 uppercase tracking-wide">
+              <h2 className="font-display text-[18px] sm:text-[20px] text-vapor-100 uppercase tracking-wide">
                 Relatório de Vistoria de Entrada
               </h2>
               {checkin.finalizado && (
@@ -224,16 +272,46 @@ export const VisualizarCheckin: React.FC = () => {
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="primary"
-          onClick={handleDownloadPDF}
-          disabled={generatingPdf}
-          className="min-h-[50px] font-semibold flex items-center gap-2"
-        >
-          <Download size={18} />
-          <span>{generatingPdf ? pdfProgress || 'Gerando PDF...' : 'Baixar PDF da Vistoria'}</span>
-        </Button>
+        {/* 3 Ações na Ordem Estrita de Uso */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          {/* 1. Iniciar serviço agora — ação principal */}
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleIniciarServicoAgora}
+            disabled={startingExec}
+            className="min-h-[56px] px-6 text-[15px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+          >
+            {startingExec ? (
+              <div className="w-5 h-5 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Play size={20} className="fill-current" />
+            )}
+            <span>Iniciar serviço agora</span>
+          </Button>
+
+          {/* 2. Enviar/Baixar PDF ao cliente — secundária */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleDownloadPDF}
+            disabled={generatingPdf}
+            className="min-h-[56px] px-4 font-semibold flex items-center justify-center gap-2 text-vapor-200"
+          >
+            <Download size={18} />
+            <span>{generatingPdf ? pdfProgress || 'Gerando PDF...' : 'Baixar PDF'}</span>
+          </Button>
+
+          {/* 3. Voltar à agenda — terciária, discreta */}
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => navigate('/')}
+            className="min-h-[56px] px-3 font-medium text-vapor-400 hover:text-vapor-100 flex items-center justify-center gap-1.5"
+          >
+            <span>Voltar à agenda</span>
+          </Button>
+        </div>
       </div>
 
       {/* Card Principal: Cliente e Veículo */}
