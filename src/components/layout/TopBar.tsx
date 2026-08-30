@@ -45,7 +45,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenMenu, isMenuOpen }) => {
     else if (location.pathname.startsWith('/checkin/')) title = 'Vistoria de Entrada';
     else if (location.pathname.startsWith('/execucao/')) title = 'Execução de Serviço';
     else if (location.pathname.startsWith('/atendimento/')) title = 'Atendimento Concluído';
-    else title = 'Plataforma Detailers';
+    else title = 'NuvemWash';
   }
 
   // Se operador estiver na rota '/', o título coerente é Agenda

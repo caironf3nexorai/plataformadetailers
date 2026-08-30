@@ -286,7 +286,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div className="flex flex-col gap-1">
                 <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide flex items-center gap-2">
-                  Bem-vindo à Plataforma Detailers!
+                  Bem-vindo ao NuvemWash!
                 </h3>
                 <p className="font-sans text-sm text-vapor-300 max-w-xl">
                   Seu estabelecimento está pronto para começar. Crie seu primeiro agendamento, cadastre produtos e defina suas metas mensais para ativar os indicadores da sua cabine.

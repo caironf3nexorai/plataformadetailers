@@ -193,14 +193,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </a>{' '}
                   e a{' '}
                   <a
-                    href="/politica-privacidade"
+                    href="/politica-de-privacidade"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-amber-500 hover:underline font-semibold"
                   >
                     Política de Privacidade
                   </a>{' '}
-                  da Plataforma Detailers.
+                  do NuvemWash.
                 </label>
               </div>
 

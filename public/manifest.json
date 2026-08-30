@@ -1,7 +1,7 @@
 {
-  "name": "Plataforma Detailers",
-  "short_name": "Detailers",
-  "description": "Sistema de Gestão e Operações para Estética Automotiva",
+  "name": "NuvemWash",
+  "short_name": "NuvemWash",
+  "description": "NuvemWash - Sistema de Gestão e Operações para Estética Automotiva",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
@@ -9,10 +9,16 @@
   "theme_color": "#0F1216",
   "icons": [
     {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/logo-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

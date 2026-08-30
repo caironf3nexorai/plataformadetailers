@@ -17,6 +17,7 @@ import {
   Tv
 } from 'lucide-react';
 import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
+import { LogoNuvemWash } from '../ui/LogoNuvemWash';
 
 export const AdminLayout: React.FC = () => {
   const { adminLevel, adminEmail } = useAdminAuth();
@@ -44,14 +45,14 @@ export const AdminLayout: React.FC = () => {
           <div className="flex items-center justify-between h-16 gap-3">
             
             {/* Logo / Badge (Fixed Left) */}
-            <div className="flex items-center space-x-2 shrink-0">
-              <div className="flex items-center space-x-2 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/40 px-2.5 py-1.5 rounded-lg shadow-inner">
-                <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0" />
-                <span className="font-heading font-black tracking-wider text-xs text-amber-400 uppercase hidden xl:inline">
-                  PAINEL DA PLATAFORMA
-                </span>
-                <span className="font-heading font-black tracking-wider text-xs text-amber-400 uppercase xl:hidden">
-                  ADMIN
+            <div className="flex items-center space-x-3 shrink-0">
+              <NavLink to="/" className="hover:opacity-90 transition-opacity">
+                <LogoNuvemWash size="xs" height={22} />
+              </NavLink>
+              <div className="flex items-center space-x-1.5 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/40 px-2 py-1 rounded-lg shadow-inner">
+                <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="font-heading font-black tracking-wider text-[11px] text-amber-400 uppercase hidden sm:inline">
+                  PAINEL ADMIN
                 </span>
               </div>
               

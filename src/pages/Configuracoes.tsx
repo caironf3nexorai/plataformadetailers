@@ -1122,7 +1122,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       {/* Rodapé de Conformidade e Documentos Legais */}
       <div className="mt-12 pt-6 border-t border-graphite-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-vapor-500 font-sans">
-        <span>Plataforma Detailers • Software de Gestão para Estética Automotiva</span>
+        <span>NuvemWash • Software de Gestão para Estética Automotiva</span>
         <div className="flex items-center gap-4">
           <Link
             to="/termos-de-uso"

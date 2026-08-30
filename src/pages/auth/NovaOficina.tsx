@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { AlertTriangle, Building2, LogOut } from 'lucide-react';
+import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const NovaOficina: React.FC = () => {
   const navigate = useNavigate();
@@ -118,8 +119,9 @@ export const NovaOficina: React.FC = () => {
   return (
     <PublicLayout>
       <div className="max-w-md mx-auto w-full flex flex-col gap-6 py-6">
-        <div className="text-center flex flex-col gap-2">
-          <h1 className="font-display text-[26px] sm:text-[30px] text-vapor-100 uppercase tracking-wide">
+        <div className="text-center flex flex-col items-center gap-3">
+          <LogoNuvemWash size="lg" className="mb-1" />
+          <h1 className="font-display text-[24px] sm:text-[28px] text-vapor-100 uppercase tracking-wide">
             Cadastrar Sua Oficina
           </h1>
           <p className="font-sans text-[14px] text-vapor-400">
@@ -154,7 +156,7 @@ export const NovaOficina: React.FC = () => {
               <label className="font-sans text-[13px] text-vapor-400 font-medium">Nome da Oficina *</label>
               <Input
                 type="text"
-                placeholder="Ex: Studio Detailers SP"
+                placeholder="Ex: Studio Auto Detail"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 required

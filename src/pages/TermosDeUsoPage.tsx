@@ -31,12 +31,12 @@ export const TermosDeUsoPage: React.FC = () => {
                 Termos de Uso
               </h1>
               <p className="text-xs sm:text-sm text-vapor-400">
-                Plataforma Detailers — Software de Gestão e Operação para Estética Automotiva
+                NuvemWash — Software de Gestão e Operação para Estética Automotiva
               </p>
             </div>
           </div>
           <p className="text-sm text-vapor-300 leading-relaxed mt-4 border-t border-graphite-700 pt-4">
-            Bem-vindo à Plataforma Detailers. Ao criar uma conta, assinar nossos planos ou utilizar nosso software, você e sua oficina concordam integralmente com estes Termos de Uso.
+            Bem-vindo à NuvemWash. Ao criar uma conta, assinar nossos planos ou utilizar nosso software, você e sua oficina concordam integralmente com estes Termos de Uso.
           </p>
         </div>
 
@@ -46,10 +46,10 @@ export const TermosDeUsoPage: React.FC = () => {
           {/* Seção 1 */}
           <section className="bg-graphite-800/50 border border-graphite-700/50 rounded-xl p-5 sm:p-6 space-y-3">
             <h2 className="text-base sm:text-lg font-bold text-amber-400">1. Identificação da Empresa</h2>
-            <p>A Plataforma Detailers é operada por:</p>
+            <p>A NuvemWash é operada por:</p>
             <ul className="list-disc list-inside space-y-1 text-vapor-300 font-mono text-xs sm:text-sm pl-1">
               <li><strong>Razão Social:</strong> [RAZÃO SOCIAL DA EMPRESA]</li>
-              <li><strong>Nome Fantasia:</strong> Plataforma Detailers</li>
+              <li><strong>Nome Fantasia:</strong> NuvemWash</li>
               <li><strong>CNPJ:</strong> [00.000.000/0000-00 - Em emissão]</li>
               <li><strong>Endereço:</strong> [ENDEREÇO COMPLETO DA SEDE, CIDADE - UF, CEP 00000-000]</li>
               <li><strong>E-mail de Contato e Suporte:</strong> [contato@plataformadetailers.com.br]</li>
@@ -60,10 +60,10 @@ export const TermosDeUsoPage: React.FC = () => {
           <section className="bg-graphite-800/50 border border-graphite-700/50 rounded-xl p-5 sm:p-6 space-y-3">
             <h2 className="text-base sm:text-lg font-bold text-amber-400">2. O que o Serviço é (e o que NÃO é)</h2>
             <p>
-              A Plataforma Detailers é um software como serviço (<em>SaaS — Software as a Service</em>) voltado à gestão operacional, financeira, agendamentos e emissão de vistorias de estéticas automotivas.
+              A NuvemWash é um software como serviço (<em>SaaS — Software as a Service</em>) voltado à gestão operacional, financeira, agendamentos e emissão de vistorias de estéticas automotivas.
             </p>
             <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs sm:text-sm">
-              <strong>Isenção de Responsabilidade Operacional:</strong> A Plataforma Detailers <strong>não</strong> presta serviços automotivos, mecânicos ou de lavagem e polimento. Toda a responsabilidade técnica, qualidade da execução, garantias e preços cobrados dos proprietários dos veículos são de responsabilidade exclusiva e direta da oficina contratante.
+              <strong>Isenção de Responsabilidade Operacional:</strong> A NuvemWash <strong>não</strong> presta serviços automotivos, mecânicos ou de lavagem e polimento. Toda a responsabilidade técnica, qualidade da execução, garantias e preços cobrados dos proprietários dos veículos são de responsabilidade exclusiva e direta da oficina contratante.
             </div>
           </section>
 
@@ -172,7 +172,7 @@ export const TermosDeUsoPage: React.FC = () => {
 
         {/* Rodapé Interno da Página */}
         <div className="mt-12 pt-6 border-t border-graphite-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-vapor-500 font-sans">
-          <span>&copy; {new Date().getFullYear()} Plataforma Detailers. Todos os direitos reservados.</span>
+          <span>&copy; {new Date().getFullYear()} NuvemWash. Todos os direitos reservados.</span>
           <div className="flex items-center gap-4">
             <Link to="/politica-de-privacidade" className="text-vapor-400 hover:text-amber-400 transition-colors">
               Política de Privacidade

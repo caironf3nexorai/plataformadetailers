@@ -467,7 +467,7 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                     Ocultar marca da plataforma no rodapé (White-Label)
                   </span>
                   <span className="font-sans text-[12px] text-vapor-400">
-                    Remove o texto "Gerado via Plataforma Detailers" dos arquivos emitidos.
+                    Remove o texto "Gerado via NuvemWash" dos arquivos emitidos.
                   </span>
                 </div>
                 <input
@@ -605,10 +605,10 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                   <div className="flex items-center justify-between text-[9px] text-vapor-500 pt-1">
                     <span>
                       {isFree
-                        ? 'Gerado via Plataforma Detailers — Plano Essencial'
+                        ? 'Gerado via NuvemWash — Plano Essencial'
                         : ocultarMarcaDagua
                         ? 'Documento emitido diretamente pela oficina'
-                        : 'Gerado via Plataforma Detailers'}
+                        : 'Gerado via NuvemWash'}
                     </span>
                     <span>Página 1 de 1</span>
                   </div>

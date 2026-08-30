@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { AlertTriangle, CheckCircle2, UserCheck } from 'lucide-react';
+import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const Convite: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -86,12 +87,13 @@ export const Convite: React.FC = () => {
   return (
     <PublicLayout>
       <div className="max-w-md mx-auto w-full flex flex-col gap-6 py-6">
-        <div className="text-center flex flex-col gap-2">
-          <h1 className="font-display text-[26px] sm:text-[30px] text-vapor-100 uppercase tracking-wide">
+        <div className="text-center flex flex-col items-center gap-3">
+          <LogoNuvemWash size="lg" className="mb-1" />
+          <h1 className="font-display text-[24px] sm:text-[28px] text-vapor-100 uppercase tracking-wide">
             Convite para Equipe
           </h1>
           <p className="font-sans text-[14px] text-vapor-400">
-            Você foi convidado para fazer parte de uma equipe no Detailers
+            Você foi convidado para fazer parte de uma equipe no NuvemWash
           </p>
         </div>
 

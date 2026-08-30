@@ -361,7 +361,7 @@ export const CatalogoPublico: React.FC = () => {
           {oficina.nome}
         </span>
         <span className="font-sans text-[11px] text-vapor-600">
-          Powered by Plataforma Detailers
+          Powered by NuvemWash
         </span>
       </footer>
     </div>

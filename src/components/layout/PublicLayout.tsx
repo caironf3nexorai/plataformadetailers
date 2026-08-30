@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { LogOut, Wrench } from 'lucide-react';
+import { LogoNuvemWash } from '../ui/LogoNuvemWash';
 
 interface PublicLayoutProps {
   children: React.ReactNode;
@@ -22,9 +23,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
       {/* Header Simples */}
       <header className="h-[64px] border-b border-graphite-600 bg-graphite-800/80 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <span className="font-display text-[18px] text-vapor-100 tracking-wider">
-            Plataforma Detailers
-          </span>
+          <LogoNuvemWash size="sm" />
         </Link>
 
         <div className="flex items-center gap-3">
@@ -84,7 +83,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="font-display font-semibold text-vapor-300 tracking-wider">
-              Plataforma Detailers
+              NuvemWash
             </span>
             <span>&copy; {new Date().getFullYear()}</span>
           </div>

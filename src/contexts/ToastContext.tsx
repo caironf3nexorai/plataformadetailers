@@ -45,7 +45,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
     
-    console.error('[Plataforma Detailers Error]', traduzido.codigoRef, rawError || userMsg);
+    console.error('[NuvemWash Error]', traduzido.codigoRef, rawError || userMsg);
     showToast(finalMsg, 'error');
   }, [showToast]);
 

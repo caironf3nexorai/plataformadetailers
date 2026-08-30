@@ -2,60 +2,55 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Gift, CheckCircle2, ArrowRight } from 'lucide-react';
+import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const PaginaConvite: React.FC = () => {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
-
-  const [indicadorNome, setIndicadorNome] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [indicadorNome, setIndicadorNome] = useState<string | null>(null);
 
   useEffect(() => {
-    if (codigo) {
-      localStorage.setItem('convite_codigo', codigo.toUpperCase());
-      
-      const buscarIndicador = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('tenants')
-            .select('nome')
-            .eq('codigo_indicacao', codigo.toUpperCase())
-            .single();
+    async function carregarIndicador() {
+      if (!codigo) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('tenants')
+          .select('nome')
+          .eq('codigo_indicacao', codigo.toUpperCase())
+          .single();
 
-          if (!error && data) {
-            setIndicadorNome(data.nome);
-          }
-        } catch (err) {
-          console.error('Erro ao buscar oficina indicadora:', err);
-        } finally {
-          setLoading(false);
+        if (data && !error) {
+          setIndicadorNome(data.nome);
         }
-      };
-
-      buscarIndicador();
-    } else {
-      setLoading(false);
+      } catch (err) {
+        console.error('Erro ao buscar indicador:', err);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    carregarIndicador();
   }, [codigo]);
 
   const handleIrParaCadastro = () => {
-    navigate(`/cadastro?convite=${codigo?.toUpperCase()}`);
+    navigate(`/criar-conta?cupom=${codigo || ''}`);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 md:p-8">
-      {/* Background Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 md:p-8 selection:bg-amber-500 selection:text-slate-950 relative overflow-hidden font-sans">
+      {/* Background Glows */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden -z-10">
+        <div className="absolute -top-40 left-1/4 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-0 w-96 h-96 bg-yellow-500/10 rounded-full blur-3xl" />
       </div>
 
       <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-4 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-bold text-slate-950 shadow-lg shadow-amber-500/20">
-            PD
-          </div>
-          <span className="font-bold text-xl tracking-tight text-white">Plataforma Detailers</span>
+          <LogoNuvemWash size="md" />
         </div>
 
         <button
@@ -83,13 +78,13 @@ export const PaginaConvite: React.FC = () => {
                 </>
               ) : (
                 <>
-                  Você recebeu um convite especial para a <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">Plataforma Detailers</span>!
+                  Você recebeu um convite especial para o <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300">NuvemWash</span>!
                 </>
               )}
             </h1>
 
             <p className="text-slate-300 text-base md:text-lg max-w-2xl mx-auto mb-8 leading-relaxed">
-              Ao se cadastrar pelo código de convite <span className="font-mono bg-slate-800 px-2 py-1 rounded text-amber-400 font-bold">{codigo?.toUpperCase()}</span>, você ganha <strong>14 dias de degustação Pro grátis</strong> sem necessidade de cartão de crédito para transformar a gestão da sua oficina!
+              Ao se cadastrar pelo código de convite <span className="font-mono bg-slate-800 px-2 py-1 rounded text-amber-400 font-bold">{codigo?.toUpperCase()}</span>, você ganha <strong>14 dias de degustação Pro grátis</strong> sem necessidade de cartão de crédito para transformar a gestão da sua estética automotiva!
             </p>
 
             {/* Benefit Box */}
@@ -124,7 +119,7 @@ export const PaginaConvite: React.FC = () => {
       </main>
 
       <footer className="max-w-5xl w-full mx-auto py-6 text-center text-xs text-slate-500 z-10 border-t border-slate-900">
-        &copy; {new Date().getFullYear()} Plataforma Detailers. Todos os direitos reservados.
+        &copy; {new Date().getFullYear()} NuvemWash. Todos os direitos reservados.
       </footer>
     </div>
   );

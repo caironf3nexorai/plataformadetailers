@@ -36,7 +36,7 @@ export const PoliticaPrivacidadePage: React.FC = () => {
             </div>
           </div>
           <p className="text-sm text-vapor-300 leading-relaxed mt-4 border-t border-graphite-700 pt-4">
-            Esta política esclarece como a Plataforma Detailers coleta, protege e processa dados pessoais, detalhando os papéis de Controladora e Operadora exercidos em cada contexto.
+            Esta política esclarece como a NuvemWash coleta, protege e processa dados pessoais, detalhando os papéis de Controladora e Operadora exercidos em cada contexto.
           </p>
         </div>
 
@@ -56,7 +56,7 @@ export const PoliticaPrivacidadePage: React.FC = () => {
                   <Building size={18} /> Assinantes e Equipe da Oficina
                 </div>
                 <p className="text-xs text-vapor-300 leading-relaxed">
-                  Para os dados cadastrais da oficina, login, faturamento e usuários do sistema, a <strong>Plataforma Detailers atua como Controladora</strong>.
+                  Para os dados cadastrais da oficina, login, faturamento e usuários do sistema, a <strong>NuvemWash atua como Controladora</strong>.
                 </p>
               </div>
 
@@ -65,7 +65,7 @@ export const PoliticaPrivacidadePage: React.FC = () => {
                   <Users size={18} /> Clientes Finais da Oficina
                 </div>
                 <p className="text-xs text-vapor-300 leading-relaxed">
-                  Para os dados dos proprietários de veículos (nome, telefone, placas, vistorias e assinaturas), a <strong>sua oficina é a Controladora</strong> e a <strong>Plataforma Detailers atua estritamente como Operadora</strong>.
+                  Para os dados dos proprietários de veículos (nome, telefone, placas, vistorias e assinaturas), a <strong>sua oficina é a Controladora</strong> e a <strong>NuvemWash atua estritamente como Operadora</strong>.
                 </p>
               </div>
             </div>
@@ -160,7 +160,7 @@ export const PoliticaPrivacidadePage: React.FC = () => {
 
         {/* Rodapé Interno da Página */}
         <div className="mt-12 pt-6 border-t border-graphite-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-vapor-500 font-sans">
-          <span>&copy; {new Date().getFullYear()} Plataforma Detailers. Todos os direitos reservados.</span>
+          <span>&copy; {new Date().getFullYear()} NuvemWash. Todos os direitos reservados.</span>
           <div className="flex items-center gap-4">
             <Link to="/termos-de-uso" className="text-vapor-400 hover:text-emerald-400 transition-colors">
               Termos de Uso

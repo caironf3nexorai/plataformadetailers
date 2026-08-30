@@ -881,7 +881,7 @@ export function FluxoAgendamentoOnline() {
       {/* Rodapé Legal Público */}
       <footer className="py-6 px-4 text-center text-xs text-slate-500 border-t border-slate-900 mt-8">
         <div className="max-w-xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span>{tenant?.nome || 'Oficina'} • Plataforma Detailers</span>
+          <span>{tenant?.nome || 'Oficina'} • NuvemWash</span>
           <div className="flex items-center gap-4">
             <Link to="/termos-de-uso" target="_blank" className="hover:text-slate-300 transition-colors">
               Termos de Uso

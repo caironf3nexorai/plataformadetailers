@@ -134,7 +134,7 @@ export function cabecalhoDocumento(
     .filter(Boolean)
     .join(' • ');
 
-  doc.text(infoLinha || 'Plataforma Detailers', textStartX, 16);
+  doc.text(infoLinha || 'NuvemWash', textStartX, 16);
 
   // Título do Documento
   doc.setFontSize(8);
@@ -197,8 +197,8 @@ export function rodapeDocumento(
   // Marca d'água obrigatória no Free, opcional no Pro/Studio
   if (isFree || !dados.pdfOcultarMarcaDagua) {
     const marcaTxt = isFree
-      ? 'Gerado via Plataforma Detailers — Plano Essencial'
-      : 'Gerado via Plataforma Detailers';
+      ? 'Gerado via NuvemWash — Plano Essencial'
+      : 'Gerado via NuvemWash';
     doc.text(marcaTxt, 15, footerY);
   } else if (dados.pdfTextoRodape?.trim()) {
     const termoCurto = dados.pdfTextoRodape.trim().slice(0, 80);

@@ -904,7 +904,7 @@ export const OrcamentoPublico: React.FC = () => {
         {/* Rodapé Legal Público */}
         <footer className="py-8 text-center text-xs text-vapor-500 border-t border-graphite-800/80 mt-8 max-w-3xl mx-auto w-full">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <span>{data.oficina?.nome || 'Oficina'} • Plataforma Detailers</span>
+            <span>{data.oficina?.nome || 'Oficina'} • NuvemWash</span>
             <div className="flex items-center gap-4">
               <Link to="/termos-de-uso" target="_blank" className="text-vapor-400 hover:text-amber-400 transition-colors">
                 Termos de Uso

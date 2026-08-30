@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -23,6 +23,7 @@ import { usePermissao } from '../../hooks/usePermissao';
 import { usePlano } from '../../hooks/usePlano';
 import { Badge } from '../ui/Badge';
 import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
+import { LogoNuvemWash } from '../ui/LogoNuvemWash';
 import { supabase } from '../../lib/supabase';
 
 interface NavItem {
@@ -99,15 +100,23 @@ export const SidebarNav: React.FC = () => {
 
   return (
     <aside className="hidden lg:flex flex-col w-[240px] h-screen fixed left-0 top-0 bg-graphite-800 border-r border-graphite-600 z-10">
+      {/* Brand Master NuvemWash */}
+      <div className="px-5 py-3.5 border-b border-graphite-700/70 flex items-center justify-between bg-graphite-900/60">
+        <Link to="/" className="hover:opacity-90 transition-opacity flex items-center">
+          <LogoNuvemWash size="xs" height={22} />
+        </Link>
+        <CentralNotificacoesMenu align="left" />
+      </div>
+
       {/* Header do Tenant e Seletor se houver múltiplos */}
-      <div className="p-5 border-b border-graphite-600 flex flex-col gap-2">
+      <div className="p-4 border-b border-graphite-600 flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
           {userTenants.length > 1 ? (
             <div className="relative flex-1">
               <select
                 value={tenant?.id || ''}
                 onChange={(e) => trocarTenant(e.target.value)}
-                className="w-full bg-graphite-900 border border-graphite-600 rounded px-2.5 py-1.5 font-display text-[14px] text-amber-500 font-bold outline-none cursor-pointer appearance-none pr-8"
+                className="w-full bg-graphite-900 border border-graphite-600 rounded px-2.5 py-1.5 font-display text-[13px] text-amber-500 font-bold outline-none cursor-pointer appearance-none pr-8"
               >
                 {userTenants.map((ut) => (
                   <option key={ut.tenant.id} value={ut.tenant.id}>
@@ -118,12 +127,10 @@ export const SidebarNav: React.FC = () => {
               <ChevronDown size={16} className="absolute right-2.5 top-2.5 text-vapor-400 pointer-events-none" />
             </div>
           ) : (
-            <h1 className="font-display text-[15.5px] text-vapor-100 font-bold tracking-wider truncate flex-1">
-              {tenant?.nome || 'Plataforma Detailers'}
-            </h1>
+            <h2 className="font-display text-[14.5px] text-vapor-100 font-bold tracking-wider truncate flex-1" title={tenant?.nome || 'Minha Oficina'}>
+              {tenant?.nome || 'Minha Oficina'}
+            </h2>
           )}
-
-          <CentralNotificacoesMenu align="left" />
         </div>
 
         <div className="flex items-center justify-between">

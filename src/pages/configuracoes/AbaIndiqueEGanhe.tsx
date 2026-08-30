@@ -108,7 +108,7 @@ export const AbaIndiqueEGanhe: React.FC = () => {
 
   const handleCompartilharWhatsApp = () => {
     const texto = encodeURIComponent(
-      `Olá! Estou usando a Plataforma Detailers na minha estética automotiva e recomendo muito! Cadastre-se pelo meu link exclusivo e ganhe 15 dias extras de bônus além da degustação grátis:\n\n${linkConvite}`
+      `Olá! Estou usando a NuvemWash na minha estética automotiva e recomendo muito! Cadastre-se pelo meu link exclusivo e ganhe 15 dias extras de bônus além da degustação grátis:\n\n${linkConvite}`
     );
     window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
   };
@@ -427,7 +427,7 @@ export const AbaIndiqueEGanhe: React.FC = () => {
               <span>2. Liberação do Bônus do Indicador</span>
             </div>
             <p className="text-xs text-vapor-400 leading-relaxed">
-              O seu bônus de <strong>+15 dias extras de uso Pro</strong> (e a pontuação para o Quadro de Metas) é ativado automaticamente assim que a oficina indicada assinar um plano pago da Plataforma Detailers.
+              O seu bônus de <strong>+15 dias extras de uso Pro</strong> (e a pontuação para o Quadro de Metas) é ativado automaticamente assim que a oficina indicada assinar um plano pago da NuvemWash.
             </p>
           </div>
 

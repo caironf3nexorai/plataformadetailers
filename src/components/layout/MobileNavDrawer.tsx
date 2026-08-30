@@ -23,6 +23,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
 import { usePlano } from '../../hooks/usePlano';
 import { Badge } from '../ui/Badge';
+import { LogoNuvemWash } from '../ui/LogoNuvemWash';
 import { supabase } from '../../lib/supabase';
 
 interface MobileNavDrawerProps {
@@ -135,9 +136,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
         {/* Header do Drawer */}
         <div className="p-4 border-b border-graphite-700 flex flex-col gap-2.5">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[11px] font-semibold text-vapor-400 uppercase tracking-wider">
-              Menu Geral
-            </span>
+            <LogoNuvemWash size="xs" height={22} />
             <button
               type="button"
               onClick={onClose}
@@ -166,7 +165,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
             </div>
           ) : (
             <h2 className="font-display text-[15px] text-vapor-100 font-bold tracking-wider truncate">
-              {tenant?.nome || 'Plataforma Detailers'}
+              {tenant?.nome || 'NuvemWash'}
             </h2>
           )}
 

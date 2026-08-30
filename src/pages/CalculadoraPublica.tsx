@@ -50,7 +50,7 @@ export const CalculadoraPublica: React.FC = () => {
               <span>Além da Diluição</span>
             </div>
             <p className="font-sans text-[13px] text-vapor-400 leading-relaxed">
-              A Plataforma Detailers organiza seus orçamentos, estoque, clientes e controle financeiro em um só painel simples e rápido.
+              O NuvemWash organiza seus orçamentos, estoque, clientes e controle financeiro em um só painel simples e rápido.
             </p>
           </Card>
         </div>
@@ -58,7 +58,7 @@ export const CalculadoraPublica: React.FC = () => {
         {/* Rodapé com linha e CTA */}
         <footer className="pt-6 border-t border-graphite-600 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <p className="font-sans text-[13px] text-vapor-400">
-            Plataforma Detailers &copy; 2026. A ferramenta definitiva para estética automotiva.
+            NuvemWash &copy; 2026. A ferramenta definitiva para estética automotiva.
           </p>
           <Button
             type="button"

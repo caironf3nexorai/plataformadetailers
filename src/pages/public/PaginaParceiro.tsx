@@ -2,60 +2,55 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Award, CheckCircle2, ArrowRight } from 'lucide-react';
+import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const PaginaParceiro: React.FC = () => {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
-
-  const [parceiroNome, setParceiroNome] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [parceiroNome, setParceiroNome] = useState<string | null>(null);
 
   useEffect(() => {
-    if (codigo) {
-      localStorage.setItem('parceiro_codigo', codigo.toUpperCase());
+    async function carregarParceiro() {
+      if (!codigo) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('afiliados')
+          .select('nome')
+          .eq('codigo', codigo.toUpperCase())
+          .single();
 
-      const buscarParceiro = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('parceiros')
-            .select('nome')
-            .eq('codigo', codigo.toUpperCase())
-            .eq('ativo', true)
-            .single();
-
-          if (!error && data) {
-            setParceiroNome(data.nome);
-          }
-        } catch (err) {
-          console.error('Erro ao buscar parceiro comercial:', err);
-        } finally {
-          setLoading(false);
+        if (data && !error) {
+          setParceiroNome(data.nome);
         }
-      };
-
-      buscarParceiro();
-    } else {
-      setLoading(false);
+      } catch (err) {
+        console.error('Erro ao buscar parceiro:', err);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    carregarParceiro();
   }, [codigo]);
 
   const handleIrParaCadastro = () => {
-    navigate(`/cadastro?parceiro=${codigo?.toUpperCase()}`);
+    navigate(`/criar-conta?cupom=${codigo || ''}`);
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 md:p-8">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 md:p-8 selection:bg-indigo-500 selection:text-white relative overflow-hidden font-sans">
+      {/* Background Glows */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none overflow-hidden -z-10">
+        <div className="absolute -top-40 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
       </div>
 
       <header className="max-w-5xl w-full mx-auto flex items-center justify-between py-4 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">
-            PD
-          </div>
-          <span className="font-bold text-xl tracking-tight text-white">Plataforma Detailers</span>
+          <LogoNuvemWash size="md" />
         </div>
 
         <button
@@ -89,7 +84,7 @@ export const PaginaParceiro: React.FC = () => {
             </h1>
 
             <p className="text-slate-300 text-base md:text-lg max-w-2xl mx-auto mb-8 leading-relaxed">
-              Inicie agora mesmo sua degustação de 14 dias no plano Pro da Plataforma Detailers com o respaldo de um parceiro oficial da nossa rede de estética automotiva.
+              Inicie agora mesmo sua degustação de 14 dias no plano Pro do NuvemWash com o respaldo de um parceiro oficial da nossa rede de estética automotiva.
             </p>
 
             <div className="bg-slate-900/80 border border-slate-800 backdrop-blur-md rounded-2xl p-6 mb-8 text-left max-w-xl mx-auto space-y-3">
@@ -119,7 +114,7 @@ export const PaginaParceiro: React.FC = () => {
       </main>
 
       <footer className="max-w-5xl w-full mx-auto py-6 text-center text-xs text-slate-500 z-10 border-t border-slate-900">
-        &copy; {new Date().getFullYear()} Plataforma Detailers. Todos os direitos reservados.
+        &copy; {new Date().getFullYear()} NuvemWash. Todos os direitos reservados.
       </footer>
     </div>
   );
