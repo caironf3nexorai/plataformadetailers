@@ -307,6 +307,20 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
       )
     : null;
 
+  // Abrir e carregar lista de serviços
+  const handleAbrirAddServico = async () => {
+    const nextState = !showAddServico;
+    setShowAddServico(nextState);
+    if (nextState && servicosDisponiveis.length === 0) {
+      const { data } = await supabase
+        .from('servicos')
+        .select('id, nome, duracao_minutos')
+        .eq('ativo', true)
+        .order('nome');
+      if (data) setServicosDisponiveis(data);
+    }
+  };
+
   // Adicionar item via RPC
   const handleConfirmAddServico = async () => {
     if (!selectedAddServicoId) return;
@@ -470,7 +484,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
       icon={<Calendar size={20} className="text-amber-500" />}
       maxWidth="lg"
     >
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5 pb-6 sm:pb-4">
         <div className="flex flex-col gap-4 font-sans text-[13px]">
           
           {/* LISTA DE SERVIÇOS DO AGENDAMENTO */}
@@ -482,19 +496,21 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
               {podeGerirServicos() && agendamento.status !== 'cancelado' && agendamento.status !== 'nao_compareceu' && (
                 <button
                   type="button"
-                  onClick={() => setShowAddServico(!showAddServico)}
-                  className="font-sans text-[11px] text-amber-400 hover:underline flex items-center gap-1 min-h-[36px]"
+                  onClick={handleAbrirAddServico}
+                  className="font-sans text-[11px] text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1 transition-colors"
                 >
-                  <Plus size={14} />
-                  <span>Adicionar serviço</span>
+                  <Plus size={12} />
+                  Adicionar Serviço
                 </button>
               )}
             </div>
 
-            {/* FORMULARIO DE ADICIONAR SERVIÇO */}
+            {/* ADICIONAR SERVIÇO INLINE */}
             {showAddServico && (
-              <div className="p-3 bg-graphite-900 border border-amber-500/40 rounded flex flex-col gap-2">
-                <span className="font-sans text-[11px] text-vapor-300">Selecione o serviço para adicionar:</span>
+              <div className="p-3 bg-graphite-900 rounded border border-amber-500/30 flex flex-col gap-2">
+                <span className="font-sans text-[11px] text-amber-400 font-bold">
+                  Adicionar Serviço ao Agendamento
+                </span>
                 <select
                   value={selectedAddServicoId}
                   onChange={(e) => setSelectedAddServicoId(e.target.value)}
@@ -636,11 +652,11 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
           {agendamento.transbordo_aceito_em && (
             <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/30 flex items-start gap-2 text-amber-300">
               <CheckCircle2 size={16} className="text-amber-400 shrink-0 mt-0.5" />
-              <div className="flex flex-col text-[12px] gap-0.5">
+              <div className="flex flex-col text-[12px] gap-0.5 min-w-0 flex-1">
                 <span className="font-bold text-amber-400">Consentimento de Pernoite Auditado</span>
-                <span>Pernoite aceito pelo cliente em <strong className="font-mono text-amber-200">{formatarData(agendamento.transbordo_aceito_em)} às {formatarHora(agendamento.transbordo_aceito_em)}</strong></span>
+                <span className="leading-snug">Pernoite aceito pelo cliente em <strong className="font-mono text-amber-200">{formatarData(agendamento.transbordo_aceito_em)} às {formatarHora(agendamento.transbordo_aceito_em)}</strong></span>
                 {agendamento.transbordo_aceite_user_agent && (
-                  <span className="font-mono text-[10px] text-amber-400/70 truncate max-w-xs" title={agendamento.transbordo_aceite_user_agent}>
+                  <span className="font-mono text-[10px] text-amber-400/70 break-all leading-tight mt-0.5" title={agendamento.transbordo_aceite_user_agent}>
                     Navegador: {agendamento.transbordo_aceite_user_agent}
                   </span>
                 )}

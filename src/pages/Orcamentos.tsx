@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ScrollableTabs } from '../components/ui/ScrollableTabs';
 import {
   FileText,
   Plus,
@@ -309,28 +310,24 @@ export const Orcamentos: React.FC = () => {
 
       {/* BARRA DE FILTROS E BUSCA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-graphite-900 p-4 rounded-xl border border-graphite-800">
-        {/* Chips de Status */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-          {[
-            { id: 'todos', label: 'Todos' },
-            { id: 'rascunho', label: 'Rascunho' },
-            { id: 'enviado', label: 'Enviado' },
-            { id: 'visualizado', label: 'Visualizado' },
-            { id: 'aprovado', label: 'Aprovado' },
-            { id: 'recusado', label: 'Recusado' },
-            { id: 'expirado', label: 'Expirado' },
-          ].map((st) => (
-            <button
-              key={st.id}
-              onClick={() => setStatusFiltro(st.id)}
-              className={`px-3 py-1.5 rounded-lg font-sans text-[13px] font-semibold whitespace-nowrap transition-colors ${statusFiltro === st.id
-                  ? 'bg-amber-500 text-graphite-950 shadow-md'
-                  : 'bg-graphite-800 text-vapor-300 hover:bg-graphite-700 hover:text-vapor-100'
-                }`}
-            >
-              {st.label}
-            </button>
-          ))}
+        {/* Chips de Status Roláveis com Indicador de Scroll */}
+        <div className="flex-1 min-w-0">
+          <ScrollableTabs
+            items={[
+              { id: 'todos', label: 'Todos' },
+              { id: 'rascunho', label: 'Rascunho' },
+              { id: 'enviado', label: 'Enviado' },
+              { id: 'visualizado', label: 'Visualizado' },
+              { id: 'aprovado', label: 'Aprovado' },
+              { id: 'recusado', label: 'Recusado' },
+              { id: 'expirado', label: 'Expirado' },
+            ]}
+            activeId={statusFiltro}
+            onChange={(id) => setStatusFiltro(id)}
+            variant="sport"
+            showQuickSelect={true}
+            quickSelectTitle="Filtrar por Status"
+          />
         </div>
 
         {/* Campo de Busca */}

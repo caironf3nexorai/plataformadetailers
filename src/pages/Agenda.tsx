@@ -7,6 +7,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { ServiceChip } from '../components/ui/ServiceChip';
+import { ScrollableTabs } from '../components/ui/ScrollableTabs';
 import { 
   Calendar as CalendarIcon, 
   CalendarDays,
@@ -1173,33 +1174,18 @@ export const Agenda: React.FC<AgendaProps> = ({ abaInicial = 'hoje' }) => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Abas Superiores (Cascatas de Navegação) */}
-      <div className="flex items-center gap-2 border-b border-graphite-600 pb-2 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('hoje')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-            activeTab === 'hoje'
-              ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500 font-bold'
-              : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-          }`}
-        >
-          <LayoutDashboard size={18} />
-          Resumo de Hoje
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('agenda')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-            activeTab === 'agenda'
-              ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500 font-bold'
-              : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-          }`}
-        >
-          <CalendarDays size={18} />
-          Agenda Completa
-        </button>
+      {/* Abas Superiores com ScrollableTabs */}
+      <div className="border-b border-graphite-600 pb-2">
+        <ScrollableTabs
+          items={[
+            { id: 'hoje', label: 'Resumo de Hoje', icon: LayoutDashboard },
+            { id: 'agenda', label: 'Agenda Completa', icon: CalendarDays },
+          ]}
+          activeId={activeTab}
+          onChange={(id) => setActiveTab(id as any)}
+          variant="sport"
+          showQuickSelect={false}
+        />
       </div>
 
       {activeTab === 'hoje' ? <Hoje /> : <VisaoAgenda />}

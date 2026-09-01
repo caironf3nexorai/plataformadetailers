@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { CampoNumerico } from '../components/ui/CampoNumerico';
 import { CopyLinkButton } from '../components/ui/CopyLinkButton';
+import { ScrollableTabs } from '../components/ui/ScrollableTabs';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissao } from '../hooks/usePermissao';
 import { usePlano } from '../hooks/usePlano';
@@ -388,167 +389,27 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     <div className="flex flex-col gap-6">
       <PageHeader title="Minha Oficina" />
 
-      {/* Tabs Switcher */}
-      <div className="flex items-center gap-2 border-b border-graphite-600 pb-2 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('oficina')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-            activeTab === 'oficina'
-              ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-              : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-          }`}
-        >
-          <Building2 size={18} />
-          Oficina
-        </button>
-
-        {(isDono || podeGerirEquipe()) && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('horarios')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'horarios'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <Clock size={18} />
-            Horários & Agenda
-          </button>
-        )}
-
-        {podeGerirEquipe() && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('equipe')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'equipe'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <Users size={18} />
-            Equipe
-          </button>
-        )}
-
-        {isDono && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('categorias')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'categorias'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <Tag size={18} />
-            Categorias
-          </button>
-        )}
-
-        {(isDono || podeGerirEquipe()) && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('checklists')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'checklists'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <CheckSquare size={18} />
-            Checklists
-          </button>
-        )}
-
-        {isDono && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('despesas')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'despesas'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <DollarSign size={18} />
-            Despesas Fixas
-          </button>
-        )}
-
-        {isDono && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('agendamento')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'agendamento'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <Calendar size={18} />
-            Agendamento Online
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('plano')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-            activeTab === 'plano'
-              ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-              : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-          }`}
-        >
-          <CreditCard size={18} />
-          Plano e Limites
-        </button>
-
-        {(isDono || podeGerirServicos()) && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('pdf')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'pdf'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <FileText size={18} />
-            Documentos PDF
-          </button>
-        )}
-
-        {isDono && (
-          <button
-            type="button"
-            onClick={() => setActiveTab('meta')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-              activeTab === 'meta'
-                ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-                : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-            }`}
-          >
-            <Target size={18} />
-            Meta Mensal
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('feedbacks')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-md font-display text-[14px] uppercase tracking-wide transition-colors whitespace-nowrap ${
-            activeTab === 'feedbacks'
-              ? 'bg-graphite-800 text-amber-500 border-b-2 border-amber-500'
-              : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/40'
-          }`}
-        >
-          <MessageSquare size={18} />
-          Meus Feedbacks
-        </button>
-      </div>
+      {/* Tabs Switcher com Gradiente de Fade, Chevrons e Menu Rápido Mobile */}
+      <ScrollableTabs
+        items={[
+          { id: 'oficina', label: 'Oficina', icon: Building2 },
+          ...((isDono || podeGerirEquipe()) ? [{ id: 'horarios', label: 'Horários & Agenda', icon: Clock }] : []),
+          ...(podeGerirEquipe() ? [{ id: 'equipe', label: 'Equipe', icon: Users }] : []),
+          ...(isDono ? [{ id: 'categorias', label: 'Categorias', icon: Tag }] : []),
+          ...((isDono || podeGerirEquipe()) ? [{ id: 'checklists', label: 'Checklists', icon: CheckSquare }] : []),
+          ...(isDono ? [{ id: 'despesas', label: 'Despesas Fixas', icon: DollarSign }] : []),
+          ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online', icon: Calendar }] : []),
+          { id: 'plano', label: 'Plano e Limites', icon: CreditCard },
+          ...((isDono || podeGerirServicos()) ? [{ id: 'pdf', label: 'Documentos PDF', icon: FileText }] : []),
+          ...(isDono ? [{ id: 'meta', label: 'Meta Mensal', icon: Target }] : []),
+          { id: 'feedbacks', label: 'Meus Feedbacks', icon: MessageSquare },
+        ]}
+        activeId={activeTab}
+        onChange={(id) => setActiveTab(id as any)}
+        variant="sport"
+        showQuickSelect={true}
+        quickSelectTitle="Seções da Oficina"
+      />
 
       {/* Conteúdo das Abas */}
       {activeTab === 'meta' && <AbaMetaMensal />}

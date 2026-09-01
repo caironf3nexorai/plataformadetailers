@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { SportGaugeCard } from '../components/ui/SportGauge';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissao } from '../hooks/usePermissao';
 import { supabase } from '../lib/supabase';
@@ -29,7 +29,9 @@ import {
   CreditCard,
   X,
   ExternalLink,
-  Tv
+  Tv,
+  Gauge,
+  Zap,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -98,6 +100,7 @@ export const Dashboard: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filtroPeriodo, setFiltroPeriodo] = useState<'hoje' | '7dias' | '30dias' | 'este_mes' | 'mes_passado'>('este_mes');
   const [modalAcao, setModalAcao] = useState<{
     titulo: string;
     tipo: 'vistorias' | 'estoque' | 'orcamentos' | 'contas' | 'sem_confirmacao' | 'taxas';
@@ -225,9 +228,161 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 pb-12 max-w-7xl mx-auto w-full">
-      <PageHeader
-        title="Cabine de Gestão"
-      />
+      {/* CABEÇALHO DO DASHBOARD COM TELEMETRIA & SELETOR DE PERÍODO */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-graphite-800 pb-4">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl text-vapor-100 uppercase tracking-wide flex items-center gap-2.5">
+            <Gauge className="text-amber-500" size={28} />
+            <span>Cabine de Gestão</span>
+          </h1>
+          <p className="font-sans text-xs sm:text-sm text-vapor-400 mt-0.5">
+            Visão executiva consolidada e telemetria da sua operação
+          </p>
+        </div>
+
+        {/* Seletor de Período estilo Cockpit Esportivo */}
+        <div className="flex items-center gap-1 bg-graphite-950/90 p-1.5 rounded-xl border border-graphite-700/80 overflow-x-auto scrollbar-none self-start sm:self-auto shadow-inner">
+          {[
+            { id: 'hoje', label: 'Hoje' },
+            { id: '7dias', label: '7 Dias' },
+            { id: '30dias', label: '30 Dias' },
+            { id: 'este_mes', label: 'Este Mês' },
+            { id: 'mes_passado', label: 'Mês Passado' },
+          ].map((periodo) => (
+            <button
+              key={periodo.id}
+              type="button"
+              onClick={() => setFiltroPeriodo(periodo.id as any)}
+              className={`px-3 py-1.5 rounded-lg font-sans text-xs font-semibold whitespace-nowrap transition-all ${
+                filtroPeriodo === periodo.id
+                  ? 'bg-amber-500 text-graphite-950 shadow-md shadow-amber-500/20 font-bold scale-[1.02]'
+                  : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800/80'
+              }`}
+            >
+              {periodo.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* --------------------------------------------------------------------- */}
+      {/* COCKPIT DE TELEMETRIA ESPORTIVA (MANÔMETROS / INSTRUMENT CLUSTER) */}
+      {/* --------------------------------------------------------------------- */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-sm text-vapor-100 uppercase tracking-wider flex items-center gap-2">
+            <Zap size={17} className="text-amber-500" />
+            <span>Telemetria de Performance</span>
+          </h2>
+          <span className="font-mono text-[11px] text-amber-500 font-semibold flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+            Cockpit Ativo
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-5">
+          {/* Manômetro 1: Volume de Agendamentos / Atendimentos */}
+          <SportGaugeCard
+            title="Agendamentos"
+            variant="cyan"
+            icon={Calendar}
+            value={saude?.carros_concluidos_mes_atual || agora?.carros_na_oficina || 0}
+            min={0}
+            max={Math.max(25, (saude?.carros_concluidos_mes_anterior || 0) * 1.4, (saude?.carros_concluidos_mes_atual || 0) * 1.2)}
+            formattedValue={`${saude?.carros_concluidos_mes_atual || agora?.carros_na_oficina || 0}`}
+            subtitle="Volume total do período"
+            badge={
+              <Badge tone="glass" className="text-[10px]">
+                {saude?.carros_concluidos_mes_anterior ? `vs ${saude.carros_concluidos_mes_anterior} ant.` : 'Ao Vivo'}
+              </Badge>
+            }
+            footerInfo={
+              <div className="flex items-center justify-between text-[11px] font-mono text-vapor-400">
+                <span>{agora?.carros_na_oficina || 0} na oficina hoje</span>
+                <span className="text-glass-400 font-bold">{agora?.em_execucao || 0} em execução</span>
+              </div>
+            }
+            onClick={() => navigate('/agenda')}
+          />
+
+          {/* Manômetro 2: Faturamento Total */}
+          <SportGaugeCard
+            title="Faturamento Total"
+            variant="mint"
+            icon={DollarSign}
+            value={dinheiro?.faturado_mes || 0}
+            min={0}
+            max={
+              dinheiro?.meta?.valor_meta && dinheiro.meta.tipo === 'faturamento'
+                ? dinheiro.meta.valor_meta
+                : Math.max(10000, (dinheiro?.faturado_mes || 0) * 1.25)
+            }
+            formattedValue={formatCurrency(dinheiro?.faturado_mes || 0)}
+            subtitle="Receitas no período"
+            badge={
+              <Badge tone="mint" className="text-[10px]">
+                {(saude?.comparativo_faturamento_pct || 0) >= 0
+                  ? `+${saude?.comparativo_faturamento_pct || 0}%`
+                  : `${saude?.comparativo_faturamento_pct || 0}%`}
+              </Badge>
+            }
+            footerInfo={
+              <div className="flex items-center justify-between text-[11px] font-mono text-vapor-400">
+                <span>Caixa: {formatCurrency(dinheiro?.recebido_mes || 0)}</span>
+                <span className="text-mint-400 font-bold">
+                  {dinheiro?.lucro_liquido_mes_atual
+                    ? `Lucro: ${formatCurrency(dinheiro.lucro_liquido_mes_atual)}`
+                    : ''}
+                </span>
+              </div>
+            }
+            onClick={() => navigate('/financeiro')}
+          />
+
+          {/* Manômetro 3: Meta do Mês / Progresso */}
+          <SportGaugeCard
+            title={
+              dinheiro?.meta
+                ? `Meta (${dinheiro.meta.tipo === 'faturamento' ? 'Faturamento' : dinheiro.meta.tipo === 'lucro_liquido' ? 'Lucro' : 'Veículos'})`
+                : 'Meta do Mês'
+            }
+            variant="amber"
+            icon={Target}
+            value={dinheiro?.meta?.progresso_pct || 0}
+            min={0}
+            max={100}
+            formattedValue={`${dinheiro?.meta?.progresso_pct || 0}%`}
+            subtitle={
+              dinheiro?.meta
+                ? `Alvo: ${
+                    dinheiro.meta.tipo === 'carros'
+                      ? `${dinheiro.meta.valor_meta} veículos`
+                      : formatCurrency(dinheiro.meta.valor_meta)
+                  }`
+                : 'Defina a meta do mês'
+            }
+            badge={
+              <Badge tone="amber" className="text-[10px]">
+                {dinheiro?.meta ? `${dinheiro.meta.progresso_pct}% Atingido` : 'Configurar'}
+              </Badge>
+            }
+            footerInfo={
+              <div className="flex items-center justify-between text-[11px] font-mono text-vapor-400">
+                <span>
+                  Realizado:{' '}
+                  {dinheiro?.meta
+                    ? dinheiro.meta.tipo === 'carros'
+                      ? `${dinheiro.meta.valor_atual} v.`
+                      : formatCurrency(dinheiro.meta.valor_atual)
+                    : 'R$ 0,00'}
+                </span>
+                <span className="text-amber-400 font-bold">Ajustar ➔</span>
+              </div>
+            }
+            onClick={() => navigate('/ajustes')}
+          />
+        </div>
+      </section>
 
       {/* WIDGET DISCRETO: PRIMEIROS PASSOS DA OFICINA (TREINAMENTO ESSENCIAL) */}
       {treinamentoOnboarding &&

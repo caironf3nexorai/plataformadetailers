@@ -73,21 +73,22 @@ export const CopyLinkButton: React.FC<CopyLinkButtonProps> = ({
     <button
       type="button"
       onClick={handleCopy}
-      className={`px-4 py-2 rounded-md font-sans text-[13px] font-medium flex items-center justify-center gap-2 transition-all shadow-sm ${
+      className={`px-3 sm:px-4 py-2 rounded-md font-sans text-[12px] sm:text-[13px] font-medium flex items-center justify-center gap-1.5 sm:gap-2 transition-all shadow-sm whitespace-nowrap ${
         copied
           ? 'bg-mint-500/20 border border-mint-500/50 text-mint-400'
           : 'bg-amber-500/10 border border-amber-500/40 hover:bg-amber-500/20 text-amber-400 hover:border-amber-500/60'
       } ${className}`}
+      title={copied ? 'Link Copiado!' : 'Copiar Link para agendamento'}
     >
       {copied ? (
         <>
-          <Check size={16} className="text-mint-400" />
-          <span>Link Copiado!</span>
+          <Check size={15} className="text-mint-400 shrink-0" />
+          <span className="truncate">{label ? 'Copiado!' : 'Link Copiado!'}</span>
         </>
       ) : (
         <>
-          <Share2 size={16} />
-          <span>{label}</span>
+          <Share2 size={15} className="shrink-0" />
+          <span className="truncate">{label}</span>
         </>
       )}
     </button>

@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/Badge';
 import { ServiceChip } from '../components/ui/ServiceChip';
 import { CopyLinkButton } from '../components/ui/CopyLinkButton';
 import { ModalConfirmacao } from '../components/ui/ModalConfirmacao';
+import { ScrollableTabs } from '../components/ui/ScrollableTabs';
 import { 
   Plus, 
   Globe, 
@@ -430,78 +431,82 @@ export const Servicos: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 p-6 flex flex-col gap-6 max-w-6xl mx-auto pb-24">
+    <div className="flex-1 p-4 sm:p-6 flex flex-col gap-6 max-w-6xl mx-auto pb-24">
       {/* Topo com ações */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-graphite-700 pb-4">
-        <div className="flex items-center gap-2">
-          <SprayCan className="text-amber-500" size={24} />
-          <h1 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
-            Catálogo de Serviços
-          </h1>
+      <div className="flex flex-col gap-3 sm:gap-4 border-b border-graphite-700 pb-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <SprayCan className="text-amber-500 shrink-0" size={24} />
+            <h1 className="font-display text-[20px] sm:text-[22px] text-vapor-100 uppercase tracking-wide">
+              Catálogo de Serviços
+            </h1>
+          </div>
+
+          {/* Botão Novo Serviço (Desktop) */}
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => navigate('/servicos/novo')}
+            className="hidden sm:flex font-semibold items-center gap-2"
+          >
+            <Plus size={16} />
+            Novo Serviço
+          </Button>
         </div>
+
+        {/* Botão Novo Serviço em Destaque no Mobile */}
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() => navigate('/servicos/novo')}
+          className="w-full sm:hidden font-bold min-h-[48px] flex items-center justify-center gap-2 text-[14px] shadow-md"
+        >
+          <Plus size={18} />
+          Novo Serviço
+        </Button>
         
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <CopyLinkButton slug={tenant?.slug} />
+        {/* Linha de Ações Secundárias */}
+        <div className="grid grid-cols-3 sm:flex sm:items-center sm:justify-end gap-2 sm:gap-3 w-full">
+          <CopyLinkButton 
+            slug={tenant?.slug} 
+            label="Link da Bio"
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-0 text-[11px] sm:text-[13px] px-1.5 sm:px-4 py-2"
+          />
 
           <Button
             type="button"
             variant="ghost"
             onClick={() => navigate('/servicos/precificacao')}
-            className="flex-1 sm:flex-initial text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 font-bold"
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-0 text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 font-bold text-[11px] sm:text-[13px] px-1.5 sm:px-4 py-2 flex items-center justify-center gap-1.5"
           >
-            <TrendingUp size={16} />
-            Precificação
+            <TrendingUp size={15} className="shrink-0" />
+            <span className="truncate">Precificação</span>
           </Button>
 
           <Button
             type="button"
             variant="ghost"
             onClick={() => navigate('/servicos/precos')}
-            className="flex-1 sm:flex-initial text-vapor-200 border-graphite-600 hover:bg-graphite-700"
+            className="w-full sm:w-auto min-h-[44px] sm:min-h-0 text-vapor-200 border-graphite-600 hover:bg-graphite-700 text-[11px] sm:text-[13px] px-1.5 sm:px-4 py-2 flex items-center justify-center gap-1.5"
           >
-            <FileSpreadsheet size={16} />
-            Editar Preços
-          </Button>
-
-          <Button
-            type="button"
-            variant="primary"
-            onClick={() => navigate('/servicos/novo')}
-            className="flex-1 sm:flex-initial font-semibold"
-          >
-            <Plus size={16} />
-            Novo Serviço
+            <FileSpreadsheet size={15} className="shrink-0" />
+            <span className="truncate">Editar Preços</span>
           </Button>
         </div>
       </div>
 
       {/* Navegação por Abas: Serviços x Combos */}
-      <div className="flex items-center gap-2 border-b border-graphite-700 pb-px">
-        <button
-          type="button"
-          onClick={() => setActiveTab('servicos')}
-          className={`px-4 py-2.5 font-display text-[13px] uppercase tracking-wider font-bold transition-all border-b-2 min-h-[44px] flex items-center gap-2 ${
-            activeTab === 'servicos'
-              ? 'border-amber-500 text-amber-400 bg-amber-500/5'
-              : 'border-transparent text-vapor-400 hover:text-vapor-200'
-          }`}
-        >
-          <SprayCan size={16} />
-          <span>Serviços Individuais ({services.length})</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('combos')}
-          className={`px-4 py-2.5 font-display text-[13px] uppercase tracking-wider font-bold transition-all border-b-2 min-h-[44px] flex items-center gap-2 ${
-            activeTab === 'combos'
-              ? 'border-amber-500 text-amber-400 bg-amber-500/5'
-              : 'border-transparent text-vapor-400 hover:text-vapor-200'
-          }`}
-        >
-          <Package size={16} />
-          <span>Combos & Pacotes</span>
-        </button>
+      <div className="border-b border-graphite-700 pb-2">
+        <ScrollableTabs
+          items={[
+            { id: 'servicos', label: `Serviços Individuais (${services.length})`, icon: SprayCan },
+            { id: 'combos', label: 'Combos & Pacotes', icon: Package },
+          ]}
+          activeId={activeTab}
+          onChange={(id) => setActiveTab(id as any)}
+          variant="sport"
+          showQuickSelect={false}
+        />
       </div>
 
       {errorMsg && (
@@ -603,7 +608,7 @@ export const Servicos: React.FC = () => {
                     return (
                       <Card
                         key={serv.id}
-                        className={`p-4 bg-graphite-800 border-graphite-600 hover:border-graphite-500 transition-all flex flex-col justify-between gap-4 cursor-pointer group ${
+                        className={`p-3.5 sm:p-4 bg-graphite-800 border-graphite-600 hover:border-graphite-500 transition-all flex flex-col justify-between gap-3 sm:gap-4 cursor-pointer group ${
                           isSelected ? 'border-amber-500 bg-amber-500/5' : ''
                         }`}
                         onClick={() => navigate(`/servicos/${serv.id}`)}
@@ -627,11 +632,11 @@ export const Servicos: React.FC = () => {
                           <img
                             src={fotoResolvedUrl}
                             alt={serv.nome}
-                            className="w-16 h-16 object-cover rounded border border-graphite-600 shrink-0 group-hover:border-amber-500/50 transition-colors"
+                            className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-lg border border-graphite-600 shrink-0 group-hover:border-amber-500/50 transition-colors"
                           />
 
                           <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-start justify-between gap-1.5">
                               <div className="min-w-0 flex-1">
                                 <ServiceChip
                                   code={serv.codigo}
@@ -641,10 +646,10 @@ export const Servicos: React.FC = () => {
                               </div>
 
                               {/* Badges de Ocupação & Público */}
-                              <div className="flex flex-wrap gap-1 justify-end shrink-0">
+                              <div className="flex flex-wrap gap-1 items-center shrink-0">
                                 {serv.publico && (
                                   <Badge tone="mint">
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-[10px]">
                                       <Globe size={10} />
                                       Público
                                     </span>
@@ -667,20 +672,20 @@ export const Servicos: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-graphite-700 pt-3 mt-1">
-                          <span className="font-sans text-[14px] text-vapor-100 font-semibold flex items-center gap-1">
-                            <span className="text-[12px] text-vapor-400 font-normal">A partir de</span>
-                            <span className="font-mono text-amber-500">{faixaTexto.replace('A partir de', '')}</span>
+                        <div className="flex items-center justify-between gap-2 border-t border-graphite-700 pt-3 mt-1">
+                          <span className="font-sans text-[13px] sm:text-[14px] text-vapor-100 font-semibold flex items-center gap-1 flex-wrap">
+                            <span className="text-[11px] sm:text-[12px] text-vapor-400 font-normal">A partir de</span>
+                            <span className="font-mono text-amber-500 font-bold">{faixaTexto.replace('A partir de', '')}</span>
                           </span>
                           
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                             {possuiEstimado && (
-                              <span className="font-sans text-[11px] text-amber-500 flex items-center gap-1" title="Duração estimada — confirme com o seu tempo real">
+                              <span className="font-sans text-[10px] sm:text-[11px] text-amber-500 flex items-center gap-1" title="Duração estimada — confirme com o seu tempo real">
                                 <AlertTriangle size={12} className="shrink-0" />
-                                Estimado
+                                <span className="hidden xs:inline">Estimado</span>
                               </span>
                             )}
-                            <span className="text-[11px] text-vapor-400 group-hover:text-amber-500 font-medium transition-colors flex items-center gap-1">
+                            <span className="text-[11px] sm:text-[12px] text-vapor-400 group-hover:text-amber-500 font-medium transition-colors flex items-center gap-1">
                               <Pencil size={11} />
                               Editar
                             </span>

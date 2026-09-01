@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { ScrollableTabs } from '../components/ui/ScrollableTabs';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
@@ -265,22 +266,24 @@ export const Estoque: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-          <button
-            onClick={() => setSelectedCategoria('todas')}
-            className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors shrink-0 ${selectedCategoria === 'todas' ? 'bg-amber-500 text-graphite-950 font-bold' : 'bg-graphite-800 text-vapor-300 hover:text-vapor-100'}`}
-          >
-            Todas Categorias
-          </button>
-          {['Lavagem', 'Polimento', 'Proteção', 'Interior', 'Vidros', 'Insumos', 'Geral'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategoria(cat)}
-              className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors shrink-0 ${selectedCategoria === cat ? 'bg-amber-500 text-graphite-950 font-bold' : 'bg-graphite-800 text-vapor-300 hover:text-vapor-100'}`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="w-full sm:w-auto flex-1 min-w-0">
+          <ScrollableTabs
+            items={[
+              { id: 'todas', label: 'Todas Categorias' },
+              { id: 'Lavagem', label: 'Lavagem' },
+              { id: 'Polimento', label: 'Polimento' },
+              { id: 'Proteção', label: 'Proteção' },
+              { id: 'Interior', label: 'Interior' },
+              { id: 'Vidros', label: 'Vidros' },
+              { id: 'Insumos', label: 'Insumos' },
+              { id: 'Geral', label: 'Geral' },
+            ]}
+            activeId={selectedCategoria}
+            onChange={(id) => setSelectedCategoria(id)}
+            variant="sport"
+            showQuickSelect={true}
+            quickSelectTitle="Categorias de Estoque"
+          />
         </div>
       </div>
 
