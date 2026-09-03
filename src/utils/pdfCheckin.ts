@@ -34,6 +34,7 @@ interface PDFCheckinData {
   pdfCorFundoCabecalho?: string | null;
   pdfCorTextoCabecalho?: string | null;
   pdfCorFundoSecoes?: string | null;
+  pdfCorTextoSecoes?: string | null;
   pdfSubtituloCabecalho?: string | null;
   pdfTextoObservacoesOrcamento?: string | null;
   pdfTextoRodape?: string | null;
@@ -199,6 +200,7 @@ export async function gerarPDFCheckin(
     pdfCorFundoCabecalho: data.pdfCorFundoCabecalho,
     pdfCorTextoCabecalho: data.pdfCorTextoCabecalho,
     pdfCorFundoSecoes: data.pdfCorFundoSecoes,
+    pdfCorTextoSecoes: data.pdfCorTextoSecoes || undefined,
     pdfSubtituloCabecalho: data.pdfSubtituloCabecalho,
     pdfTextoObservacoesOrcamento: data.pdfTextoObservacoesOrcamento,
     pdfTextoRodape: data.pdfTextoRodape,
@@ -207,25 +209,45 @@ export async function gerarPDFCheckin(
 
   const isFree = data.planoCodigo === 'free';
   const corFundoSecoesRgb = isFree ? [39, 39, 42] as [number, number, number] : hexToRgb(data.pdfCorFundoSecoes, [39, 39, 42]);
-  const corPrimariaRgb = isFree ? [251, 191, 36] as [number, number, number] : hexToRgb(data.pdfCorPrimaria, [245, 158, 11]);
+  const corPrimariaRgb = isFree ? [245, 158, 11] as [number, number, number] : hexToRgb(data.pdfCorPrimaria, [245, 158, 11]);
+
+  // Detector de Fundo Claro vs Escuro
+  const lumFundoSecoes = (0.299 * corFundoSecoesRgb[0] + 0.587 * corFundoSecoesRgb[1] + 0.114 * corFundoSecoesRgb[2]) / 255;
+  const isLightSecoes = lumFundoSecoes > 0.65;
+
+  const corTextoPrincipal: [number, number, number] = data.pdfCorTextoSecoes
+    ? hexToRgb(data.pdfCorTextoSecoes, isLightSecoes ? [15, 23, 42] : [255, 255, 255])
+    : (isLightSecoes ? [15, 23, 42] : [255, 255, 255]);
+
+  const lumTexto = (0.299 * corTextoPrincipal[0] + 0.587 * corTextoPrincipal[1] + 0.114 * corTextoPrincipal[2]) / 255;
+  const isTextoEscuro = lumTexto < 0.5;
+
+  const corTextoSecundario: [number, number, number] = isTextoEscuro ? [82, 82, 91] : [203, 213, 225];
+  const corBordaCard: [number, number, number] = isLightSecoes ? [203, 213, 225] : [63, 63, 70];
+  const corDestaquePreco: [number, number, number] = isLightSecoes
+    ? (corPrimariaRgb[0] > 200 && corPrimariaRgb[1] > 180 ? [180, 83, 9] : corPrimariaRgb)
+    : [251, 191, 36];
 
   // 2. Dados do Cliente e Veículo
   doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
-  doc.roundedRect(pageMargin, y, usableWidth, 22, 2, 2, 'F');
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(pageMargin, y, usableWidth, 22, 2, 2, 'FD');
 
-  doc.setTextColor(corPrimariaRgb[0], corPrimariaRgb[1], corPrimariaRgb[2]);
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
   doc.setFontSize(9.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('CLIENTE & VEÍCULO', pageMargin + 4, y + 6);
+  doc.text('CLIENTE & VEÍCULO', pageMargin + 5, y + 6);
 
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Cliente: ${clienteNome} (${clienteTelefone || '—'})`, pageMargin + 4, y + 12);
-  doc.text(`Veículo: ${veiculoModelo} | Placa: ${veiculoPlaca.toUpperCase()}`, pageMargin + 4, y + 17);
+  doc.text(`Cliente: ${clienteNome} (${clienteTelefone || '—'})`, pageMargin + 5, y + 12);
+  doc.text(`Veículo: ${veiculoModelo} | Placa: ${veiculoPlaca.toUpperCase()}`, pageMargin + 5, y + 17);
 
-  doc.text(`KM: ${checkin.km ? checkin.km.toLocaleString('pt-BR') : '—'}`, rightMarginX - 4, y + 12, { align: 'right' });
-  doc.text(`Combustível: ${formatarNivelCombustivel(checkin.nivel_combustivel)}`, rightMarginX - 4, y + 17, { align: 'right' });
+  doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+  doc.text(`KM: ${checkin.km ? checkin.km.toLocaleString('pt-BR') : '—'}`, rightMarginX - 5, y + 12, { align: 'right' });
+  doc.text(`Combustível: ${formatarNivelCombustivel(checkin.nivel_combustivel)}`, rightMarginX - 5, y + 17, { align: 'right' });
 
   y += 28;
 
@@ -308,14 +330,16 @@ export async function gerarPDFCheckin(
   const boxHeight = Math.max(maxLines * 4.5 + 10, 40);
 
   // Desenhar bloco de fundo com altura calculada
-  doc.setFillColor(39, 39, 42); // graphite-800
-  doc.roundedRect(pageMargin, y, usableWidth, boxHeight, 2, 2, 'F');
+  doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(pageMargin, y, usableWidth, boxHeight, 2, 2, 'FD');
 
   let curY1 = y + 5;
   let curY2 = y + 5;
 
   // --- COLUNA 1: ILUMINAÇÃO E FLUIDOS ---
-  doc.setTextColor(251, 191, 36);
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('ILUMINAÇÃO', col1X, curY1);
@@ -603,11 +627,11 @@ export async function gerarPDFCheckin(
             // Desenho proporcional mantendo aspect ratio real da foto (retrato ou paisagem)
             await drawProportionalImage(doc, base64, 'JPEG', photoX, photoY, boxWidth, boxHeight);
 
-            // Carimbo de data/hora e descrição abaixo de cada foto
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(200, 200, 200);
-            const descTxt = foto.descricao ? ` - ${foto.descricao}` : '';
+            // Carimbo de data/hora imutável e descrição abaixo de cada foto
+            doc.setFontSize(6.8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(245, 158, 11);
+            const descTxt = foto.descricao ? ` · ${foto.descricao}` : '';
             doc.text(
               `${formatarData(foto.created_at)} ${formatarHora(foto.created_at)}${descTxt}`,
               photoX + boxWidth / 2,
@@ -644,7 +668,7 @@ export async function gerarPDFCheckin(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'italic');
   const termoTxt = '"Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega."';
-  const termoLines = doc.splitTextToSize(termoTxt, usableWidth - 60);
+  const termoLines = doc.splitTextToSize(termoTxt, usableWidth - 68);
   termoLines.forEach((line: string, idx: number) => {
     doc.text(line, pageMargin + 4, y + 6 + idx * 3.5);
   });
@@ -669,17 +693,36 @@ export async function gerarPDFCheckin(
     } catch (e) {
       console.error('Erro ao carregar assinatura no PDF:', e);
     }
+  } else {
+    // Bloco para Assinatura Manual / Física no papel
+    const sigBoxW = 60;
+    const sigBoxX = rightMarginX - 64;
+    const sigBoxY = y + 3;
+
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.3);
+    doc.line(sigBoxX, sigBoxY + 12, sigBoxX + sigBoxW, sigBoxY + 12);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(180, 180, 180);
+    doc.text('Assinatura Manual do Cliente', sigBoxX + sigBoxW / 2, sigBoxY + 16, { align: 'center' });
   }
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Assinado por: ${checkin.assinatura_nome || clienteNome}`, pageMargin + 4, y + 22);
+  const nomeSignatario = checkin.assinatura_nome || clienteNome || 'Cliente';
+  doc.text(`Signatário: ${nomeSignatario}`, pageMargin + 4, y + 22);
 
   if (checkin.assinado_em) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.text(`Assinado em: ${formatarData(checkin.assinado_em)} ${formatarHora(checkin.assinado_em)}`, pageMargin + 4, y + 27);
+  } else {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(251, 191, 36);
+    doc.text('Via impressa para coleta de assinatura física / manual', pageMargin + 4, y + 27);
   }
 
   // Nota legal de carimbos de fotos no rodapé

@@ -20,12 +20,13 @@ import { AbaPersonalizacaoPDF } from '../components/configuracoes/AbaPersonaliza
 import { AbaMetaMensal } from './configuracoes/AbaMetaMensal';
 import { AbaFeedbacks } from './configuracoes/AbaFeedbacks';
 import { AbaAssinatura } from './configuracoes/AbaAssinatura';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FileText, Target, MessageSquare } from 'lucide-react';
+import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FileText, Target, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, getFotoPublicUrl } from '../utils/imagens';
 
 interface ConfiguracoesProps {
-  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks';
+  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos';
 }
 
 export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
@@ -40,7 +41,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     return 'oficina';
   };
 
-  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks'>(getTabPadrao());
+  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos'>(getTabPadrao());
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -68,7 +69,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
   const [docTipo, setDocTipo] = useState<'cpf' | 'cnpj'>(tenant?.documento_tipo || 'cnpj');
   const [documentoInput, setDocumentoInput] = useState(tenant?.documento || '');
   const [razaoSocialInput, setRazaoSocialInput] = useState(tenant?.razao_social || '');
-  const [validadeDiasInput, setValidadeDiasInput] = useState<number>(tenant?.orcamento_validade_dias || 7);
   const [savingIdentidade, setSavingIdentidade] = useState(false);
   const [identidadeError, setIdentidadeError] = useState<string | null>(null);
   const [identidadeSuccess, setIdentidadeSuccess] = useState<string | null>(null);
@@ -80,7 +80,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setDocTipo(tenant.documento_tipo || 'cnpj');
       setDocumentoInput(tenant.documento || '');
       setRazaoSocialInput(tenant.razao_social || '');
-      setValidadeDiasInput(tenant.orcamento_validade_dias || 7);
 
       supabase
         .from('tenant_contadores')
@@ -401,6 +400,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online', icon: Calendar }] : []),
           { id: 'plano', label: 'Plano e Limites', icon: CreditCard },
           ...((isDono || podeGerirServicos()) ? [{ id: 'pdf', label: 'Documentos PDF', icon: FileText }] : []),
+          ...((isDono || podeGerirServicos()) ? [{ id: 'termos', label: 'Termos de Garantia', icon: ShieldCheck }] : []),
           ...(isDono ? [{ id: 'meta', label: 'Meta Mensal', icon: Target }] : []),
           { id: 'feedbacks', label: 'Meus Feedbacks', icon: MessageSquare },
         ]}
@@ -414,6 +414,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       {/* Conteúdo das Abas */}
       {activeTab === 'meta' && <AbaMetaMensal />}
       {activeTab === 'feedbacks' && <AbaFeedbacks />}
+      {activeTab === 'termos' && <AbaTermosGarantia />}
 
       {activeTab === 'oficina' && (
         <div className="flex flex-col lg:flex-row items-start gap-6">
@@ -483,42 +484,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                 }}
                 className="w-5 h-5 accent-amber-500 rounded cursor-pointer shrink-0 min-h-[28px] min-w-[28px]"
               />
-            </div>
-
-            {/* CONFIGURAÇÃO: Validade Padrão dos Orçamentos */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-2">
-              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                <span className="font-sans text-[13px] text-vapor-100 font-bold">
-                  Validade Padrão dos Orçamentos (dias)
-                </span>
-                <span className="font-sans text-[12px] text-vapor-400">
-                  Tempo que a proposta pública continuará ativa para o cliente aceitar.
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <CampoNumerico
-                  integerOnly
-                  value={validadeDiasInput}
-                  onChange={async (val) => {
-                    const novoVal = val || 7;
-                    setValidadeDiasInput(novoVal);
-                    if (!tenant) return;
-                    try {
-                      await supabase
-                        .from('tenants')
-                        .update({ orcamento_validade_dias: novoVal })
-                        .eq('id', tenant.id);
-                      await refetchTenantData();
-                    } catch (err) {
-                      console.error('[Configuracoes] Erro ao salvar validade orcamento:', err);
-                    }
-                  }}
-                  align="center"
-                  placeholder="7"
-                  wrapperClassName="w-20 min-h-[40px]"
-                />
-                <span className="font-sans text-[12px] text-vapor-400 font-medium">dias</span>
-              </div>
             </div>
 
             {/* CONFIGURAÇÃO: Fuso Horário da Oficina */}

@@ -44,8 +44,47 @@ export const VisualizarCheckin: React.FC = () => {
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string>('');
+  const [destravando, setDestravando] = useState(false);
 
   const svgRefs = useRef<{ [key in VistaDiagrama]?: SVGSVGElement | null }>({});
+
+  const handleDestravarManual = async () => {
+    if (!checkin) return;
+    try {
+      setDestravando(true);
+      const nomeSignatario = checkin.assinatura_nome || agendamento?.cliente?.nome || 'Assinatura Manual';
+      const { error: err } = await supabase.rpc('finalizar_checkin', {
+        p_checkin: checkin.id,
+        p_assinatura_path: 'manual',
+        p_nome: nomeSignatario,
+      });
+
+      if (err) {
+        await supabase
+          .from('checkins')
+          .update({
+            finalizado: true,
+            aceite_tipo: 'manual',
+            assinatura_nome: nomeSignatario,
+            assinado_em: new Date().toISOString(),
+          })
+          .eq('id', checkin.id);
+      } else {
+        await supabase
+          .from('checkins')
+          .update({
+            aceite_tipo: 'manual',
+          })
+          .eq('id', checkin.id);
+      }
+
+      await fetchCheckinCompleto();
+    } catch (e: any) {
+      setError('Erro ao destravar vistoria: ' + (e?.message || e));
+    } finally {
+      setDestravando(false);
+    }
+  };
 
   const handleIniciarServicoAgora = async () => {
     if (!agendamento || startingExec) return;
@@ -206,6 +245,7 @@ export const VisualizarCheckin: React.FC = () => {
           pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
           pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho,
           pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes,
+          pdfCorTextoSecoes: tenant.pdf_cor_texto_secoes || (tenant?.id ? localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) : null),
           pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho,
           pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento,
           pdfTextoRodape: tenant.pdf_texto_rodape,
@@ -425,9 +465,10 @@ export const VisualizarCheckin: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <span className="font-mono text-[11px] text-vapor-400 px-0.5">
-                    {formatarData(ft.created_at)} {formatarHora(ft.created_at)}
-                  </span>
+                  <div className="flex items-center gap-1 font-mono text-[10.5px] text-amber-400 font-semibold px-0.5" title="Data e hora imutável do upload">
+                    <Lock size={12} className="shrink-0 text-amber-500" />
+                    <span>Upload: {formatarData(ft.created_at)} às {formatarHora(ft.created_at)}</span>
+                  </div>
                 </div>
               );
             })}
@@ -437,9 +478,22 @@ export const VisualizarCheckin: React.FC = () => {
 
       {/* Termo e Assinatura Digital do Cliente */}
       <Card className="p-6 bg-graphite-800 border-amber-500/30 flex flex-col gap-4">
-        <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide border-b border-graphite-700 pb-2">
-          Assinatura e Validação Jurídica
-        </h3>
+        <div className="flex items-center justify-between border-b border-graphite-700 pb-2 flex-wrap gap-2">
+          <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
+            Assinatura e Validação Jurídica
+          </h3>
+          {!checkin.finalizado && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleDestravarManual}
+              disabled={destravando}
+              className="text-xs bg-cyan-500/10 border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/20"
+            >
+              <span>{destravando ? 'Destravando...' : 'Destravar Vistoria (Assinatura Manual)'}</span>
+            </Button>
+          )}
+        </div>
 
         <div className="p-4 bg-graphite-900 rounded-lg border border-graphite-700 font-sans text-[13px] text-vapor-300 italic leading-relaxed">
           "Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega."
@@ -447,20 +501,29 @@ export const VisualizarCheckin: React.FC = () => {
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
           <div>
-            <span className="font-mono text-[11px] text-vapor-400 uppercase">Assinado por:</span>
+            <span className="font-mono text-[11px] text-vapor-400 uppercase">Signatário:</span>
             <p className="font-sans text-[16px] font-bold text-vapor-100">
-              {checkin.assinatura_nome || agendamento.cliente?.nome}
+              {checkin.assinatura_nome || agendamento.cliente?.nome || 'Cliente'}
             </p>
-            {checkin.assinado_em && (
+            {checkin.assinado_em ? (
               <p className="font-mono text-[12px] text-amber-400">
                 Data: {formatarData(checkin.assinado_em)} às {formatarHora(checkin.assinado_em)}
+              </p>
+            ) : (
+              <p className="font-mono text-[12px] text-cyan-400">
+                Status: Assinatura Manual / Física em Papel
               </p>
             )}
           </div>
 
-          {assinaturaSignedUrl && (
+          {assinaturaSignedUrl ? (
             <div className="p-2 bg-graphite-950 rounded-lg border border-graphite-700">
               <img src={assinaturaSignedUrl} alt="Assinatura do cliente" className="h-16 object-contain" />
+            </div>
+          ) : (
+            <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 text-center flex flex-col items-center">
+              <div className="w-40 border-b border-dashed border-vapor-500 my-2" />
+              <span className="font-sans text-[11px] text-vapor-400">Assinatura Manual em Papel</span>
             </div>
           )}
         </div>

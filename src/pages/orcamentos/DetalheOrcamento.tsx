@@ -28,14 +28,24 @@ import {
   Tag,
   Trash2,
   Percent,
-  FileText
+  FileText,
+  Camera,
+  Printer,
+  ShieldCheck,
+  FileDown,
+  PlusCircle,
 } from 'lucide-react';
 import type { Orcamento, TipoNivelOrcamento } from '../../types/orcamento';
 import type { Servico } from '../../types/servicos';
+import type { TermoGarantia } from '../../types/termos';
 import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../../utils/pdfOrcamento';
 import { getFotoPublicUrl } from '../../utils/imagens';
+import { uploadOrcamentoFoto, getEvidenciaSignedUrl } from '../../utils/evidencias';
+import { formatarDataHora } from '../../utils/datas';
+import { CanvasAssinatura } from '../../components/checkin/CanvasAssinatura';
+import { ModalServicoRapido } from '../../components/orcamentos/ModalServicoRapido';
 
 interface ServicoComPrecoDuracao extends Servico {
   precoMatriz: number;
@@ -117,6 +127,42 @@ export const DetalheOrcamento: React.FC = () => {
   // Link público gerado
   const [linkPublico, setLinkPublico] = useState<string>('');
 
+  // Fotos de Avaliação do Veículo (Registro Imutável com Suporte a Antes e Depois)
+  interface FotoOrcamentoItem {
+    id: string;
+    url: string;
+    path?: string;
+    tipo?: 'antes' | 'depois';
+    descricao?: string;
+    created_at: string;
+  }
+  const [fotosAvaliacao, setFotosAvaliacao] = useState<FotoOrcamentoItem[]>([]);
+  const [uploadingFoto, setUploadingFoto] = useState<boolean>(false);
+  const [momentoFotoUpload, setMomentoFotoUpload] = useState<'antes' | 'depois'>('antes');
+  const [filtroMomentoFoto, setFiltroMomentoFoto] = useState<'todas' | 'antes' | 'depois'>('todas');
+  const fileInputFotoRef = useRef<HTMLInputElement>(null);
+
+  // Checks de Inclusão no Orçamento / PDF / Link Público
+  const [incluirFotos, setIncluirFotos] = useState<boolean>(true);
+  const [incluirTermos, setIncluirTermos] = useState<boolean>(true);
+
+  // Termos de Garantia e Validade
+  const [termosDisponiveis, setTermosDisponiveis] = useState<TermoGarantia[]>([]);
+  const [termoGarantiaSelecionado, setTermoGarantiaSelecionado] = useState<string>('');
+  const [validadeDiasOrcamento, setValidadeDiasOrcamento] = useState<number>(7);
+
+  // Modal de Novo Serviço Rápido
+  const [showModalServicoRapido, setShowModalServicoRapido] = useState<boolean>(false);
+
+  // Modal de Assinaturas Presenciais (Cliente e Operador)
+  const [showAssinaturaModal, setShowAssinaturaModal] = useState<boolean>(false);
+  const [assinandoTipo, setAssinandoTipo] = useState<'cliente' | 'usuario'>('cliente');
+  const [nomeSignatario, setNomeSignatario] = useState<string>('');
+  const [savingAssinatura, setSavingAssinatura] = useState<boolean>(false);
+
+  // Aceite Manual do Orçamento Impresso
+  const [aceitandoManual, setAceitandoManual] = useState<boolean>(false);
+
   const fetchOrcamentoEDados = async () => {
     if (!id || !tenant) return;
     if (!orcamento) {
@@ -155,6 +201,110 @@ export const DetalheOrcamento: React.FC = () => {
 
       if (quote.token_publico) {
         setLinkPublico(`${window.location.origin}/orcamento/${quote.token_publico}`);
+      }
+
+      setObservacoes(quote.observacoes || '');
+      setValidadeDiasOrcamento(quote.validade_dias || 7);
+      setIncluirFotos((quote as any).incluir_fotos ?? true);
+      setIncluirTermos((quote as any).incluir_termos ?? true);
+      setTermoGarantiaSelecionado((quote as any).termo_garantia_id || '');
+
+      // Carrega fotos de avaliação
+      const { data: fotosData } = await supabase
+        .from('orcamento_fotos')
+        .select('*')
+        .eq('orcamento_id', quote.id)
+        .order('created_at', { ascending: true });
+
+      if (fotosData && fotosData.length > 0) {
+        const comUrls = await Promise.all(
+          fotosData.map(async (ft: any) => {
+            const url = await getEvidenciaSignedUrl(ft.path);
+            return {
+              id: ft.id,
+              url: url || '',
+              descricao: ft.descricao,
+              created_at: ft.created_at,
+            };
+          })
+        );
+        setFotosAvaliacao(comUrls.filter((f) => Boolean(f.url)));
+      }
+
+      // Carrega termos de garantia do tenant
+      const { data: termosData } = await supabase
+        .from('termos_garantia')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('ativo', true);
+
+      if (termosData && termosData.length > 0) {
+        setTermosDisponiveis(termosData as TermoGarantia[]);
+      } else {
+        const salvosLocal = localStorage.getItem(`termos_garantia_${tenant.id}`);
+        if (salvosLocal) setTermosDisponiveis(JSON.parse(salvosLocal));
+      }
+
+      // Carrega fotos de avaliação do veículo para este orçamento
+      let fotosCarregadas: any[] = [];
+      try {
+        const { data: fotosDb } = await supabase
+          .from('orcamento_fotos')
+          .select('*')
+          .eq('orcamento_id', quote.id)
+          .order('created_at', { ascending: true });
+        if (fotosDb && fotosDb.length > 0) {
+          fotosCarregadas = fotosDb;
+        }
+      } catch (e) {
+        console.warn('[orcamento_fotos select]:', e);
+      }
+
+      // Se a tabela não retornou dados, busca diretamente do bucket de evidencias
+      if (fotosCarregadas.length === 0) {
+        try {
+          const { data: storageFiles } = await supabase.storage
+            .from('evidencias')
+            .list(`${tenant.id}/orcamentos/${quote.id}`);
+          if (storageFiles && storageFiles.length > 0) {
+            const fotosArquivos = storageFiles.filter((f) => !f.name.startsWith('assinatura_') && !f.name.startsWith('.'));
+            fotosCarregadas = fotosArquivos.map((f) => ({
+              id: f.id || f.name,
+              path: `${tenant.id}/orcamentos/${quote.id}/${f.name}`,
+              created_at: f.created_at || new Date().toISOString(),
+            }));
+          }
+        } catch (e) {
+          console.warn('[storage list fotos]:', e);
+        }
+      }
+
+      // Fallback para cache local no navegador
+      if (fotosCarregadas.length === 0) {
+        const salvosLocal = localStorage.getItem(`orcamento_fotos_${quote.id}`);
+        if (salvosLocal) {
+          try {
+            fotosCarregadas = JSON.parse(salvosLocal);
+          } catch {}
+        }
+      }
+
+      if (fotosCarregadas.length > 0) {
+        const fotosComUrl = await Promise.all(
+          fotosCarregadas.map(async (ft: any) => {
+            const signed = ft.url && ft.url.startsWith('http') ? ft.url : (ft.path ? await getEvidenciaSignedUrl(ft.path) : '');
+            return {
+              id: ft.id,
+              path: ft.path,
+              url: signed || ft.url || '',
+              descricao: ft.descricao,
+              created_at: ft.created_at || new Date().toISOString(),
+            };
+          })
+        );
+        const validas = fotosComUrl.filter((f) => Boolean(f.url || f.path));
+        setFotosAvaliacao(validas);
+        localStorage.setItem(`orcamento_fotos_${quote.id}`, JSON.stringify(validas));
       }
 
       // 2. Busca catálogo de serviços e preços (servico_precos) do tenant
@@ -527,7 +677,19 @@ export const DetalheOrcamento: React.FC = () => {
         p_motivo: 'Atualização de serviços e valores do orçamento pela oficina',
       });
 
-      if (error) throw error;
+      if (error) {
+        console.warn('[solicitar_reassinatura_orcamento fallback]:', error);
+        await supabase
+          .from('orcamentos')
+          .update({
+            status: 'enviado',
+            assinatura_path: null,
+            assinatura_nome: null,
+            assinatura_data: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', orcamento.id);
+      }
 
       const link = `${window.location.origin}/orcamento/${orcamento.token_publico}`;
       setLinkPublico(link);
@@ -643,8 +805,213 @@ export const DetalheOrcamento: React.FC = () => {
     }
   };
 
-  // GERAR PDF DO ORÇAMENTO
-  const handleGerarPDF = async () => {
+  const handleDispararUpload = (momento: 'antes' | 'depois') => {
+    setMomentoFotoUpload(momento);
+    if (fileInputFotoRef.current) {
+      fileInputFotoRef.current.value = '';
+      fileInputFotoRef.current.click();
+    }
+  };
+
+  // UPLOAD DE FOTO DE AVALIAÇÃO COM CARIMBO IMUTÁVEL
+  const handleUploadFotoAvaliacao = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !orcamento || !tenant) return;
+
+    setUploadingFoto(true);
+    try {
+      const { path, capturadaEm } = await uploadOrcamentoFoto(tenant.id, orcamento.id, file, false, orcamento.veiculo?.placa);
+
+      let novaFotoId = `ft_${Date.now()}`;
+      try {
+        const { data: novaFoto } = await supabase
+          .from('orcamento_fotos')
+          .insert({
+            tenant_id: tenant.id,
+            orcamento_id: orcamento.id,
+            path,
+            created_at: capturadaEm || new Date().toISOString(),
+          })
+          .select('*')
+          .single();
+        if (novaFoto?.id) novaFotoId = novaFoto.id;
+      } catch (errDb) {
+        console.warn('[orcamento_fotos insert error]:', errDb);
+      }
+
+      const signedUrl = await getEvidenciaSignedUrl(path);
+      const novaFotoObj: FotoOrcamentoItem = {
+        id: novaFotoId,
+        path,
+        url: signedUrl || '',
+        tipo: momentoFotoUpload,
+        descricao: momentoFotoUpload === 'depois' ? '[DEPOIS]' : '[ANTES]',
+        created_at: capturadaEm || new Date().toISOString(),
+      };
+
+      setFotosAvaliacao((prev) => {
+        const updated = [...prev, novaFotoObj];
+        localStorage.setItem(`orcamento_fotos_${orcamento.id}`, JSON.stringify(updated));
+        return updated;
+      });
+      showSuccess(`Foto (${momentoFotoUpload === 'depois' ? 'Depois' : 'Antes'}) anexada com sucesso!`);
+    } catch (err: any) {
+      console.error('[Upload Foto Avaliacao Error]:', err);
+      showError('Erro ao enviar foto: ' + (err?.message || err));
+    } finally {
+      setUploadingFoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleExcluirFotoAvaliacao = async (fotoId: string) => {
+    if (isAprovado) {
+      showError('As fotos não podem ser excluídas após a aprovação da proposta comercial.');
+      return;
+    }
+    try {
+      await supabase.from('orcamento_fotos').delete().eq('id', fotoId);
+    } catch (e: any) {
+      console.error('[Excluir Foto Orcamento]:', e);
+    }
+    setFotosAvaliacao((prev) => {
+      const updated = prev.filter((f) => f.id !== fotoId);
+      if (orcamento) {
+        localStorage.setItem(`orcamento_fotos_${orcamento.id}`, JSON.stringify(updated));
+      }
+      return updated;
+    });
+    showSuccess('Foto removida.');
+  };
+
+  // ACEITE MANUAL DO ORÇAMENTO IMPRESSO
+  const handleDarAceiteManual = async () => {
+    if (!orcamento || !tenant) return;
+    if (!confirm('Confirmar aceite manual deste orçamento impresso? Isso marcará a proposta como aprovada e liberará a conversão para Ordem de Serviço.')) return;
+
+    setAceitandoManual(true);
+    try {
+      const agora = new Date().toISOString();
+      const nivelEscolhido = orcamento.nivel_aprovado || 'recomendado';
+
+      const { error } = await supabase
+        .from('orcamentos')
+        .update({
+          status: 'aprovado',
+          nivel_aprovado: nivelEscolhido,
+          aceite_manual: true,
+          respondido_em: agora,
+          updated_at: agora,
+        })
+        .eq('id', orcamento.id);
+
+      if (error) throw error;
+      setOrcamento((prev) => prev ? { ...prev, status: 'aprovado', nivel_aprovado: nivelEscolhido, aceite_manual: true } as any : null);
+      showSuccess('Aceite manual registrado com sucesso! Você já pode agendar ou iniciar a OS.');
+    } catch (err: any) {
+      console.error('[Aceite Manual Error]:', err);
+      showError('Erro ao registrar aceite manual: ' + (err?.message || err));
+    } finally {
+      setAceitandoManual(false);
+    }
+  };
+
+  // ASSINATURA DIGITAL NA TELA (CLIENTE OU USUÁRIO)
+  const handleSalvarAssinaturaCanvas = async (blob: Blob) => {
+    if (!orcamento || !tenant) return;
+    if (!nomeSignatario.trim()) {
+      showError('Informe o nome de quem está assinando.');
+      return;
+    }
+
+    setSavingAssinatura(true);
+    try {
+      const { path } = await uploadOrcamentoFoto(tenant.id, orcamento.id, blob, true);
+      const agora = new Date().toISOString();
+
+      if (assinandoTipo === 'cliente') {
+        await supabase
+          .from('orcamentos')
+          .update({
+            assinatura_path: path,
+            assinatura_nome: nomeSignatario.trim(),
+            assinatura_data: agora,
+            status: 'aprovado',
+            nivel_aprovado: orcamento.nivel_aprovado || 'recomendado',
+            updated_at: agora,
+          })
+          .eq('id', orcamento.id);
+
+        setOrcamento((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'aprovado',
+                nivel_aprovado: prev.nivel_aprovado || 'recomendado',
+                assinatura_path: path,
+                assinatura_nome: nomeSignatario.trim(),
+                assinatura_data: agora,
+              } as any
+            : null
+        );
+        showSuccess('Assinatura do cliente salva e orçamento aprovado!');
+      } else {
+        await supabase
+          .from('orcamentos')
+          .update({
+            assinatura_usuario_path: path,
+            assinatura_usuario_nome: nomeSignatario.trim(),
+            assinado_usuario_em: agora,
+            updated_at: agora,
+          })
+          .eq('id', orcamento.id);
+
+        setOrcamento((prev) =>
+          prev
+            ? {
+                ...prev,
+                assinatura_usuario_path: path,
+                assinatura_usuario_nome: nomeSignatario.trim(),
+                assinado_usuario_em: agora,
+              } as any
+            : null
+        );
+        showSuccess('Assinatura do responsável registrada!');
+      }
+
+      setShowAssinaturaModal(false);
+      setNomeSignatario('');
+    } catch (err: any) {
+      console.error('[Salvar Assinatura Error]:', err);
+      showError('Erro ao salvar assinatura: ' + (err?.message || err));
+    } finally {
+      setSavingAssinatura(false);
+    }
+  };
+
+  // NOVO SERVIÇO CADASTRADO VIA MODAL RÁPIDO
+  const handleNovoServicoCadastrado = (novoServico: any) => {
+    fetchOrcamentoEDados();
+    const nivelAlvo = activeTabMobile || 'recomendado';
+    handleToggleServico(nivelAlvo, novoServico.id);
+    showSuccess(`Serviço "${novoServico.nome}" criado e selecionado na proposta!`);
+  };
+
+  // ALTERAR VALIDADE DO ORÇAMENTO
+  const handleAlterarValidade = async (dias: number) => {
+    setValidadeDiasOrcamento(dias);
+    if (!orcamento) return;
+    try {
+      await supabase.from('orcamentos').update({ validade_dias: dias }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? { ...prev, validade_dias: dias } : null);
+      showSuccess(`Validade alterada para ${dias} dias.`);
+    } catch (e) {
+      console.error('[Alterar Validade Error]:', e);
+    }
+  };
+
+  // GERAR PDF DO ORÇAMENTO (DOWNLOAD OU IMPRESSÃO DIRETA)
+  const handleGerarPDF = async (acao: 'download' | 'print' = 'download') => {
     if (!orcamento || !tenant) return;
     setGerandoPDF(true);
     try {
@@ -670,48 +1037,65 @@ export const DetalheOrcamento: React.FC = () => {
         };
       });
 
-      await gerarPDFOrcamento({
-        id: orcamento.id,
-        numero: orcamento.numero,
-        numero_os: orcamento.numero_os,
-        status: orcamento.status,
-        nivel_aprovado: orcamento.nivel_aprovado,
-        enviado_em: orcamento.enviado_em,
-        validade_dias: orcamento.validade_dias,
-        observacoes: observacoes || orcamento.observacoes,
-        clienteNome: orcamento.cliente?.nome || 'Cliente',
-        clienteTelefone: orcamento.cliente?.telefone,
-        veiculoModelo: orcamento.veiculo?.modelo,
-        veiculoPlaca: orcamento.veiculo?.placa,
-        categoriaNome: orcamento.categoria?.nome,
-        oficinaNome: tenant.nome || 'Oficina',
-        oficinaRazaoSocial: tenant.razao_social,
-        oficinaDocumento: tenant.documento,
-        oficinaDocumentoTipo: tenant.documento_tipo as any,
-        oficinaTelefone: tenant.telefone,
-        oficinaCidadeUF: tenant.cidade ? `${tenant.cidade}/${tenant.uf || ''}` : undefined,
-        oficinaLogoUrl: getFotoPublicUrl(tenant.logo_path) || tenant.logo_url,
-        assinaturaUrl: (orcamento as any).assinatura_path || (orcamento as any).assinatura_url,
-        assinaturaNome: (orcamento as any).assinatura_nome,
-        assinaturaData: (orcamento as any).assinatura_data,
-        desconto: orcamento.desconto_valor && orcamento.desconto_tipo ? {
-          tipo: orcamento.desconto_tipo,
-          valor: orcamento.desconto_valor,
-          motivo: orcamento.desconto_motivo,
-          cupom_codigo: orcamento.desconto_cupom_codigo,
-        } : null,
-        niveis: niveisFormatados,
-        planoCodigo: tenant.plano,
-        pdfCorPrimaria: tenant.pdf_cor_primaria,
-        pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
-        pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho,
-        pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes,
-        pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho,
-        pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento,
-        pdfTextoRodape: tenant.pdf_texto_rodape,
-        pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
-      });
-      showSuccess('PDF do orçamento gerado com sucesso!');
+      const termoEscolhido = termosDisponiveis.find((t) => t.id === termoGarantiaSelecionado);
+
+      await gerarPDFOrcamento(
+        {
+          id: orcamento.id,
+          numero: orcamento.numero,
+          numero_os: orcamento.numero_os,
+          status: orcamento.status,
+          nivel_aprovado: orcamento.nivel_aprovado,
+          enviado_em: orcamento.enviado_em,
+          validade_dias: validadeDiasOrcamento || orcamento.validade_dias,
+          observacoes: observacoes || orcamento.observacoes,
+          clienteNome: orcamento.cliente?.nome || 'Cliente',
+          clienteTelefone: orcamento.cliente?.telefone,
+          veiculoModelo: orcamento.veiculo?.modelo,
+          veiculoPlaca: orcamento.veiculo?.placa,
+          categoriaNome: orcamento.categoria?.nome,
+          oficinaNome: tenant.nome || 'Oficina',
+          oficinaRazaoSocial: tenant.razao_social,
+          oficinaDocumento: tenant.documento,
+          oficinaDocumentoTipo: tenant.documento_tipo as any,
+          oficinaTelefone: tenant.telefone,
+          oficinaCidadeUF: tenant.cidade ? `${tenant.cidade}/${tenant.uf || ''}` : undefined,
+          oficinaLogoUrl: getFotoPublicUrl(tenant.logo_path) || tenant.logo_url,
+          assinaturaUrl: (orcamento as any).assinatura_path || (orcamento as any).assinatura_url,
+          assinaturaNome: (orcamento as any).assinatura_nome,
+          assinaturaData: (orcamento as any).assinatura_data,
+          assinaturaUsuarioNome: (orcamento as any).assinatura_usuario_nome || tenant.nome,
+          incluirFotos,
+          fotos: fotosAvaliacao.map((f) => ({
+            url: f.url,
+            path: (f as any).path,
+            created_at: f.created_at,
+            descricao: f.descricao,
+          })),
+          incluirTermos,
+          termosGarantia: termoEscolhido?.conteudo || tenant.pdf_texto_rodape,
+          desconto: orcamento.desconto_valor && orcamento.desconto_tipo ? {
+            tipo: orcamento.desconto_tipo,
+            valor: orcamento.desconto_valor,
+            motivo: orcamento.desconto_motivo,
+            cupom_codigo: orcamento.desconto_cupom_codigo,
+          } : null,
+          niveis: niveisFormatados,
+          planoCodigo: tenant.plano,
+          pdfCorPrimaria: tenant.pdf_cor_primaria || undefined,
+          pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho || undefined,
+          pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho || undefined,
+          pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes || undefined,
+          pdfCorTextoSecoes: tenant.pdf_cor_texto_secoes || localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) || undefined,
+          pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho || undefined,
+          pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento || undefined,
+          pdfTextoRodape: tenant.pdf_texto_rodape || undefined,
+          pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua || undefined,
+        },
+        undefined,
+        acao
+      );
+      showSuccess(acao === 'print' ? 'Documento enviado para impressão!' : 'PDF baixado com sucesso!');
     } catch (err: any) {
       showError('Não foi possível gerar o PDF.', err);
     } finally {
@@ -824,16 +1208,61 @@ export const DetalheOrcamento: React.FC = () => {
             </Button>
           )}
 
+          {/* IMPRIMIR PROPOSTA (DIRETO) */}
           <Button
             tone="graphite"
             size="sm"
-            onClick={handleGerarPDF}
+            onClick={() => handleGerarPDF('print')}
+            loading={gerandoPDF}
+            className="flex items-center gap-1.5 min-h-[44px]"
+            title="Imprimir proposta com campo para assinatura física"
+          >
+            <Printer size={16} className="text-amber-400" />
+            <span>Imprimir</span>
+          </Button>
+
+          {/* BAIXAR PDF */}
+          <Button
+            tone="graphite"
+            size="sm"
+            onClick={() => handleGerarPDF('download')}
             loading={gerandoPDF}
             className="flex items-center gap-1.5 min-h-[44px]"
           >
-            <FileText size={16} className="text-amber-400" />
-            <span>Baixar PDF</span>
+            <FileDown size={16} className="text-cyan-400" />
+            <span>PDF</span>
           </Button>
+
+          {/* ASSINATURA DIGITAL (CLIENTE / OFICINA) */}
+          <Button
+            tone="graphite"
+            size="sm"
+            onClick={() => {
+              setAssinandoTipo('cliente');
+              setNomeSignatario(orcamento.cliente?.nome || '');
+              setShowAssinaturaModal(true);
+            }}
+            className="flex items-center gap-1.5 min-h-[44px]"
+            title="Coletar assinatura digital"
+          >
+            <PenTool size={16} className="text-amber-400" />
+            <span>Assinatura</span>
+          </Button>
+
+          {/* ACEITE MANUAL (CASO SEJA IMPRESSO PARA ASSINATURA FÍSICA) */}
+          {!isAprovado && (
+            <Button
+              tone="amber"
+              size="sm"
+              onClick={handleDarAceiteManual}
+              loading={aceitandoManual}
+              className="flex items-center gap-1.5 min-h-[44px] font-bold"
+              title="Confirmar que o cliente assinou a via impressa física"
+            >
+              <CheckCircle2 size={16} />
+              <span>Dar Aceite Manual</span>
+            </Button>
+          )}
 
           <Button
             tone="amber"
@@ -958,6 +1387,282 @@ export const DetalheOrcamento: React.FC = () => {
         </Card>
       )}
 
+      {/* CARD: AVALIAÇÃO DO VEÍCULO, FOTOS COM TIMESTAMP IMUTÁVEL E TERMOS DE GARANTIA */}
+      <Card className="p-4 bg-graphite-900 border-graphite-800 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-graphite-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Camera size={18} className="text-amber-400" />
+            <h3 className="font-display text-sm font-bold text-vapor-100 uppercase tracking-wide">
+              Avaliação do Veículo, Fotos & Termos
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap text-xs">
+            {/* CHECK: INCLUIR FOTOS */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-vapor-100">
+              <input
+                type="checkbox"
+                checked={incluirFotos}
+                onChange={async (e) => {
+                  const val = e.target.checked;
+                  setIncluirFotos(val);
+                  if (orcamento) {
+                    await supabase.from('orcamentos').update({ incluir_fotos: val }).eq('id', orcamento.id);
+                  }
+                }}
+                className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
+              />
+              <span className="font-semibold">Fotos no PDF / Link</span>
+            </label>
+
+            {/* CHECK: INCLUIR TERMOS */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-vapor-100">
+              <input
+                type="checkbox"
+                checked={incluirTermos}
+                onChange={async (e) => {
+                  const val = e.target.checked;
+                  setIncluirTermos(val);
+                  if (orcamento) {
+                    await supabase.from('orcamentos').update({ incluir_termos: val }).eq('id', orcamento.id);
+                  }
+                }}
+                className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
+              />
+              <span className="font-semibold">Termos de Garantia no PDF</span>
+            </label>
+          </div>
+        </div>
+
+        {/* SELETORES: VALIDADE DO ORÇAMENTO E TERMO ESPECÍFICO */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-vapor-300">
+              Validade da Proposta (em dias):
+            </label>
+            <div className="flex items-center gap-2 flex-wrap">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={validadeDiasOrcamento}
+                onChange={(e) => {
+                  const val = Math.max(1, parseInt(e.target.value) || 1);
+                  setValidadeDiasOrcamento(val);
+                }}
+                onBlur={() => handleAlterarValidade(validadeDiasOrcamento)}
+                className="w-24 bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono text-base font-bold outline-none focus:border-amber-500"
+              />
+              <span className="text-xs font-sans text-vapor-300 font-medium">dias</span>
+              <button
+                type="button"
+                onClick={() => handleAlterarValidade(validadeDiasOrcamento)}
+                className="px-2.5 py-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border border-graphite-700 rounded text-xs font-bold"
+                title="Salvar validade digitada"
+              >
+                Salvar
+              </button>
+              <div className="flex items-center gap-1 ml-auto flex-wrap">
+                {[7, 15, 30, 60, 90].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setValidadeDiasOrcamento(d);
+                      handleAlterarValidade(d);
+                    }}
+                    className={`px-2 py-1 rounded text-[11px] font-mono transition-colors ${
+                      validadeDiasOrcamento === d
+                        ? 'bg-amber-500 text-graphite-950 font-bold'
+                        : 'bg-graphite-950 text-vapor-400 border border-graphite-800 hover:text-vapor-200'
+                    }`}
+                  >
+                    {d}d
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-vapor-300 flex items-center justify-between">
+              <span>Termo de Garantia Selecionado:</span>
+              <ShieldCheck size={14} className="text-amber-400" />
+            </label>
+            <select
+              value={termoGarantiaSelecionado}
+              onChange={async (e) => {
+                const val = e.target.value;
+                setTermoGarantiaSelecionado(val);
+                if (orcamento) {
+                  await supabase.from('orcamentos').update({ termo_garantia_id: val || null }).eq('id', orcamento.id);
+                }
+              }}
+              className="w-full bg-graphite-950 border border-graphite-700 rounded-lg p-2 text-vapor-100 font-sans text-xs outline-none focus:border-amber-500"
+            >
+              <option value="">Termo Padrão da Oficina</option>
+              {termosDisponiveis.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.titulo} ({t.tipo})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* GALERIA DE FOTOS DE AVALIAÇÃO (ANTES E DEPOIS) COM DATA IMUTÁVEL */}
+        <div className="flex flex-col gap-3 pt-2 border-t border-graphite-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+                Fotos do Veículo ({fotosAvaliacao.length})
+              </span>
+
+              {/* Filtros Antes / Depois */}
+              <div className="flex items-center bg-graphite-950 p-0.5 rounded-lg border border-graphite-800 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setFiltroMomentoFoto('todas')}
+                  className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'todas' ? 'bg-graphite-800 text-vapor-100 font-bold' : 'text-vapor-400 hover:text-vapor-200'}`}
+                >
+                  Todas ({fotosAvaliacao.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroMomentoFoto('antes')}
+                  className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'antes' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30' : 'text-vapor-400 hover:text-vapor-200'}`}
+                >
+                  📷 Antes ({fotosAvaliacao.filter(f => f.tipo !== 'depois').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltroMomentoFoto('depois')}
+                  className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'depois' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-vapor-400 hover:text-vapor-200'}`}
+                >
+                  ✨ Depois ({fotosAvaliacao.filter(f => f.tipo === 'depois').length})
+                </button>
+              </div>
+            </div>
+
+            {/* Ações de Upload Diferenciadas: Antes vs Depois */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleDispararUpload('antes')}
+                disabled={uploadingFoto}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                title="Anexar foto do estado inicial / antes do serviço"
+              >
+                <Camera size={14} />
+                <span>{uploadingFoto && momentoFotoUpload === 'antes' ? 'Enviando...' : '+ Foto Antes'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDispararUpload('depois')}
+                disabled={uploadingFoto}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                title="Anexar foto do resultado final / depois do serviço"
+              >
+                <Sparkles size={14} />
+                <span>{uploadingFoto && momentoFotoUpload === 'depois' ? 'Enviando...' : '+ Foto Depois'}</span>
+              </button>
+
+              <input
+                ref={fileInputFotoRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleUploadFotoAvaliacao}
+                disabled={uploadingFoto}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {fotosAvaliacao.length === 0 ? (
+            <p className="text-xs text-vapor-400 italic py-2">
+              Nenhuma foto anexada. Tire fotos de detalhes ou avarias para o "Antes", e fotos do acabamento para o "Depois".
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+              {fotosAvaliacao
+                .filter((f) => {
+                  if (filtroMomentoFoto === 'antes') return f.tipo !== 'depois';
+                  if (filtroMomentoFoto === 'depois') return f.tipo === 'depois';
+                  return true;
+                })
+                .map((foto) => {
+                  const isDepois = foto.tipo === 'depois';
+                  return (
+                    <div
+                      key={foto.id}
+                      className="relative group rounded-lg overflow-hidden border border-graphite-700 bg-graphite-950 flex flex-col"
+                    >
+                      <img
+                        src={foto.url}
+                        alt={isDepois ? 'Depois' : 'Antes'}
+                        className="w-full h-24 object-cover group-hover:scale-105 transition-transform"
+                      />
+                      {/* Tag Antes ou Depois */}
+                      <div className="absolute top-1 left-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase shadow ${
+                          isDepois
+                            ? 'bg-emerald-500 text-graphite-950'
+                            : 'bg-cyan-600 text-white'
+                        }`}>
+                          {isDepois ? '✨ DEPOIS' : '📷 ANTES'}
+                        </span>
+                      </div>
+
+                      {/* Badge de Data/Hora */}
+                      <div className="p-1 bg-graphite-950/95 border-t border-graphite-800 text-[9px] font-mono text-vapor-300 flex items-center gap-1">
+                        <Clock size={10} className="text-amber-400 shrink-0" />
+                        <span className="truncate">{formatarDataHora(foto.created_at)}</span>
+                      </div>
+                      {!isAprovado && (
+                        <button
+                          type="button"
+                          onClick={() => handleExcluirFotoAvaliacao(foto.id)}
+                          className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remover Foto"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
+        {/* STATUS DAS ASSINATURAS */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-graphite-800 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-vapor-400">Assinatura Cliente:</span>
+            {(orcamento as any).assinatura_path || (orcamento as any).assinatura_data ? (
+              <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                <Check size={13} /> Assinado por {(orcamento as any).assinatura_nome || 'Cliente'} em {formatarDataHora((orcamento as any).assinatura_data)}
+              </span>
+            ) : (
+              <span className="text-amber-400 font-medium italic">Pendente</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-vapor-400">Assinatura Oficina:</span>
+            {(orcamento as any).assinatura_usuario_path || (orcamento as any).assinado_usuario_em ? (
+              <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                <Check size={13} /> Assinado por {(orcamento as any).assinatura_usuario_nome || 'Oficina'}
+              </span>
+            ) : (
+              <span className="text-vapor-400 italic">Não coletada</span>
+            )}
+          </div>
+        </div>
+      </Card>
+
       {/* SELETOR DE NÍVEL EM ABAS (< 1280px / xl) */}
       <div className="flex xl:hidden bg-graphite-900 p-1.5 rounded-xl border border-graphite-800 gap-1">
         {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nKey) => (
@@ -1079,6 +1784,15 @@ export const DetalheOrcamento: React.FC = () => {
                   <span className="font-mono text-[11px] text-vapor-400 uppercase tracking-wider">
                     Selecione os Serviços ({itensNivel[nivelKey].size})
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowModalServicoRapido(true)}
+                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline"
+                    title="Cadastrar novo serviço sem sair desta tela"
+                  >
+                    <PlusCircle size={13} />
+                    <span>+ Novo Serviço</span>
+                  </button>
                 </div>
 
                 {servicosCatalogo.length === 0 ? (
@@ -1536,6 +2250,76 @@ export const DetalheOrcamento: React.FC = () => {
         textoCancelar="Permanecer na Tela"
         variant="warning"
       />
+
+      {/* MODAL NOVO SERVIÇO RÁPIDO */}
+      <ModalServicoRapido
+        isOpen={showModalServicoRapido}
+        onClose={() => setShowModalServicoRapido(false)}
+        onSuccess={handleNovoServicoCadastrado}
+        categoriaVeiculoId={orcamento.categoria_id}
+      />
+
+      {/* MODAL ASSINATURA DIGITAL (CLIENTE OU OFICINA) */}
+      <Modal
+        isOpen={showAssinaturaModal}
+        onClose={() => setShowAssinaturaModal(false)}
+        title={assinandoTipo === 'cliente' ? 'Assinatura do Cliente' : 'Assinatura da Oficina / Responsável'}
+        maxWidth="md"
+        icon={<PenTool className="text-amber-500" size={22} />}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex gap-2 p-1 bg-graphite-900 rounded-lg border border-graphite-700">
+            <button
+              type="button"
+              onClick={() => {
+                setAssinandoTipo('cliente');
+                setNomeSignatario(orcamento.cliente?.nome || '');
+              }}
+              className={`flex-1 py-1.5 text-xs font-bold rounded ${
+                assinandoTipo === 'cliente' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400'
+              }`}
+            >
+              Cliente
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAssinandoTipo('usuario');
+                setNomeSignatario(tenant?.nome || '');
+              }}
+              className={`flex-1 py-1.5 text-xs font-bold rounded ${
+                assinandoTipo === 'usuario' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400'
+              }`}
+            >
+              Responsável Técnico
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+              Nome do Signatário:
+            </label>
+            <input
+              type="text"
+              value={nomeSignatario}
+              onChange={(e) => setNomeSignatario(e.target.value)}
+              placeholder="Nome completo de quem está assinando..."
+              className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+              Desenhe a Assinatura Abaixo:
+            </label>
+            <CanvasAssinatura
+              onSaveSignature={handleSalvarAssinaturaCanvas}
+              saveButtonText="Confirmar e Salvar Assinatura"
+              disabled={savingAssinatura}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

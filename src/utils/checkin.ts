@@ -10,25 +10,25 @@ export function formatarNivelCombustivel(nivel: number | null | undefined): stri
   if (nivel === null || nivel === undefined) return 'Não informado';
   switch (nivel) {
     case 0:
-      return 'E (Vazio)';
+      return 'Reserva (Vazio)';
     case 1:
-      return '1/8';
+      return 'Reserva (12%)';
     case 2:
-      return '1/4';
+      return '25%';
     case 3:
-      return '3/8';
+      return '37%';
     case 4:
-      return '1/2 (Meio)';
+      return '50% (Meio Tanque)';
     case 5:
-      return '5/8';
+      return '62%';
     case 6:
-      return '3/4';
+      return '75%';
     case 7:
-      return '7/8';
+      return '87%';
     case 8:
-      return 'F (Cheio)';
+      return '100% (Tanque Cheio)';
     default:
-      return `${nivel}/8`;
+      return `${Math.round((nivel / 8) * 100)}%`;
   }
 }
 

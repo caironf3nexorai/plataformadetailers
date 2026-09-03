@@ -50,8 +50,15 @@ const PRESET_CORES_SECOES = [
   { hex: '#1e293b', nome: 'Azul Slate' },
   { hex: '#111827', nome: 'Cinza Carbono' },
   { hex: '#3f3f46', nome: 'Zinc 700' },
-  { hex: '#3f0f15', nome: 'Vinho Suave' },
-  { hex: '#14532d', nome: 'Verde Escuro' },
+  { hex: '#ffffff', nome: 'Branco / Clean' },
+  { hex: '#f4f4f5', nome: 'Cinza Papel Claro' },
+];
+
+const PRESET_CORES_TEXTO_SECOES = [
+  { hex: '#18181b', nome: 'Preto / Carvão (Impressão Limpa)' },
+  { hex: '#ffffff', nome: 'Branco Puro (Modo Escuro)' },
+  { hex: '#374151', nome: 'Cinza Chumbo' },
+  { hex: '#0f172a', nome: 'Azul Noturno Profundo' },
 ];
 
 export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNavigateToPlano }) => {
@@ -67,6 +74,9 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
   const [corFundoCabecalho, setCorFundoCabecalho] = useState(tenant?.pdf_cor_fundo_cabecalho || '#18181b');
   const [corTextoCabecalho, setCorTextoCabecalho] = useState(tenant?.pdf_cor_texto_cabecalho || '#ffffff');
   const [corFundoSecoes, setCorFundoSecoes] = useState(tenant?.pdf_cor_fundo_secoes || '#27272a');
+  const [corTextoSecoes, setCorTextoSecoes] = useState(
+    tenant?.pdf_cor_texto_secoes || (tenant?.id ? localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) : null) || '#ffffff'
+  );
 
   const [subtituloCabecalho, setSubtituloCabecalho] = useState(tenant?.pdf_subtitulo_cabecalho || '');
   const [textoObservacoesOrcamento, setTextoObservacoesOrcamento] = useState(tenant?.pdf_texto_observacoes_orcamento || '');
@@ -83,12 +93,31 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
       setCorFundoCabecalho(tenant.pdf_cor_fundo_cabecalho || '#18181b');
       setCorTextoCabecalho(tenant.pdf_cor_texto_cabecalho || '#ffffff');
       setCorFundoSecoes(tenant.pdf_cor_fundo_secoes || '#27272a');
+      const savedTexto = tenant.pdf_cor_texto_secoes || localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`);
+      if (savedTexto) {
+        setCorTextoSecoes(savedTexto);
+      } else if (tenant.pdf_cor_fundo_secoes?.toLowerCase() === '#ffffff') {
+        setCorTextoSecoes('#18181b');
+      }
       setSubtituloCabecalho(tenant.pdf_subtitulo_cabecalho || '');
       setTextoObservacoesOrcamento(tenant.pdf_texto_observacoes_orcamento || '');
       setTextoRodape(tenant.pdf_texto_rodape || '');
       setOcultarMarcaDagua(tenant.pdf_ocultar_marca_dagua || false);
     }
   }, [tenant]);
+
+  const handleAlterarCorFundoSecoes = (novaCor: string) => {
+    setCorFundoSecoes(novaCor);
+    if (novaCor.toLowerCase() === '#ffffff' || novaCor.toLowerCase() === '#f4f4f5') {
+      if (corTextoSecoes.toLowerCase() === '#ffffff') {
+        setCorTextoSecoes('#18181b');
+      }
+    } else if (novaCor.toLowerCase() === '#27272a' || novaCor.toLowerCase() === '#111827') {
+      if (corTextoSecoes.toLowerCase() === '#18181b') {
+        setCorTextoSecoes('#ffffff');
+      }
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,22 +132,34 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
     setSuccessMsg(null);
 
     try {
-      const { error } = await supabase
-        .from('tenants')
-        .update({
-          pdf_cor_primaria: corPrimaria,
-          pdf_cor_fundo_cabecalho: corFundoCabecalho,
-          pdf_cor_texto_cabecalho: corTextoCabecalho,
-          pdf_cor_fundo_secoes: corFundoSecoes,
-          pdf_subtitulo_cabecalho: subtituloCabecalho.trim() || null,
-          pdf_texto_observacoes_orcamento: textoObservacoesOrcamento.trim() || null,
-          pdf_texto_rodape: textoRodape.trim() || null,
-          pdf_ocultar_marca_dagua: ocultarMarcaDagua,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', tenant.id);
+      if (tenant?.id) {
+        localStorage.setItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`, corTextoSecoes);
+      }
 
-      if (error) throw error;
+      const payload: any = {
+        pdf_cor_primaria: corPrimaria,
+        pdf_cor_fundo_cabecalho: corFundoCabecalho,
+        pdf_cor_texto_cabecalho: corTextoCabecalho,
+        pdf_cor_fundo_secoes: corFundoSecoes,
+        pdf_cor_texto_secoes: corTextoSecoes,
+        pdf_subtitulo_cabecalho: subtituloCabecalho.trim() || null,
+        pdf_texto_observacoes_orcamento: textoObservacoesOrcamento.trim() || null,
+        pdf_texto_rodape: textoRodape.trim() || null,
+        pdf_ocultar_marca_dagua: ocultarMarcaDagua,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from('tenants').update(payload).eq('id', tenant.id);
+      if (error) {
+        // Se a coluna ainda não existir no banco, salva sem ela e preserva no localStorage
+        if (error.message?.includes('pdf_cor_texto_secoes')) {
+          delete payload.pdf_cor_texto_secoes;
+          const { error: errRetry } = await supabase.from('tenants').update(payload).eq('id', tenant.id);
+          if (errRetry) throw errRetry;
+        } else {
+          throw error;
+        }
+      }
 
       setSuccessMsg('Branding e preferências dos documentos em PDF salvos com sucesso!');
       await refetchTenantData();
@@ -354,8 +395,8 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                 </div>
               </div>
 
-              {/* Cor de Fundo das Seções Internas */}
-              <div className="flex flex-col gap-2 pt-2">
+              {/* Cor de Fundo das Caixas e Cartões de Seção */}
+              <div className="flex flex-col gap-2 pt-1">
                 <label className="font-sans text-[13px] text-vapor-200 font-bold">
                   Cor de Fundo das Caixas e Cartões de Seção
                 </label>
@@ -364,17 +405,17 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                     <button
                       key={preset.hex}
                       type="button"
-                      onClick={() => setCorFundoSecoes(preset.hex)}
+                      onClick={() => handleAlterarCorFundoSecoes(preset.hex)}
                       className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-transform ${
                         corFundoSecoes.toLowerCase() === preset.hex.toLowerCase()
-                          ? 'border-white scale-110 shadow-lg'
+                          ? 'border-amber-400 scale-110 shadow-lg'
                           : 'border-graphite-600 hover:scale-105'
                       }`}
                       style={{ backgroundColor: preset.hex }}
                       title={preset.nome}
                     >
                       {corFundoSecoes.toLowerCase() === preset.hex.toLowerCase() && (
-                        <Check size={13} className="text-white" />
+                        <Check size={13} className={preset.hex === '#ffffff' ? 'text-graphite-900' : 'text-white'} />
                       )}
                     </button>
                   ))}
@@ -383,7 +424,7 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                     <input
                       type="color"
                       value={corFundoSecoes}
-                      onChange={(e) => setCorFundoSecoes(e.target.value)}
+                      onChange={(e) => handleAlterarCorFundoSecoes(e.target.value)}
                       className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
                     />
                     <span className="font-mono text-[11px] text-vapor-300 uppercase pr-1">
@@ -392,9 +433,55 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                   </div>
                 </div>
               </div>
+
+              {/* Cor do Texto Geral das Seções e Cartões */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-graphite-700/60">
+                <div className="flex flex-col gap-0.5">
+                  <label className="font-sans text-[13px] text-vapor-200 font-bold flex items-center gap-1.5">
+                    <Type size={15} className="text-amber-400" />
+                    <span>Cor do Texto Geral das Seções e Cartões</span>
+                  </label>
+                  <span className="font-sans text-[12px] text-vapor-400">
+                    Define a cor das letras dentro dos quadros. Use <strong>Texto Escuro</strong> para fundos brancos/claros e <strong>Texto Claro</strong> para fundos escuros.
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {PRESET_CORES_TEXTO_SECOES.map((preset) => (
+                    <button
+                      key={preset.hex}
+                      type="button"
+                      onClick={() => setCorTextoSecoes(preset.hex)}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-transform ${
+                        corTextoSecoes.toLowerCase() === preset.hex.toLowerCase()
+                          ? 'border-amber-400 scale-110 shadow-lg'
+                          : 'border-graphite-600 hover:scale-105'
+                      }`}
+                      style={{ backgroundColor: preset.hex }}
+                      title={preset.nome}
+                    >
+                      {corTextoSecoes.toLowerCase() === preset.hex.toLowerCase() && (
+                        <Check size={13} className={preset.hex === '#ffffff' ? 'text-graphite-900' : 'text-white'} />
+                      )}
+                    </button>
+                  ))}
+
+                  <div className="flex items-center gap-2 p-1 bg-graphite-950 rounded border border-graphite-700 ml-1">
+                    <input
+                      type="color"
+                      value={corTextoSecoes}
+                      onChange={(e) => setCorTextoSecoes(e.target.value)}
+                      className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
+                    />
+                    <span className="font-mono text-[11px] text-vapor-300 uppercase pr-1">
+                      {corTextoSecoes}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* SEÇÃO 3: TEXTOS E OBSERVAÇÕES DO DOCUMENTO */}
+            {/* SEÇÃO 3: TEXTOS E IDENTIDADE DO DOCUMENTO */}
             <div className="flex flex-col gap-4 pt-2">
               <h4 className="font-display text-[15px] text-vapor-100 uppercase tracking-wide border-b border-graphite-700 pb-2 flex items-center gap-2">
                 <Type size={18} className="text-amber-500" />
@@ -424,39 +511,6 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                   placeholder="Ex: Ateliê Especializado em Vitrificação & PPF"
                   maxLength={90}
                   className="bg-graphite-950 border border-graphite-600 rounded-lg p-2.5 text-vapor-100 font-sans text-[13px] outline-none focus:border-amber-500 min-h-[44px]"
-                />
-              </div>
-
-              {/* Observações de Orçamentos */}
-              <div className="flex flex-col gap-1.5">
-                <label className="font-sans text-[13px] text-vapor-200 font-bold">
-                  Observações Padrão de Fallback (Opcional)
-                </label>
-                <textarea
-                  value={textoObservacoesOrcamento}
-                  onChange={(e) => setTextoObservacoesOrcamento(e.target.value)}
-                  placeholder="Ex: Validade deste orçamento: 7 dias corridos. Forma de pagamento: 50% na aprovação e 50% na entrega."
-                  rows={2}
-                  maxLength={300}
-                  className="bg-graphite-950 border border-graphite-600 rounded-lg p-2.5 text-vapor-100 font-sans text-[13px] outline-none focus:border-amber-500 resize-none"
-                />
-                <span className="font-sans text-[11.5px] text-vapor-400">
-                  Usado apenas caso o orçamento individual não possua observações preenchidas.
-                </span>
-              </div>
-
-              {/* Termos de Rodapé */}
-              <div className="flex flex-col gap-1.5">
-                <label className="font-sans text-[13px] text-vapor-200 font-bold">
-                  Termos de Garantia / Rodapé Padrão (Opcional)
-                </label>
-                <textarea
-                  value={textoRodape}
-                  onChange={(e) => setTextoRodape(e.target.value)}
-                  placeholder="Ex: Garantia de 3 anos no tratamento cerâmico 9H. Manutenção recomendada a cada 6 meses."
-                  rows={2}
-                  maxLength={300}
-                  className="bg-graphite-950 border border-graphite-600 rounded-lg p-2.5 text-vapor-100 font-sans text-[13px] outline-none focus:border-amber-500 resize-none"
                 />
               </div>
 
@@ -561,48 +615,93 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                 </div>
               </div>
 
-              {/* Corpo Simulado do PDF com Seção Interna Customizada */}
-              <div className="p-4 flex flex-col gap-3 bg-graphite-950">
-                {/* Banner de Seção com a cor de fundo escolhida */}
+              {/* Corpo Simulado do PDF com TODOS os Quadros e Textos Sincronizados */}
+              <div className="p-4 flex flex-col gap-3 bg-slate-100 border-t border-slate-200">
+                {/* Quadro 1: Cliente & Veículo */}
                 <div
-                  className="p-3 rounded border border-white/10 flex flex-col gap-1 transition-colors"
+                  className="p-3 rounded border transition-colors shadow-sm"
                   style={{
                     backgroundColor: isFree ? '#27272a' : corFundoSecoes,
+                    color: isFree ? '#ffffff' : corTextoSecoes,
+                    borderColor: isFree ? '#3f3f46' : (corFundoSecoes.toLowerCase() === '#ffffff' ? '#e2e8f0' : '#3f3f46'),
                   }}
                 >
                   <span
-                    className="font-bold text-[11px] uppercase tracking-wider"
+                    className="font-bold text-[11px] uppercase tracking-wider block mb-1"
                     style={{ color: isFree ? '#fbbf24' : corPrimaria }}
                   >
                     CLIENTE & VEÍCULO
                   </span>
-                  <div className="text-[11px] text-vapor-200 flex justify-between">
+                  <div className="text-[11px] flex justify-between" style={{ color: isFree ? '#e4e4e7' : corTextoSecoes }}>
                     <span>Cliente: João Silva</span>
                     <span className="font-mono">BMW M3 (Placa: ABC-1234)</span>
                   </div>
                 </div>
 
-                {/* Lista de Serviços */}
-                <div className="p-3 bg-graphite-900 rounded border border-graphite-800 flex justify-between items-center text-[11px]">
-                  <span className="text-vapor-200">Vitrificação de Pintura Cerâmica 9H</span>
-                  <span className="font-mono font-bold text-vapor-100">R$ 2.450,00</span>
+                {/* Quadro 2: Serviço 1 */}
+                <div
+                  className="p-3 rounded border flex justify-between items-center text-[11px] transition-colors shadow-sm"
+                  style={{
+                    backgroundColor: isFree ? '#27272a' : corFundoSecoes,
+                    color: isFree ? '#ffffff' : corTextoSecoes,
+                    borderColor: isFree ? '#3f3f46' : (corFundoSecoes.toLowerCase() === '#ffffff' ? '#e2e8f0' : '#3f3f46'),
+                  }}
+                >
+                  <span style={{ color: isFree ? '#e4e4e7' : corTextoSecoes }}>
+                    • Vitrificação de Pintura Cerâmica 9H
+                  </span>
+                  <span
+                    className="font-mono font-bold text-[12px]"
+                    style={{ color: isFree ? '#fbbf24' : corPrimaria }}
+                  >
+                    R$ 2.450,00
+                  </span>
                 </div>
 
-                {/* Bloco de Observações Comerciais se preenchido */}
+                {/* Quadro 3: Serviço 2 */}
+                <div
+                  className="p-3 rounded border flex justify-between items-center text-[11px] transition-colors shadow-sm"
+                  style={{
+                    backgroundColor: isFree ? '#27272a' : corFundoSecoes,
+                    color: isFree ? '#ffffff' : corTextoSecoes,
+                    borderColor: isFree ? '#3f3f46' : (corFundoSecoes.toLowerCase() === '#ffffff' ? '#e2e8f0' : '#3f3f46'),
+                  }}
+                >
+                  <span style={{ color: isFree ? '#e4e4e7' : corTextoSecoes }}>
+                    • Higienização e Tratamento de Couro
+                  </span>
+                  <span
+                    className="font-mono font-bold text-[12px]"
+                    style={{ color: isFree ? '#fbbf24' : corPrimaria }}
+                  >
+                    R$ 480,00
+                  </span>
+                </div>
+
+                {/* Bloco de Observações se preenchido */}
                 {(!isFree && textoObservacoesOrcamento.trim()) && (
-                  <div className="p-2.5 bg-graphite-900/60 rounded border border-graphite-800 text-[10px] text-vapor-300 italic">
-                    <strong className="not-italic text-vapor-200 block mb-0.5">Observações:</strong>
+                  <div
+                    className="p-2.5 rounded border text-[10px] italic shadow-sm"
+                    style={{
+                      backgroundColor: isFree ? '#27272a' : corFundoSecoes,
+                      color: isFree ? '#e4e4e7' : corTextoSecoes,
+                      borderColor: isFree ? '#3f3f46' : (corFundoSecoes.toLowerCase() === '#ffffff' ? '#e2e8f0' : '#3f3f46'),
+                    }}
+                  >
+                    <strong className="not-italic block mb-0.5" style={{ color: isFree ? '#fbbf24' : corPrimaria }}>
+                      Observações:
+                    </strong>
                     "{textoObservacoesOrcamento.trim()}"
                   </div>
                 )}
 
                 {/* Rodapé Simulado */}
-                <div className="pt-2 border-t border-graphite-800 text-[10px] text-vapor-400 flex flex-col gap-1 italic">
+                <div className="pt-2 border-t border-slate-300 text-[10px] text-slate-500 flex flex-col gap-1 italic">
                   {(!isFree && textoRodape.trim()) && (
-                    <p className="text-vapor-300">"{textoRodape.trim()}"</p>
+                    <p className="text-slate-600">"{textoRodape.trim()}"</p>
                   )}
 
-                  <div className="flex items-center justify-between text-[9px] text-vapor-500 pt-1">
+                  <div className="flex items-center justify-between text-[9px] text-slate-400 pt-1">
                     <span>
                       {isFree
                         ? 'Gerado via NuvemWash — Plano Essencial'

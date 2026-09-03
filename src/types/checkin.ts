@@ -25,7 +25,7 @@ export interface Checkin {
   assinado_em: string | null;
   assinatura_nome: string | null;
   token_aceite?: string;
-  aceite_tipo?: 'presencial' | 'remoto' | null;
+  aceite_tipo?: 'presencial' | 'remoto' | 'manual' | null;
   aceite_ip?: string | null;
   aceite_user_agent?: string | null;
   enviado_em?: string | null;

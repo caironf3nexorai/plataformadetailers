@@ -23,13 +23,19 @@ import {
   Download,
   ShieldCheck,
   Archive,
+  Printer,
+  FileDown,
+  Sparkles,
 } from 'lucide-react';
 import { usePermissao } from '../hooks/usePermissao';
 import { ModalFinalizarExecucao } from '../components/execucao/ModalFinalizarExecucao';
+import { ModalOrcamentoComplementar } from '../components/orcamentos/ModalOrcamentoComplementar';
 import { Cronometro } from '../components/execucao/Cronometro';
 import { useTempoExecucao, obterEstadoDerivadoCronometro, notificarAtualizacaoTempo } from '../hooks/useTempoExecucao';
 import { uploadExecucaoFoto, getEvidenciaSignedUrl } from '../utils/evidencias';
 import { downloadFotosAtendimentoZip } from '../utils/zipFotos';
+import { gerarPDFOS } from '../utils/pdfOS';
+import { formatarDataHora } from '../utils/datas';
 import type { Execucao, ExecucaoItem, ExecucaoFoto, ExecucaoExecutor } from '../types/execucao';
 
 interface MembroEquipeExecucao {
@@ -68,6 +74,77 @@ export const ExecucaoPage: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState<Record<string, boolean>>({});
   const [addingItemLoading, setAddingItemLoading] = useState(false);
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
+
+  // Estados de OS e Serviços Complementares
+  const [showModalComplementar, setShowModalComplementar] = useState(false);
+  const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
+
+  const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
+    if (!agendamento || !tenant) return;
+    try {
+      setGerandoPDFOS(true);
+      const logoUrl = tenant.logo_path
+        ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
+        : undefined;
+
+      const itensFormatados = (agendamento.itens || agendamento.agendamento_itens || []).map((it: any) => ({
+        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+        categoria_nome: it.categoria?.nome,
+        preco: Number(it.preco_praticado ?? it.preco ?? it.servicos?.preco ?? 0),
+        duracao_minutos: it.duracao_minutos || it.servicos?.duracao_minutos,
+        quantidade: it.quantidade || 1,
+      }));
+
+      await gerarPDFOS(
+        {
+          numero_os: agendamento.numero_os || 1,
+          data_emissao: agendamento.created_at,
+          status: agendamento.status || (execucao?.status === 'finalizado' ? 'concluido' : 'em_andamento'),
+          inicio: agendamento.inicio,
+          previsao_entrega: agendamento.fim,
+          concluido_em: execucao?.finalizado_em,
+          responsavel_nome: 'Oficina / Responsável',
+          observacoes: (agendamento as any).observacoes || (execucao as any)?.observacoes,
+          clienteNome: agendamento.cliente?.nome || 'Cliente',
+          clienteTelefone: agendamento.cliente?.telefone,
+          clienteDocumento: agendamento.cliente?.documento || agendamento.cliente?.cpf_cnpj,
+          clienteEmail: agendamento.cliente?.email,
+          veiculoModelo: agendamento.veiculo?.modelo || 'Veículo',
+          veiculoPlaca: agendamento.veiculo?.placa || '',
+          veiculoMarca: agendamento.veiculo?.marca,
+          veiculoCor: agendamento.veiculo?.cor,
+          veiculoAno: agendamento.veiculo?.ano,
+          oficinaNome: tenant.nome || 'Oficina',
+          oficinaRazaoSocial: tenant.razao_social,
+          oficinaDocumento: tenant.documento,
+          oficinaDocumentoTipo: tenant.documento_tipo,
+          oficinaTelefone: tenant.telefone,
+          oficinaCidadeUF: tenant.cidade && tenant.uf ? `${tenant.cidade}/${tenant.uf}` : undefined,
+          oficinaLogoUrl: logoUrl,
+          planoCodigo: tenant.plano,
+          pdfCorPrimaria: tenant.pdf_cor_primaria,
+          pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
+          pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho,
+          pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes,
+          pdfCorTextoSecoes: tenant.pdf_cor_texto_secoes || (tenant?.id ? localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) : null),
+          pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho,
+          pdfTextoRodape: tenant.pdf_texto_rodape,
+          pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
+          itens: itensFormatados,
+          valor_total: Number(agendamento.preco_total || 0),
+          desconto: Number(agendamento.desconto_valor || 0),
+          forma_pagamento: agendamento.forma_pagamento,
+          assinaturaClienteNome: agendamento.cliente?.nome,
+        },
+        undefined,
+        acao
+      );
+    } catch (err: any) {
+      console.error('[Gerar PDF OS Error]:', err);
+    } finally {
+      setGerandoPDFOS(false);
+    }
+  };
 
   // Carrega os dados da execução com retry de até 3 tentativas (300ms de intervalo)
   const loadExecucaoData = useCallback(async () => {
@@ -545,7 +622,7 @@ export const ExecucaoPage: React.FC = () => {
               <span>Hoje</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               <span className="text-[12px] uppercase font-bold text-vapor-400 tracking-wider">
                 {agendamento?.veiculo?.modelo || 'Veículo'}
               </span>
@@ -553,6 +630,45 @@ export const ExecucaoPage: React.FC = () => {
                 {agendamento?.veiculo?.placa || 'PLACA'}
               </span>
             </div>
+          </div>
+
+          {/* BARRA DE AÇÕES RÁPIDAS DA OS E SERVIÇO COMPLEMENTAR */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-graphite-800 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => handleGerarPDFOS('print')}
+                disabled={gerandoPDFOS}
+                className="h-8 text-[11px] px-2.5 font-bold flex items-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border-graphite-700"
+                title="Imprimir Ordem de Serviço"
+              >
+                <Printer size={13} className="text-amber-400" />
+                <span>Imprimir OS</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => handleGerarPDFOS('download')}
+                disabled={gerandoPDFOS}
+                className="h-8 text-[11px] px-2.5 font-bold flex items-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border-graphite-700"
+                title="Baixar PDF da Ordem de Serviço"
+              >
+                <FileDown size={13} className="text-cyan-400" />
+                <span>PDF</span>
+              </Button>
+            </div>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowModalComplementar(true)}
+              className="h-8 text-[11px] px-2.5 font-bold flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
+            >
+              <Sparkles size={13} className="text-amber-400" />
+              <span>+ Serviço Complementar</span>
+            </Button>
           </div>
 
           {/* CRONÔMETRO GRANDE VISÍVEL A 2 METROS */}
@@ -938,8 +1054,15 @@ export const ExecucaoPage: React.FC = () => {
 
           <div className="grid grid-cols-3 gap-2">
             {fotos.map((foto) => (
-              <div key={foto.id} className="relative aspect-square rounded-lg overflow-hidden bg-graphite-900 border border-graphite-700">
-                <img src={foto.signedUrl || foto.path} alt="Durante" className="w-full h-full object-cover" />
+              <div key={foto.id} className="flex flex-col gap-1">
+                <div className="relative aspect-square rounded-lg overflow-hidden bg-graphite-900 border border-graphite-700">
+                  <img src={foto.signedUrl || foto.path} alt="Durante" className="w-full h-full object-cover" />
+                </div>
+                {foto.created_at && (
+                  <span className="font-mono text-[9.5px] text-amber-400 font-semibold px-0.5 truncate" title="Data e hora imutável">
+                    Upload: {formatarDataHora(foto.created_at)}
+                  </span>
+                )}
               </div>
             ))}
 
@@ -1129,6 +1252,23 @@ export const ExecucaoPage: React.FC = () => {
           fotosSaidaExistentes={fotos.filter((f) => f.momento === 'saida')}
           onSuccess={() => {
             navigate('/hoje');
+          }}
+        />
+      )}
+
+      {/* MODAL DE SERVIÇO COMPLEMENTAR */}
+      {agendamento && (
+        <ModalOrcamentoComplementar
+          isOpen={showModalComplementar}
+          onClose={() => setShowModalComplementar(false)}
+          agendamentoId={agendamento.id}
+          execucaoId={execucaoId}
+          veiculoPlaca={agendamento.veiculo?.placa}
+          veiculoModelo={agendamento.veiculo?.modelo}
+          clienteNome={agendamento.cliente?.nome}
+          clienteTelefone={agendamento.cliente?.telefone}
+          onSuccess={() => {
+            loadExecucaoData();
           }}
         />
       )}

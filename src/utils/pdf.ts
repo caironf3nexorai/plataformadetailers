@@ -20,6 +20,7 @@ export interface DadosCabecalhoPDF {
   pdfCorFundoCabecalho?: string | null;
   pdfCorTextoCabecalho?: string | null;
   pdfCorFundoSecoes?: string | null;
+  pdfCorTextoSecoes?: string | null;
   pdfSubtituloCabecalho?: string | null;
   pdfTextoObservacoesOrcamento?: string | null;
   pdfTextoRodape?: string | null;

@@ -34,6 +34,7 @@ export interface Tenant {
   pdf_cor_fundo_cabecalho?: string | null;
   pdf_cor_texto_cabecalho?: string | null;
   pdf_cor_fundo_secoes?: string | null;
+  pdf_cor_texto_secoes?: string | null;
   pdf_subtitulo_cabecalho?: string | null;
   pdf_texto_observacoes_orcamento?: string | null;
   pdf_texto_rodape?: string | null;

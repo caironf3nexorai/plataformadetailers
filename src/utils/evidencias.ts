@@ -219,6 +219,49 @@ export async function uploadExecucaoFoto(
 }
 
 /**
+ * Faz upload de uma foto de avaliação ou assinatura para o orçamento no bucket privado `evidencias`.
+ * Path: {tenant_id}/orcamentos/{orcamento_id}/{uuid}.jpg
+ */
+export async function uploadOrcamentoFoto(
+  tenantId: string,
+  orcamentoId: string,
+  fileOrBlob: File | Blob,
+  isSignature = false,
+  placaVeiculo?: string
+): Promise<UploadFotoResult> {
+  let capturadaEm = new Date().toISOString();
+  if (fileOrBlob instanceof File && !isSignature) {
+    capturadaEm = await extractExifCapturedAt(fileOrBlob);
+  }
+
+  let blobToUpload: Blob;
+  if (isSignature) {
+    blobToUpload = fileOrBlob;
+  } else {
+    const dataHoraAtual = formatarDataHora(new Date().toISOString());
+    const carimbo = placaVeiculo ? `${dataHoraAtual} · ${placaVeiculo.toUpperCase()}` : dataHoraAtual;
+    blobToUpload = await compressImage(fileOrBlob, 1600, 0.75, carimbo);
+  }
+
+  const fileExt = isSignature ? 'png' : 'jpg';
+  const fileName = isSignature ? `assinatura_${gerarId().slice(0, 8)}.png` : `${gerarId()}.${fileExt}`;
+  const filePath = `${tenantId}/orcamentos/${orcamentoId}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('evidencias')
+    .upload(filePath, blobToUpload, {
+      upsert: true,
+      contentType: isSignature ? 'image/png' : 'image/jpeg',
+    });
+
+  if (uploadError) {
+    throw new Error(`Erro ao enviar foto do orçamento: ${uploadError.message}`);
+  }
+
+  return { path: filePath, capturadaEm };
+}
+
+/**
  * Gera uma URL assinada temporária para visualizar arquivos do bucket privado `evidencias`.
  */
 export async function getEvidenciaSignedUrl(

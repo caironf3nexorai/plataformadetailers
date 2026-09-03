@@ -12,7 +12,7 @@ import type { Cliente } from '../types/clientes';
 import { CadastroRapidoModal } from '../components/clientes/CadastroRapidoModal';
 import { ImportarCSVModal } from '../components/clientes/ImportarCSVModal';
 import { extrairNumeroOS } from '../utils/formatters';
-import { Users, UserPlus, Search, Car, Phone, FileSpreadsheet } from 'lucide-react';
+import { Users, UserPlus, Search, Car, Phone, FileSpreadsheet, FileText } from 'lucide-react';
 
 export const Clientes: React.FC = () => {
   const navigate = useNavigate();
@@ -24,6 +24,7 @@ export const Clientes: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [abrirComOrcamento, setAbrirComOrcamento] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const [abaAtiva, setAbaAtiva] = useState<'todos' | 'incompletos'>('todos');
@@ -128,8 +129,23 @@ export const Clientes: React.FC = () => {
               </Button>
               <Button
                 type="button"
+                variant="secondary"
+                onClick={() => {
+                  setAbrirComOrcamento(true);
+                  setIsModalOpen(true);
+                }}
+                className="min-h-[44px] px-3 font-semibold text-xs border-amber-500/40 text-amber-300 hover:bg-amber-500/10 flex items-center gap-1.5"
+              >
+                <FileText size={16} />
+                <span>+ Novo Orçamento</span>
+              </Button>
+              <Button
+                type="button"
                 variant="primary"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setAbrirComOrcamento(false);
+                  setIsModalOpen(true);
+                }}
                 className="min-h-[44px] px-4 font-semibold text-xs"
               >
                 <UserPlus size={18} />
@@ -265,6 +281,28 @@ export const Clientes: React.FC = () => {
                       </span>
                     ))
                   )}
+
+                  {/* Ação rápida para criar orçamento sem navegação */}
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const vId = veiculosAtivos.length > 0 ? veiculosAtivos[0].id : null;
+                      const catId = veiculosAtivos.length > 0 ? (veiculosAtivos[0] as any).categoria_id : null;
+                      const { data: newId } = await supabase.rpc('criar_orcamento', {
+                        p_cliente: cliente.id,
+                        p_veiculo: vId,
+                        p_categoria: catId,
+                        p_titulo: null,
+                      });
+                      if (newId) navigate(`/orcamentos/${newId}`);
+                    }}
+                    className="ml-auto text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 rounded border border-amber-500/30 transition-colors"
+                    title="Criar Orçamento Imediato para este Cliente"
+                  >
+                    <FileText size={13} />
+                    <span>Orçamento</span>
+                  </button>
                 </div>
               </Card>
             );
@@ -272,10 +310,14 @@ export const Clientes: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Cadastro Rápido */}
+      {/* Modal Cadastro Rápido com suporte a criação imediata de orçamento */}
       <CadastroRapidoModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setAbrirComOrcamento(false);
+        }}
+        iniciarComOrcamento={abrirComOrcamento}
         onSuccess={() => fetchClientes()}
       />
 

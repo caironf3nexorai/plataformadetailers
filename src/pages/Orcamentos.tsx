@@ -51,6 +51,15 @@ export const Orcamentos: React.FC = () => {
   const [titulo, setTitulo] = useState<string>('');
   const [creating, setCreating] = useState<boolean>(false);
 
+  // Modo de Entrada: Cliente Existente vs Cadastro Rápido Base
+  const [modoEntrada, setModoEntrada] = useState<'existente' | 'rapido'>('existente');
+  const [novoNome, setNovoNome] = useState<string>('');
+  const [novoTelefone, setNovoTelefone] = useState<string>('');
+  const [novoModelo, setNovoModelo] = useState<string>('');
+  const [novaCor, setNovaCor] = useState<string>('');
+  const [novaPlaca, setNovaPlaca] = useState<string>('');
+  const [validadeDias, setValidadeDias] = useState<number>(tenant?.orcamento_validade_dias || 7);
+
   const fetchOrcamentos = async () => {
     if (!tenant) return;
     setLoading(true);
@@ -134,19 +143,62 @@ export const Orcamentos: React.FC = () => {
 
   const handleCriarOrcamento = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clienteId || !tenant) return;
+    if (!tenant) return;
 
     setCreating(true);
     try {
+      let finalClienteId = clienteId;
+      let finalVeiculoId = veiculoId || null;
+      let finalCategoriaId = categoriaId;
+
+      if (modoEntrada === 'rapido') {
+        if (!novoNome.trim() || !novoTelefone.trim() || !finalCategoriaId) {
+          showError('Preencha o nome do cliente, telefone e a categoria do veículo.');
+          setCreating(false);
+          return;
+        }
+
+        const cleanPlaca = novaPlaca.trim()
+          ? novaPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+          : `ORC${Date.now().toString().slice(-4)}`;
+
+        const { data: cadData, error: cadErr } = await supabase.rpc('cadastro_rapido', {
+          p_nome: novoNome.trim(),
+          p_telefone: novoTelefone.trim(),
+          p_placa: cleanPlaca,
+          p_categoria: finalCategoriaId,
+          p_marca: null,
+          p_modelo: novoModelo.trim() || 'Veículo',
+        });
+
+        if (cadErr) throw cadErr;
+        const res = Array.isArray(cadData) ? cadData[0] : cadData;
+        finalClienteId = res?.out_cliente_id || res?.cliente_id;
+        finalVeiculoId = res?.out_veiculo_id || res?.veiculo_id;
+
+        if (novaCor.trim() && finalVeiculoId) {
+          await supabase.from('veiculos').update({ cor: novaCor.trim() }).eq('id', finalVeiculoId);
+        }
+      }
+
+      if (!finalClienteId) {
+        showError('Por favor, selecione ou informe o cliente.');
+        setCreating(false);
+        return;
+      }
+
       const { data: newId, error } = await supabase.rpc('criar_orcamento', {
-        p_cliente: clienteId,
-        p_veiculo: veiculoId || null,
-        p_categoria: categoriaId || null,
+        p_cliente: finalClienteId,
+        p_veiculo: finalVeiculoId,
+        p_categoria: finalCategoriaId || null,
         p_titulo: titulo.trim() || null,
       });
 
       if (error) throw error;
       if (newId) {
+        if (validadeDias && validadeDias !== 7) {
+          await supabase.from('orcamentos').update({ validade_dias: validadeDias }).eq('id', newId);
+        }
         setShowModal(false);
         navigate(`/orcamentos/${newId}`);
       }
@@ -441,49 +493,143 @@ export const Orcamentos: React.FC = () => {
         title="Novo Orçamento em Níveis"
       >
         <form onSubmit={handleCriarOrcamento} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="font-sans text-[13px] font-bold text-vapor-200">
-              Cliente <span className="text-amber-500">*</span>
-            </label>
-            <select
-              value={clienteId}
-              onChange={(e) => setClienteId(e.target.value)}
-              required
-              className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 font-sans text-[14px] focus:border-amber-500 focus:outline-none"
+          {/* SELETOR DE MODO DE CLIENTE */}
+          <div className="grid grid-cols-2 gap-2 bg-graphite-900 p-1 rounded-lg border border-graphite-700">
+            <button
+              type="button"
+              onClick={() => setModoEntrada('existente')}
+              className={`py-2 text-xs font-bold rounded transition-colors ${
+                modoEntrada === 'existente'
+                  ? 'bg-amber-500 text-graphite-950 shadow'
+                  : 'text-vapor-400 hover:text-vapor-200'
+              }`}
             >
-              <option value="">Selecione um cliente...</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome} {c.telefone ? `(${c.telefone})` : ''}
-                </option>
-              ))}
-            </select>
+              Cliente Cadastrado
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoEntrada('rapido')}
+              className={`py-2 text-xs font-bold rounded transition-colors ${
+                modoEntrada === 'rapido'
+                  ? 'bg-amber-500 text-graphite-950 shadow'
+                  : 'text-vapor-400 hover:text-vapor-200'
+              }`}
+            >
+              + Digitar Dados na Hora
+            </button>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="font-sans text-[13px] font-bold text-vapor-200">
-              Veículo
-            </label>
-            <select
-              value={veiculoId}
-              onChange={(e) => setVeiculoId(e.target.value)}
-              disabled={!clienteId || veiculos.length === 0}
-              className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 font-sans text-[14px] focus:border-amber-500 focus:outline-none disabled:opacity-50"
-            >
-              <option value="">
-                {!clienteId
-                  ? 'Selecione um cliente primeiro...'
-                  : veiculos.length === 0
-                    ? 'Nenhum veículo cadastrado para este cliente'
-                    : 'Selecione um veículo...'}
-              </option>
-              {veiculos.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.placa} - {v.modelo || 'Sem modelo'}
-                </option>
-              ))}
-            </select>
-          </div>
+          {modoEntrada === 'existente' ? (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <label className="font-sans text-[13px] font-bold text-vapor-200">
+                  Cliente <span className="text-amber-500">*</span>
+                </label>
+                <select
+                  value={clienteId}
+                  onChange={(e) => setClienteId(e.target.value)}
+                  required={modoEntrada === 'existente'}
+                  className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 font-sans text-[14px] focus:border-amber-500 focus:outline-none"
+                >
+                  <option value="">Selecione um cliente...</option>
+                  {clientes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome} {c.telefone ? `(${c.telefone})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-sans text-[13px] font-bold text-vapor-200">
+                  Veículo
+                </label>
+                <select
+                  value={veiculoId}
+                  onChange={(e) => setVeiculoId(e.target.value)}
+                  disabled={!clienteId || veiculos.length === 0}
+                  className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 font-sans text-[14px] focus:border-amber-500 focus:outline-none disabled:opacity-50"
+                >
+                  <option value="">
+                    {!clienteId
+                      ? 'Selecione um cliente primeiro...'
+                      : veiculos.length === 0
+                        ? 'Nenhum veículo cadastrado para este cliente'
+                        : 'Selecione um veículo...'}
+                  </option>
+                  {veiculos.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.placa} - {v.modelo || 'Sem modelo'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <div className="p-3 bg-graphite-900/80 rounded-lg border border-graphite-700 flex flex-col gap-3">
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                Dados Base do Cliente e Veículo:
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-vapor-300 font-medium">Nome do Cliente *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Carlos Mendes"
+                    value={novoNome}
+                    onChange={(e) => setNovoNome(e.target.value)}
+                    required={modoEntrada === 'rapido'}
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-vapor-300 font-medium">Telefone / WhatsApp *</label>
+                  <input
+                    type="tel"
+                    placeholder="(00) 00000-0000"
+                    value={novoTelefone}
+                    onChange={(e) => setNovoTelefone(e.target.value)}
+                    required={modoEntrada === 'rapido'}
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-vapor-300 font-medium">Carro / Modelo *</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Civic G10"
+                    value={novoModelo}
+                    onChange={(e) => setNovoModelo(e.target.value)}
+                    required={modoEntrada === 'rapido'}
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-vapor-300 font-medium">Cor do Carro</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Preto Cristal"
+                    value={novaCor}
+                    onChange={(e) => setNovaCor(e.target.value)}
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-vapor-300 font-medium">Placa (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: BRA2E19"
+                    value={novaPlaca}
+                    onChange={(e) => setNovaPlaca(e.target.value)}
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2 py-1.5 text-xs text-vapor-100 font-mono outline-none focus:border-amber-500 uppercase"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <label className="font-sans text-[13px] font-bold text-vapor-200">
@@ -502,6 +648,41 @@ export const Orcamentos: React.FC = () => {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* VALIDADE DA PROPOSTA (DIGITAÇÃO POR ESCRITA) */}
+          <div className="flex flex-col gap-1.5">
+            <label className="font-sans text-[13px] font-bold text-vapor-200">
+              Validade da Proposta (em dias)
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={validadeDias}
+                onChange={(e) => setValidadeDias(Math.max(1, parseInt(e.target.value) || 1))}
+                placeholder="Ex: 30, 90..."
+                className="w-28 bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono text-base font-bold outline-none focus:border-amber-500"
+              />
+              <span className="text-vapor-300 font-sans text-xs">dias corridos</span>
+              <div className="flex items-center gap-1 ml-auto flex-wrap">
+                {[7, 15, 30, 60, 90].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setValidadeDias(d)}
+                    className={`px-2 py-1 rounded text-[11px] font-mono transition-colors ${
+                      validadeDias === d
+                        ? 'bg-amber-500 text-graphite-950 font-bold'
+                        : 'bg-graphite-800 text-vapor-400 hover:text-vapor-200 border border-graphite-700'
+                    }`}
+                  >
+                    {d}d
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5">

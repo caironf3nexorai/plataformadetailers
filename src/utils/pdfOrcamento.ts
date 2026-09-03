@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import { formatarData, formatarHora } from './datas';
 import { formatarMoeda, formatarCodigoProposta } from './formatters';
-import { fetchImageAsBase64, obterAssinaturaBase64 } from './evidencias';
+import { fetchImageAsBase64, obterAssinaturaBase64, getEvidenciaSignedUrl } from './evidencias';
 import { cabecalhoDocumento, hexToRgb } from './pdf';
 import type { TipoNivelOrcamento } from '../types/orcamento';
 
@@ -66,61 +66,77 @@ export interface PDFOrcamentoData {
   // Níveis
   niveis: PDFOrcamentoNivelData[];
 
+  // Fotos de Avaliação e Termos (Controle por Check)
+  incluirFotos?: boolean;
+  fotos?: Array<{ url: string; path?: string; tipo?: 'antes' | 'depois'; descricao?: string; created_at?: string }>;
+  incluirTermos?: boolean;
+  termosGarantia?: string | null;
+
+  // Assinatura do Usuário/Oficina
+  assinaturaUsuarioUrl?: string | null;
+  assinaturaUsuarioNome?: string | null;
+
   // Branding Customizado
   planoCodigo?: string;
-  pdfCorPrimaria?: string | null;
-  pdfCorFundoCabecalho?: string | null;
-  pdfCorTextoCabecalho?: string | null;
-  pdfCorFundoSecoes?: string | null;
-  pdfSubtituloCabecalho?: string | null;
-  pdfTextoObservacoesOrcamento?: string | null;
-  pdfTextoRodape?: string | null;
-  pdfOcultarMarcaDagua?: boolean | null;
+  pdfCorPrimaria?: string;
+  pdfCorFundoCabecalho?: string;
+  pdfCorTextoCabecalho?: string;
+  pdfCorFundoSecoes?: string;
+  pdfCorTextoSecoes?: string;
+  pdfSubtituloCabecalho?: string;
+  pdfTextoObservacoesOrcamento?: string;
+  pdfTextoRodape?: string;
+  pdfOcultarMarcaDagua?: boolean;
 }
 
 /**
- * Obtém as dimensões reais de uma imagem em Base64.
- */
-function getImageDimensions(base64: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
-    if (!base64) {
-      resolve({ width: 100, height: 100 });
-      return;
-    }
-    const img = new Image();
-    img.onload = () => resolve({ width: img.width || 100, height: img.height || 100 });
-    img.onerror = () => resolve({ width: 100, height: 100 });
-    img.src = base64;
-  });
-}
-
-/**
- * Desenha imagem mantendo proporção de aspecto.
+ * Desenha uma imagem proporcionalmente dentro da caixa delimitadora
  */
 async function drawProportionalImage(
   doc: jsPDF,
   base64: string,
-  format: 'JPEG' | 'PNG',
-  boxX: number,
-  boxY: number,
+  format: string,
+  x: number,
+  y: number,
   boxWidth: number,
   boxHeight: number
 ) {
-  const { width: realW, height: realH } = await getImageDimensions(base64);
-  const scale = Math.min(boxWidth / realW, boxHeight / realH);
-  const drawW = realW * scale;
-  const drawH = realH * scale;
-  const drawX = boxX + (boxWidth - drawW) / 2;
-  const drawY = boxY + (boxHeight - drawH) / 2;
+  try {
+    const props = doc.getImageProperties(base64);
+    const imgRatio = props.width / props.height;
+    const boxRatio = boxWidth / boxHeight;
 
-  doc.addImage(base64, format, drawX, drawY, drawW, drawH);
+    let finalW = boxWidth;
+    let finalH = boxHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (imgRatio > boxRatio) {
+      finalW = boxWidth;
+      finalH = boxWidth / imgRatio;
+      offsetY = (boxHeight - finalH) / 2;
+    } else {
+      finalH = boxHeight;
+      finalW = boxHeight * imgRatio;
+      offsetX = (boxWidth - finalW) / 2;
+    }
+
+    doc.addImage(base64, format, x + offsetX, y + offsetY, finalW, finalH);
+  } catch (err) {
+    doc.addImage(base64, format, x, y, boxWidth, boxHeight);
+  }
 }
 
+/**
+ * Gera o documento em PDF da Proposta Comercial com design refinado,
+ * espaçamentos perfeitos e contraste adaptativo (suporta fundo branco ou escuro).
+ */
 export async function gerarPDFOrcamento(
   data: PDFOrcamentoData,
-  onProgress?: (statusText: string) => void
+  onProgress?: (msg: string) => void,
+  acao: 'download' | 'print' = 'download'
 ): Promise<void> {
-  onProgress?.('Iniciando geração do PDF do orçamento...');
+  onProgress?.('Preparando estrutura do PDF...');
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -128,276 +144,398 @@ export async function gerarPDFOrcamento(
     format: 'a4',
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
-  const pageMargin = 15;
-  const usableWidth = pageWidth - pageMargin * 2; // 180mm
-  const rightMarginX = pageMargin + usableWidth;
+  const pageWidth = 210;
+  const pageMargin = 12;
+  const usableWidth = pageWidth - pageMargin * 2;
+  const rightMarginX = pageWidth - pageMargin;
 
-  // Carregar Logo da oficina
-  let logoBase64 = '';
+  // 1. Logotipo da Oficina
+  let logoBase64: string | null = null;
   if (data.oficinaLogoUrl) {
+    onProgress?.('Carregando logotipo...');
     try {
-      onProgress?.('Carregando logo da oficina...');
       logoBase64 = await fetchImageAsBase64(data.oficinaLogoUrl);
     } catch (e) {
       console.error('[PDFOrcamento] Erro ao carregar logo:', e);
     }
   }
 
-  const codProposta = formatarCodigoProposta({ numero: data.numero, numero_os: data.numero_os });
+  const codProposta = formatarCodigoProposta(data);
 
-  // 1. Cabeçalho Padronizado
+  // Renderiza cabeçalho oficial
   let y = cabecalhoDocumento(doc, {
+    logoBase64: logoBase64 || undefined,
     oficinaNome: data.oficinaNome,
     oficinaRazaoSocial: data.oficinaRazaoSocial || undefined,
     oficinaDocumento: data.oficinaDocumento || undefined,
     oficinaDocumentoTipo: data.oficinaDocumentoTipo || undefined,
     oficinaTelefone: data.oficinaTelefone || undefined,
     oficinaCidadeUF: data.oficinaCidadeUF || undefined,
-    logoBase64,
-    documentoTitulo: data.numero_os ? `Orçamento / OS ${codProposta}` : `Proposta de Orçamento ${codProposta}`,
-    dataEmissao: data.enviado_em ? `${formatarData(data.enviado_em)} ${formatarHora(data.enviado_em)}` : formatarData(new Date().toISOString()),
-    statusBadge: data.status === 'aprovado' ? 'Orçamento Aprovado' : data.status === 'recusado' ? 'Orçamento Recusado' : 'Proposta em Aberto',
-    numeroOS: data.numero_os,
+    documentoTitulo: `PROPOSTA COMERCIAL ${codProposta}`,
+    documentoSubtitulo: `Validade da Proposta: ${data.validade_dias || 7} dias`,
+    dataEmissao: data.enviado_em
+      ? `${formatarData(data.enviado_em)} ${formatarHora(data.enviado_em)}`
+      : `${formatarData(new Date().toISOString())} ${formatarHora(new Date().toISOString())}`,
+    statusBadge: data.status === 'aprovado' ? 'STATUS: APROVADO' : 'PROPOSTA COMERCIAL',
+    numeroOS: data.numero_os || undefined,
     planoCodigo: data.planoCodigo,
     pdfCorPrimaria: data.pdfCorPrimaria,
     pdfCorFundoCabecalho: data.pdfCorFundoCabecalho,
     pdfCorTextoCabecalho: data.pdfCorTextoCabecalho,
     pdfCorFundoSecoes: data.pdfCorFundoSecoes,
-    pdfSubtituloCabecalho: data.pdfSubtituloCabecalho,
-    pdfTextoObservacoesOrcamento: data.pdfTextoObservacoesOrcamento,
-    pdfTextoRodape: data.pdfTextoRodape,
-    pdfOcultarMarcaDagua: data.pdfOcultarMarcaDagua,
+    pdfCorTextoSecoes: data.pdfCorTextoSecoes || undefined,
+    pdfSubtituloCabecalho: data.pdfSubtituloCabecalho || undefined,
+    pdfTextoRodape: data.pdfTextoRodape || undefined,
+    pdfOcultarMarcaDagua: data.pdfOcultarMarcaDagua || undefined,
   });
 
   const isFree = data.planoCodigo === 'free';
   const corFundoSecoesRgb = isFree ? [39, 39, 42] as [number, number, number] : hexToRgb(data.pdfCorFundoSecoes, [39, 39, 42]);
-  const corPrimariaRgb = isFree ? [251, 191, 36] as [number, number, number] : hexToRgb(data.pdfCorPrimaria, [245, 158, 11]);
+  const corPrimariaRgb = isFree ? [245, 158, 11] as [number, number, number] : hexToRgb(data.pdfCorPrimaria, [245, 158, 11]);
 
-  // 2. Bloco Cliente & Veículo
+  // Detector de Fundo Claro vs Escuro para Alto Contraste Automático
+  const lumFundoSecoes = (0.299 * corFundoSecoesRgb[0] + 0.587 * corFundoSecoesRgb[1] + 0.114 * corFundoSecoesRgb[2]) / 255;
+  const isLightSecoes = lumFundoSecoes > 0.65;
+
+  // Cor do Texto Principal: respeita a cor escolhida pelo usuário ou adapta automaticamente
+  const corTextoPrincipal: [number, number, number] = data.pdfCorTextoSecoes
+    ? hexToRgb(data.pdfCorTextoSecoes, isLightSecoes ? [15, 23, 42] : [255, 255, 255])
+    : (isLightSecoes ? [15, 23, 42] : [255, 255, 255]);
+
+  const lumTexto = (0.299 * corTextoPrincipal[0] + 0.587 * corTextoPrincipal[1] + 0.114 * corTextoPrincipal[2]) / 255;
+  const isTextoEscuro = lumTexto < 0.5;
+
+  const corTextoSecundario: [number, number, number] = isTextoEscuro ? [82, 82, 91] : [203, 213, 225];
+  const corBordaCard: [number, number, number] = isLightSecoes ? [203, 213, 225] : [63, 63, 70];
+  const corLinhaPar: [number, number, number] = isLightSecoes ? [248, 250, 252] : [28, 28, 32];
+  const corLinhaImpar: [number, number, number] = isLightSecoes ? [255, 255, 255] : [34, 34, 39];
+  const corHeaderNivelBg: [number, number, number] = isLightSecoes ? [241, 245, 249] : [20, 20, 24];
+
+  // Preço com contraste garantido no claro ou escuro
+  const corDestaquePreco: [number, number, number] = isLightSecoes
+    ? (corPrimariaRgb[0] > 200 && corPrimariaRgb[1] > 180 ? [180, 83, 9] : corPrimariaRgb)
+    : [251, 191, 36];
+
+  // 2. Bloco Cliente e Veículo Unificado
   doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
-  doc.roundedRect(pageMargin, y, usableWidth, 22, 2, 2, 'F');
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(pageMargin, y, usableWidth, 20, 2, 2, 'FD');
 
-  doc.setTextColor(corPrimariaRgb[0], corPrimariaRgb[1], corPrimariaRgb[2]);
-  doc.setFontSize(9.5);
+  // Coluna Cliente
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('DADOS DO CLIENTE & VEÍCULO', pageMargin + 4, y + 6);
+  doc.text('DADOS DO CLIENTE', pageMargin + 5, y + 5.5);
 
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Cliente: ${data.clienteNome} ${data.clienteTelefone ? `(${data.clienteTelefone})` : ''}`, pageMargin + 4, y + 12);
-  doc.text(`Veículo: ${data.veiculoModelo || 'Veículo não especificado'} ${data.veiculoPlaca ? `| Placa: ${data.veiculoPlaca.toUpperCase()}` : ''}`, pageMargin + 4, y + 17);
+  doc.text(`Nome: ${data.clienteNome}`, pageMargin + 5, y + 11);
+  doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+  doc.text(`Telefone: ${data.clienteTelefone || 'Não informado'}`, pageMargin + 5, y + 15.5);
 
-  if (data.categoriaNome) {
-    doc.text(`Categoria: ${data.categoriaNome}`, rightMarginX - 4, y + 12, { align: 'right' });
-  }
+  // Separador vertical sutil entre colunas
+  const colCentroX = pageMargin + 92;
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.15);
+  doc.line(colCentroX - 6, y + 3, colCentroX - 6, y + 17);
 
-  if (data.data_validade_limite) {
-    doc.setTextColor(251, 191, 36);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Validade da Proposta: até ${formatarData(data.data_validade_limite)}`, rightMarginX - 4, y + 17, { align: 'right' });
-  }
-
-  y += 28;
-
-  // 3. Apresentação dos Pacotes/Níveis de Orçamento
-  onProgress?.('Renderizando opções de serviços...');
-
-  doc.setTextColor(corPrimariaRgb[0], corPrimariaRgb[1], corPrimariaRgb[2]);
-  doc.setFontSize(10.5);
+  // Coluna Veículo
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
-  doc.text('OPÇÕES E NÍVEIS DE SERVIÇOS', pageMargin, y);
-  y += 6;
+  doc.text('DADOS DO VEÍCULO', colCentroX, y + 5.5);
 
-  for (const niv of data.niveis) {
-    const isAprovado = data.nivel_aprovado === niv.nivel;
+  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Modelo: ${data.veiculoModelo || 'Não informado'}`, colCentroX, y + 11);
+  const placaTxt = data.veiculoPlaca ? data.veiculoPlaca.toUpperCase() : 'Não informada';
+  const catTxt = data.categoriaNome ? ` • ${data.categoriaNome}` : '';
+  doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+  doc.text(`Placa: ${placaTxt}${catTxt}`, colCentroX, y + 15.5);
 
-    // Calcula altura necessária para o bloco deste nível
-    const numItens = niv.itens ? niv.itens.length : 0;
-    const blockHeight = Math.max(28 + numItens * 5, 32);
+  y += 24;
 
-    if (y + blockHeight > 275) {
+  // 3. Níveis de Proposta (Cartões Unificados e Estruturados)
+  onProgress?.('Renderizando opções de proposta...');
+  const niveisParaExibir = data.niveis && data.niveis.length > 0 ? data.niveis : [];
+
+  for (let idx = 0; idx < niveisParaExibir.length; idx++) {
+    const nivel = niveisParaExibir[idx];
+    const isAprovado = data.nivel_aprovado === nivel.nivel;
+    const itens = nivel.itens || [];
+
+    const headerHeight = 9.5;
+    const descHeight = nivel.descricao ? 5 : 0;
+    const itemRowHeight = 6.2;
+    const itemsHeight = itens.length * itemRowHeight;
+    const cardTotalHeight = headerHeight + descHeight + itemsHeight + 2;
+
+    // Quebra de página inteligente caso o cartão não caiba
+    if (y + cardTotalHeight > 275) {
       doc.addPage();
       y = 15;
     }
 
-    // Fundo do card
+    // Fundo do Cartão Unificado + Borda
+    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+    doc.setDrawColor(isAprovado ? 16 : corBordaCard[0], isAprovado ? 185 : corBordaCard[1], isAprovado ? 129 : corBordaCard[2]);
+    doc.setLineWidth(isAprovado ? 0.45 : 0.25);
+    doc.roundedRect(pageMargin, y, usableWidth, cardTotalHeight, 2, 2, 'FD');
+
+    // Se aprovado, desenha barra de destaque lateral verde
     if (isAprovado) {
-      doc.setFillColor(16, 185, 129); // emerald-500 sutil
-      doc.roundedRect(pageMargin, y, usableWidth, blockHeight, 2, 2, 'F');
-      doc.setFillColor(24, 24, 27); // graphite-950
-      doc.roundedRect(pageMargin + 1, y + 1, usableWidth - 2, blockHeight - 2, 1.5, 1.5, 'F');
-    } else {
-      doc.setFillColor(39, 39, 42); // graphite-800
-      doc.roundedRect(pageMargin, y, usableWidth, blockHeight, 2, 2, 'F');
+      doc.setFillColor(16, 185, 129);
+      doc.roundedRect(pageMargin, y, 2.5, cardTotalHeight, 1, 1, 'F');
     }
 
-    // Cabeçalho do Nível
-    let headY = y + 6;
-    doc.setFontSize(10);
+    // Barra de Cabeçalho do Cartão
+    doc.setFillColor(corHeaderNivelBg[0], corHeaderNivelBg[1], corHeaderNivelBg[2]);
+    doc.roundedRect(pageMargin + (isAprovado ? 2.5 : 0), y, usableWidth - (isAprovado ? 2.5 : 0), headerHeight, 1.5, 1.5, 'F');
+
+    // Título do Nível
+    doc.setTextColor(isAprovado ? 16 : corDestaquePreco[0], isAprovado ? 185 : corDestaquePreco[1], isAprovado ? 129 : corDestaquePreco[2]);
+    doc.setFontSize(9.5);
     doc.setFont('helvetica', 'bold');
-    if (isAprovado) {
-      doc.setTextColor(52, 211, 153); // emerald-400
-      doc.text(`[APROVADO] ${niv.titulo.toUpperCase()}`, pageMargin + 4, headY);
-    } else {
-      doc.setTextColor(255, 255, 255);
-      doc.text(niv.titulo.toUpperCase(), pageMargin + 4, headY);
-    }
+    const aprovadoBadge = isAprovado ? '✓ [OPÇÃO APROVADA] ' : '';
+    doc.text(`${aprovadoBadge}${nivel.titulo.toUpperCase()}`, pageMargin + 5, y + 6.2);
 
-    // Preço e Tempo no canto direito
+    // Preço Total do Nível
+    doc.setFontSize(10.5);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(251, 191, 36);
-    doc.text(formatarMoeda(niv.valor_total), rightMarginX - 4, headY, { align: 'right' });
+    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+    doc.text(formatarMoeda(nivel.valor_total), rightMarginX - 5, y + 6.5, { align: 'right' });
 
-    headY += 4;
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(161, 161, 170);
-    doc.text(`Duração estimada: ~${niv.duracao_total} minutos`, rightMarginX - 4, headY, { align: 'right' });
+    let currentCardY = y + headerHeight;
 
-    if (niv.descricao) {
-      doc.setTextColor(200, 200, 200);
-      doc.setFont('helvetica', 'italic');
-      doc.text(niv.descricao, pageMargin + 4, headY);
+    // Subtítulo / Descrição dentro do cartão
+    if (nivel.descricao) {
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.text(nivel.descricao, pageMargin + 5, currentCardY + 3.8);
+      currentCardY += descHeight;
     }
 
-    headY += 6;
+    // Linhas de Serviços dentro do cartão
+    if (itens.length > 0) {
+      itens.forEach((item, itemIdx) => {
+        const isEven = itemIdx % 2 === 0;
+        const rowBg = isEven ? corLinhaPar : corLinhaImpar;
 
-    // Divisor fino
-    doc.setDrawColor(63, 63, 70);
-    doc.line(pageMargin + 4, headY, rightMarginX - 4, headY);
-    headY += 4;
+        doc.setFillColor(rowBg[0], rowBg[1], rowBg[2]);
+        doc.rect(pageMargin + (isAprovado ? 2.5 : 0.2), currentCardY, usableWidth - (isAprovado ? 2.7 : 0.4), itemRowHeight, 'F');
 
-    // Lista de Itens do Pacote
-    doc.setFontSize(8);
-    if (!niv.itens || niv.itens.length === 0) {
-      doc.setTextColor(161, 161, 170);
-      doc.setFont('helvetica', 'italic');
-      doc.text('Nenhum item vinculado a esta opção.', pageMargin + 6, headY);
-    } else {
-      for (const item of niv.itens) {
-        doc.setFont('helvetica', 'bold');
+        // Linha divisória sutil
+        doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+        doc.setLineWidth(0.15);
+        doc.line(pageMargin + 4, currentCardY, rightMarginX - 4, currentCardY);
+
+        // Nome do serviço
+        doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
         doc.setFontSize(8);
-        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`• ${item.servico_nome}`, pageMargin + 5, currentCardY + 4.2);
 
-        const titleText = `• ${item.servico_nome}`;
-        const titleWidth = doc.getTextWidth(titleText);
-        doc.text(titleText, pageMargin + 6, headY);
-
-        if (item.servico_descricao) {
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(161, 161, 170);
-
-          const descStartX = pageMargin + 6 + titleWidth + 2.5;
-          const maxDescWidth = rightMarginX - 6 - descStartX;
-
-          if (maxDescWidth > 15) {
-            const descStr = item.servico_descricao.trim();
-            const splitDesc = doc.splitTextToSize(descStr, maxDescWidth);
-            doc.text(splitDesc[0], descStartX, headY);
-          }
+        // Preço do serviço
+        if (item.preco) {
+          doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text(formatarMoeda(item.preco), rightMarginX - 5, currentCardY + 4.2, { align: 'right' });
         }
 
-        headY += 4.5;
-      }
+        currentCardY += itemRowHeight;
+      });
     }
 
-    y += blockHeight + 5;
+    // Espaçamento consistente entre níveis
+    y += cardTotalHeight + 4.5;
   }
 
-  // 4. Seção de Desconto (se houver)
-  if (data.desconto && data.desconto.valor > 0) {
-    if (y + 16 > 275) {
-      doc.addPage();
-      y = 15;
-    }
-
-    doc.setFillColor(245, 158, 11);
-    doc.roundedRect(pageMargin, y, usableWidth, 12, 1.5, 1.5, 'F');
-    doc.setTextColor(24, 24, 27);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    
-    const descTxt = data.desconto.tipo === 'porcentagem'
-      ? `${data.desconto.valor}% OFF`
-      : formatarMoeda(data.desconto.valor);
-    
-    const cupomTxt = data.desconto.cupom_codigo ? ` (CUPOM: ${data.desconto.cupom_codigo})` : '';
-    doc.text(`DESCONTO ESPECIAL APLICADO NO ORÇAMENTO: ${descTxt}${cupomTxt}`, pageMargin + 4, y + 7.5);
-
-    y += 16;
-  }
-
-  // 5. Observações Gerais
-  const temObsBudget = data.observacoes && data.observacoes.trim();
-  const temObsBranding = data.pdfTextoObservacoesOrcamento && data.pdfTextoObservacoesOrcamento.trim();
-
-  let obsTextoGlobal = '';
-  if (temObsBudget && temObsBranding) {
-    if (temObsBudget === temObsBranding) {
-      obsTextoGlobal = temObsBudget;
-    } else {
-      obsTextoGlobal = `${temObsBudget}\n\nTermos e Condições Gerais:\n${temObsBranding}`;
-    }
-  } else if (temObsBudget) {
-    obsTextoGlobal = temObsBudget;
-  } else if (temObsBranding) {
-    obsTextoGlobal = temObsBranding;
-  }
-
+  // 4. Observações Gerais (Somente se houver texto preenchido)
+  const obsTextoGlobal = (data.observacoes || '').trim();
   if (obsTextoGlobal) {
-    const splitObs = doc.splitTextToSize(obsTextoGlobal, usableWidth - 8);
-    const boxHeight = Math.max(18, 10 + splitObs.length * 4);
+    const splitObs = doc.splitTextToSize(obsTextoGlobal, usableWidth - 10);
+    const boxHeight = Math.max(12, 7 + splitObs.length * 4);
 
     if (y + boxHeight > 275) {
       doc.addPage();
       y = 15;
     }
 
-    doc.setFillColor(39, 39, 42);
-    doc.roundedRect(pageMargin, y, usableWidth, boxHeight, 1.5, 1.5, 'F');
+    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, y, usableWidth, boxHeight, 1.5, 1.5, 'FD');
 
-    doc.setTextColor(251, 191, 36);
-    doc.setFontSize(8.5);
+    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text('OBSERVAÇÕES E CONDIÇÕES:', pageMargin + 4, y + 5);
+    doc.text('OBSERVAÇÕES GERAIS:', pageMargin + 5, y + 5);
 
-    doc.setTextColor(220, 220, 220);
+    doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'normal');
-
     splitObs.forEach((line: string, idx: number) => {
-      doc.text(line, pageMargin + 4, y + 9 + idx * 3.5);
+      doc.text(line, pageMargin + 5, y + 9.5 + idx * 3.8);
     });
 
-    y += boxHeight + 4;
+    y += boxHeight + 4.5;
   }
 
-  // 6. Assinatura Digital do Cliente (Se Aprovado e Assinado)
+  // 5. Fotos de Avaliação (Antes e Depois)
+  if (data.incluirFotos !== false && data.fotos && data.fotos.length > 0) {
+    onProgress?.('Renderizando fotos de avaliação (antes e depois)...');
+
+    const fotosAntes = data.fotos.filter((f) => f.tipo === 'antes' || !f.tipo);
+    const fotosDepois = data.fotos.filter((f) => f.tipo === 'depois');
+
+    const renderGrupoFotos = async (titulo: string, fotosLista: typeof data.fotos) => {
+      if (!fotosLista || fotosLista.length === 0) return;
+
+      if (y + 40 > 275) {
+        doc.addPage();
+        y = 15;
+      }
+
+      doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text(titulo, pageMargin, y);
+      y += 4.5;
+
+      const photosPerRow = 3;
+      const gap = 4;
+      const boxWidth = (usableWidth - gap * (photosPerRow - 1)) / photosPerRow;
+      const boxHeight = boxWidth * 0.7;
+
+      let photoX = pageMargin;
+      let photoY = y;
+
+      for (let i = 0; i < fotosLista.length; i++) {
+        const f = fotosLista[i];
+        if (photoY + boxHeight + 12 > 280) {
+          doc.addPage();
+          photoY = 15;
+          photoX = pageMargin;
+        }
+
+        try {
+          let base64 = '';
+          if (f.url && f.url.startsWith('data:')) {
+            base64 = f.url;
+          } else if (f.path) {
+            const signed = await getEvidenciaSignedUrl(f.path);
+            if (signed) base64 = await fetchImageAsBase64(signed);
+          }
+          if (!base64 && f.url && f.url.startsWith('http')) {
+            base64 = await fetchImageAsBase64(f.url);
+          }
+          if (!base64 && f.url) {
+            const signed = await getEvidenciaSignedUrl(f.url);
+            if (signed) base64 = await fetchImageAsBase64(signed);
+          }
+
+          if (base64) {
+            // Fundo suave neutro para moldura da foto sem faixa preta
+            doc.setFillColor(isLightSecoes ? 245 : 24, isLightSecoes ? 247 : 24, isLightSecoes ? 250 : 28);
+            doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+            doc.setLineWidth(0.2);
+            doc.roundedRect(photoX, photoY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
+            await drawProportionalImage(doc, base64, 'JPEG', photoX, photoY, boxWidth, boxHeight);
+
+            if (f.created_at) {
+              doc.setFontSize(7);
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+              const descExtra = f.descricao && !f.descricao.startsWith('[') ? ` · ${f.descricao}` : '';
+              const horaTexto = `${formatarData(f.created_at)} ${formatarHora(f.created_at)}${descExtra}`;
+              doc.text(horaTexto, photoX + boxWidth / 2, photoY + boxHeight + 3.8, { align: 'center' });
+            }
+          }
+        } catch (e) {
+          console.error('[PDFOrcamento] Erro ao carregar foto:', e);
+        }
+
+        if ((i + 1) % photosPerRow === 0) {
+          photoX = pageMargin;
+          photoY += boxHeight + 8.5;
+        } else {
+          photoX += boxWidth + gap;
+        }
+      }
+
+      y = photoY + (fotosLista.length % photosPerRow !== 0 ? boxHeight + 8.5 : 2);
+    };
+
+    if (fotosAntes.length > 0 && fotosDepois.length > 0) {
+      await renderGrupoFotos(`FOTOS ANTES · AVALIAÇÃO INICIAL DO VEÍCULO (${fotosAntes.length})`, fotosAntes);
+      await renderGrupoFotos(`FOTOS DEPOIS · RESULTADO DOS SERVIÇOS EXECUTADOS (${fotosDepois.length})`, fotosDepois);
+    } else if (fotosDepois.length > 0) {
+      await renderGrupoFotos(`FOTOS DEPOIS · RESULTADO DOS SERVIÇOS (${fotosDepois.length})`, fotosDepois);
+    } else {
+      await renderGrupoFotos(`FOTOS E EVIDÊNCIAS DE AVALIAÇÃO DO VEÍCULO (${fotosAntes.length})`, fotosAntes);
+    }
+  }
+
+  // 6. Termos de Garantia (se marcado incluirTermos)
+  if (data.incluirTermos && data.termosGarantia && data.termosGarantia.trim()) {
+    const splitTermos = doc.splitTextToSize(data.termosGarantia.trim(), usableWidth - 10);
+    const termosBoxH = Math.max(14, 7 + splitTermos.length * 3.8);
+
+    if (y + termosBoxH > 275) {
+      doc.addPage();
+      y = 15;
+    }
+
+    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, y, usableWidth, termosBoxH, 1.5, 1.5, 'FD');
+
+    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TERMOS DE GARANTIA E CONDIÇÕES:', pageMargin + 5, y + 5);
+
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.setFontSize(7.2);
+    doc.setFont('helvetica', 'normal');
+    splitTermos.forEach((line: string, idx: number) => {
+      doc.text(line, pageMargin + 5, y + 9.2 + idx * 3.6);
+    });
+
+    y += termosBoxH + 4.5;
+  }
+
+  // 7. Bloco de Assinaturas (Digital ou Linhas Físicas para Impressão Manual)
   if (data.assinaturaUrl) {
-    onProgress?.('Iniciando renderização da assinatura do cliente...');
+    onProgress?.('Iniciando renderização da assinatura digital do cliente...');
     if (y + 35 > 275) {
       doc.addPage();
       y = 15;
     }
 
-    doc.setFillColor(39, 39, 42);
-    doc.roundedRect(pageMargin, y, usableWidth, 32, 2, 2, 'F');
+    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, y, usableWidth, 32, 2, 2, 'FD');
 
-    doc.setTextColor(251, 191, 36);
-    doc.setFontSize(9);
+    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+    doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
-    doc.text('ACEITE DIGITAL E CONFIRMAÇÃO LEGAL DO CLIENTE', pageMargin + 4, y + 6);
+    doc.text('ACEITE DIGITAL E CONFIRMAÇÃO DO CLIENTE', pageMargin + 5, y + 6);
 
-    doc.setTextColor(200, 200, 200);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.setFontSize(7.5);
     doc.setFont('helvetica', 'italic');
     const termoAceite = '"Declaro que li e concordo com as condições, prazos e valores apresentados nesta proposta de orçamento."';
     const termoLines = doc.splitTextToSize(termoAceite, usableWidth - 60);
     termoLines.forEach((line: string, idx: number) => {
-      doc.text(line, pageMargin + 4, y + 11 + idx * 3.5);
+      doc.text(line, pageMargin + 5, y + 11 + idx * 3.5);
     });
 
     try {
@@ -409,7 +547,8 @@ export async function gerarPDFOrcamento(
         const sigY = y + 2;
 
         doc.setFillColor(255, 255, 255);
-        doc.roundedRect(sigX, sigY, sigW, sigH, 1, 1, 'F');
+        doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+        doc.roundedRect(sigX, sigY, sigW, sigH, 1, 1, 'FD');
 
         await drawProportionalImage(doc, assBase64, 'PNG', sigX, sigY, sigW, sigH);
       }
@@ -417,21 +556,79 @@ export async function gerarPDFOrcamento(
       console.error('[PDFOrcamento] Erro ao renderizar imagem de assinatura:', e);
     }
 
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8.5);
+    doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Assinado por: ${data.assinaturaNome || data.clienteNome}`, pageMargin + 4, y + 22);
+    doc.text(`Assinado por: ${data.assinaturaNome || data.clienteNome}`, pageMargin + 5, y + 22);
 
     if (data.assinaturaData) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.text(`Confirmado em: ${formatarData(data.assinaturaData)} ${formatarHora(data.assinaturaData)}`, pageMargin + 4, y + 27);
+      doc.setFontSize(7);
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+      doc.text(`Confirmado em: ${formatarData(data.assinaturaData)} ${formatarHora(data.assinaturaData)}`, pageMargin + 5, y + 26.5);
     }
+
+    y += 36;
+  } else {
+    // Linhas de Assinatura Manual Dupla (Cliente e Oficina) para Via Impressa
+    if (y + 34 > 275) {
+      doc.addPage();
+      y = 15;
+    }
+
+    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, y, usableWidth, 32, 2, 2, 'FD');
+
+    doc.setFontSize(7.2);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    const termoTxt = '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta de orçamento."';
+    const splitTermo = doc.splitTextToSize(termoTxt, usableWidth - 10);
+    splitTermo.forEach((line: string, idx: number) => {
+      doc.text(line, pageMargin + 5, y + 5 + idx * 3.5);
+    });
+
+    const sigY = y + 13;
+    const colW = (usableWidth - 16) / 2;
+
+    // Assinatura Manual do Cliente
+    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+    doc.setLineWidth(0.3);
+    doc.line(pageMargin + 5, sigY + 8, pageMargin + 5 + colW, sigY + 8);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+    doc.text(data.clienteNome, pageMargin + 5 + colW / 2, sigY + 12, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.text('Assinatura do Cliente', pageMargin + 5 + colW / 2, sigY + 15.5, { align: 'center' });
+
+    // Assinatura do Responsável / Usuário
+    const col2StartX = rightMarginX - 5 - colW;
+    doc.line(col2StartX, sigY + 8, col2StartX + colW, sigY + 8);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+    doc.text(data.assinaturaUsuarioNome || data.oficinaNome, col2StartX + colW / 2, sigY + 12, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.text('Responsável Técnico / Oficina', col2StartX + colW / 2, sigY + 15.5, { align: 'center' });
 
     y += 36;
   }
 
   onProgress?.('Finalizando PDF do orçamento...');
   const nomeArquivo = `orcamento_${data.veiculoPlaca ? data.veiculoPlaca.toUpperCase() : 'proposta'}_${codProposta.replace('#', '')}.pdf`;
-  doc.save(nomeArquivo);
+
+  if (acao === 'print') {
+    doc.autoPrint();
+    const blobUrl = doc.output('bloburl');
+    window.open(blobUrl, '_blank');
+  } else {
+    doc.save(nomeArquivo);
+  }
 }

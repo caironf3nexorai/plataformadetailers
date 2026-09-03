@@ -17,10 +17,10 @@ describe('checkin utils', () => {
     expect(clampedPercentage(NaN)).toBe(0);
   });
 
-  it('formatarNivelCombustivel converte oitavos corretamente', () => {
-    expect(formatarNivelCombustivel(0)).toBe('E (Vazio)');
-    expect(formatarNivelCombustivel(4)).toBe('1/2 (Meio)');
-    expect(formatarNivelCombustivel(8)).toBe('F (Cheio)');
+  it('formatarNivelCombustivel converte oitavos para formato digital corretamente', () => {
+    expect(formatarNivelCombustivel(0)).toBe('Reserva (Vazio)');
+    expect(formatarNivelCombustivel(4)).toBe('50% (Meio Tanque)');
+    expect(formatarNivelCombustivel(8)).toBe('100% (Tanque Cheio)');
     expect(formatarNivelCombustivel(null)).toBe('Não informado');
   });
 

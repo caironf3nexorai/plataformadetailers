@@ -17,15 +17,18 @@ import {
   AlertTriangle,
   ShieldCheck,
   CheckCircle2,
+  Printer,
+  FileDown,
 } from 'lucide-react';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
 import { formatarDataHora } from '../utils/datas';
 import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
+import { gerarPDFOS } from '../utils/pdfOS';
 
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { membership } = useAuth();
+  const { tenant, membership } = useAuth();
   const podeVerCusto = membership?.role === 'dono' || membership?.role === 'gerente';
 
   const [loading, setLoading] = useState(true);
@@ -39,6 +42,83 @@ export const VisualizarAtendimento: React.FC = () => {
   const [consumos, setConsumos] = useState<any[]>([]);
   const [valores, setValores] = useState<any[]>([]);
   const [fotos, setFotos] = useState<{ durante: any[]; saida: any[] }>({ durante: [], saida: [] });
+  const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
+
+  const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
+    if (!agendamento || !tenant) return;
+    try {
+      setGerandoPDFOS(true);
+      const logoUrl = tenant.logo_path
+        ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
+        : undefined;
+
+      const itensFormatados = (agendamento.agendamento_itens || []).map((it: any) => ({
+        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+        categoria_nome: it.categoria?.nome,
+        preco: Number(it.preco_praticado ?? it.preco ?? it.servicos?.preco ?? 0),
+        duracao_minutos: it.duracao_minutos || it.servicos?.duracao_minutos,
+        quantidade: it.quantidade || 1,
+      }));
+
+      if (itensFormatados.length === 0 && agendamento.servico) {
+        itensFormatados.push({
+          servico_nome: agendamento.servico.nome || 'Serviço',
+          preco: Number(agendamento.preco_total || 0),
+          duracao_minutos: agendamento.duracao_minutos,
+          quantidade: 1,
+        });
+      }
+
+      await gerarPDFOS(
+        {
+          numero_os: agendamento.numero_os || 1,
+          data_emissao: agendamento.created_at,
+          status: agendamento.status || (execucao?.finalizado_em ? 'concluido' : 'em_andamento'),
+          inicio: agendamento.inicio,
+          previsao_entrega: agendamento.fim,
+          concluido_em: execucao?.finalizado_em,
+          responsavel_nome: 'Oficina / Responsável',
+          observacoes: agendamento.observacoes || execucao?.observacoes,
+          clienteNome: agendamento.cliente?.nome || 'Cliente',
+          clienteTelefone: agendamento.cliente?.telefone,
+          clienteDocumento: agendamento.cliente?.documento || agendamento.cliente?.cpf_cnpj,
+          clienteEmail: agendamento.cliente?.email,
+          veiculoModelo: agendamento.veiculo?.modelo || 'Veículo',
+          veiculoPlaca: agendamento.veiculo?.placa || '',
+          veiculoMarca: agendamento.veiculo?.marca,
+          veiculoCor: agendamento.veiculo?.cor,
+          veiculoAno: agendamento.veiculo?.ano,
+          oficinaNome: tenant.nome || 'Oficina',
+          oficinaRazaoSocial: tenant.razao_social,
+          oficinaDocumento: tenant.documento,
+          oficinaDocumentoTipo: tenant.documento_tipo,
+          oficinaTelefone: tenant.telefone,
+          oficinaCidadeUF: tenant.cidade && tenant.uf ? `${tenant.cidade}/${tenant.uf}` : undefined,
+          oficinaLogoUrl: logoUrl,
+          planoCodigo: tenant.plano,
+          pdfCorPrimaria: tenant.pdf_cor_primaria,
+          pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
+          pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho,
+          pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes,
+          pdfCorTextoSecoes: tenant.pdf_cor_texto_secoes || (tenant?.id ? localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) : null),
+          pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho,
+          pdfTextoRodape: tenant.pdf_texto_rodape,
+          pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
+          itens: itensFormatados,
+          valor_total: Number(agendamento.preco_total || 0),
+          desconto: Number(agendamento.desconto_valor || 0),
+          forma_pagamento: agendamento.forma_pagamento,
+          assinaturaClienteNome: agendamento.cliente?.nome,
+        },
+        undefined,
+        acao
+      );
+    } catch (err: any) {
+      console.error('[Gerar PDF OS Error]:', err);
+    } finally {
+      setGerandoPDFOS(false);
+    }
+  };
 
   useEffect(() => {
     const fetchAtendimento = async () => {
@@ -299,6 +379,32 @@ export const VisualizarAtendimento: React.FC = () => {
             </Button>
           )}
 
+          {/* Botão de Imprimir OS */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleGerarPDFOS('print')}
+            disabled={gerandoPDFOS}
+            className="flex items-center gap-1.5 text-[12px] bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border border-graphite-600 shrink-0"
+            title="Imprimir Ordem de Serviço"
+          >
+            <Printer size={16} className="text-amber-400" />
+            <span className="hidden sm:inline">Imprimir OS</span>
+          </Button>
+
+          {/* Botão de Baixar PDF da OS */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleGerarPDFOS('download')}
+            disabled={gerandoPDFOS}
+            className="flex items-center gap-1.5 text-[12px] bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border border-graphite-600 shrink-0"
+            title="Baixar PDF da Ordem de Serviço"
+          >
+            <FileDown size={16} className="text-cyan-400" />
+            <span className="hidden sm:inline">{gerandoPDFOS ? 'Gerando...' : 'PDF da OS'}</span>
+          </Button>
+
           {/* Botão para Vistoria de Entrada se existir */}
           {checkinId && (
             <Button
@@ -493,15 +599,21 @@ export const VisualizarAtendimento: React.FC = () => {
           {fotos.durante.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {fotos.durante.map((f) => (
-                <a
-                  key={f.id}
-                  href={f.signedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors"
-                >
-                  <img src={f.signedUrl} alt="Execução" className="w-full h-full object-cover" />
-                </a>
+                <div key={f.id} className="flex flex-col gap-1">
+                  <a
+                    href={f.signedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors"
+                  >
+                    <img src={f.signedUrl} alt="Execução" className="w-full h-full object-cover" />
+                  </a>
+                  {f.created_at && (
+                    <span className="font-mono text-[10px] text-amber-400 font-medium px-0.5 truncate" title="Data e hora imutável">
+                      Upload: {formatarDataHora(f.created_at)}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           ) : (
@@ -517,15 +629,21 @@ export const VisualizarAtendimento: React.FC = () => {
           {fotos.saida.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {fotos.saida.map((f) => (
-                <a
-                  key={f.id}
-                  href={f.signedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors"
-                >
-                  <img src={f.signedUrl} alt="Saída" className="w-full h-full object-cover" />
-                </a>
+                <div key={f.id} className="flex flex-col gap-1">
+                  <a
+                    href={f.signedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors"
+                  >
+                    <img src={f.signedUrl} alt="Saída" className="w-full h-full object-cover" />
+                  </a>
+                  {f.created_at && (
+                    <span className="font-mono text-[10px] text-amber-400 font-medium px-0.5 truncate" title="Data e hora imutável">
+                      Upload: {formatarDataHora(f.created_at)}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           ) : (

@@ -23,10 +23,13 @@ import {
   Plus,
   Trash2,
   AlertTriangle,
-  DollarSign
+  DollarSign,
+  Printer,
+  FileDown
 } from 'lucide-react';
 import { ModalConfirmacao } from '../ui/ModalConfirmacao';
 import type { Agendamento, HorarioDisponivel } from '../../types/agenda';
+import { gerarPDFOS } from '../../utils/pdfOS';
 import { 
   getLabelFromStatus
 } from '../../utils/agenda';
@@ -67,6 +70,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
   const [checkinInfo, setCheckinInfo] = useState<CheckinInfo | null>(null);
   const [execucaoInfo, setExecucaoInfo] = useState<ExecucaoInfo | null>(null);
   const [startingCheckin, setStartingCheckin] = useState(false);
+  const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
   const [startingExec, setStartingExec] = useState(false);
   const [showModalPularVistoria, setShowModalPularVistoria] = useState(false);
   const [pularLoading, setPularLoading] = useState(false);
@@ -306,6 +310,74 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
         `Olá ${agendamento.cliente.nome}! Confirmamos o agendamento do seu serviço na nossa oficina para o dia ${dataFormatada} às ${horaInicio}.`
       )
     : null;
+
+  // Gerar PDF ou Imprimir OS
+  const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
+    if (!agendamento || !tenant) return;
+    try {
+      setGerandoPDFOS(true);
+      const logoUrl = tenant.logo_path
+        ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
+        : undefined;
+
+      const itensFormatados = itensList.map((it: any) => ({
+        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+        categoria_nome: it.categoria?.nome,
+        preco: Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? 0),
+        duracao_minutos: it.duracao_minutos || it.servicos?.duracao_minutos,
+        quantidade: it.quantidade || 1,
+      }));
+
+      await gerarPDFOS(
+        {
+          numero_os: agendamento.numero_os || 1,
+          data_emissao: agendamento.created_at,
+          status: agendamento.status || (execucaoInfo?.status === 'finalizado' ? 'concluido' : 'agendado'),
+          inicio: agendamento.inicio,
+          previsao_entrega: (agendamento as any).previsao_entrega || (agendamento as any).fim,
+          concluido_em: (execucaoInfo as any)?.finalizado_em,
+          responsavel_nome: 'Oficina / Responsável',
+          observacoes: (agendamento as any).observacoes,
+          clienteNome: agendamento.cliente?.nome || 'Cliente',
+          clienteTelefone: agendamento.cliente?.telefone,
+          clienteDocumento: (agendamento.cliente as any)?.documento || (agendamento.cliente as any)?.cpf_cnpj,
+          clienteEmail: (agendamento.cliente as any)?.email,
+          veiculoModelo: agendamento.veiculo?.modelo || 'Veículo',
+          veiculoPlaca: agendamento.veiculo?.placa || '',
+          veiculoMarca: agendamento.veiculo?.marca,
+          veiculoCor: (agendamento.veiculo as any)?.cor,
+          veiculoAno: (agendamento.veiculo as any)?.ano,
+          oficinaNome: tenant.nome || 'Oficina',
+          oficinaRazaoSocial: tenant.razao_social,
+          oficinaDocumento: tenant.documento,
+          oficinaDocumentoTipo: tenant.documento_tipo,
+          oficinaTelefone: tenant.telefone,
+          oficinaCidadeUF: tenant.cidade && tenant.uf ? `${tenant.cidade}/${tenant.uf}` : undefined,
+          oficinaLogoUrl: logoUrl,
+          planoCodigo: tenant.plano,
+          pdfCorPrimaria: tenant.pdf_cor_primaria,
+          pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
+          pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho,
+          pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes,
+          pdfCorTextoSecoes: tenant.pdf_cor_texto_secoes || (tenant?.id ? localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) : null),
+          pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho,
+          pdfTextoRodape: tenant.pdf_texto_rodape,
+          pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
+          itens: itensFormatados,
+          valor_total: Number(precoEstimadoCalculado || 0),
+          desconto: Number((agendamento as any).desconto_valor || 0),
+          forma_pagamento: (agendamento as any).forma_pagamento,
+          assinaturaClienteNome: agendamento.cliente?.nome,
+        },
+        undefined,
+        acao
+      );
+    } catch (err: any) {
+      console.error('[PainelAgendamento] Erro ao gerar PDF da OS:', err);
+    } finally {
+      setGerandoPDFOS(false);
+    }
+  };
 
   // Abrir e carregar lista de serviços
   const handleAbrirAddServico = async () => {
@@ -696,6 +768,30 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                 {agendamento.veiculo ? `${agendamento.veiculo.placa} (${agendamento.veiculo.modelo})` : 'Sem veículo'} • {agendamento.categoria?.nome || 'Categoria'}
               </span>
             </div>
+          </div>
+
+          {/* BOTÕES DE IMPRIMIR / GERAR PDF DA OS */}
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => handleGerarPDFOS('print')}
+              disabled={gerandoPDFOS}
+              className="flex-1 h-9 text-xs font-bold flex items-center justify-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border-graphite-700"
+            >
+              <Printer size={14} className="text-amber-400" />
+              <span>Imprimir OS</span>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => handleGerarPDFOS('download')}
+              disabled={gerandoPDFOS}
+              className="flex-1 h-9 text-xs font-bold flex items-center justify-center gap-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border-graphite-700"
+            >
+              <FileDown size={14} className="text-cyan-400" />
+              <span>{gerandoPDFOS ? 'Gerando...' : 'PDF da OS'}</span>
+            </Button>
           </div>
 
           {agendamento.observacoes && (

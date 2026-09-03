@@ -12,6 +12,8 @@ import { uploadEvidenciaFoto } from '../../utils/evidencias';
 import { montarLinkWhatsapp } from '../../utils/whatsapp';
 import { ModalConfirmarSemVistoria } from '../../components/checkin/ModalConfirmarSemVistoria';
 import { dispensarVistoriaAgendamento } from '../../utils/checkin';
+import { MarcadorCombustivelDigital } from '../../components/ui/MarcadorCombustivelDigital';
+import { gerarPDFCheckin } from '../../utils/pdfCheckin';
 import {
   Car,
   Fuel,
@@ -24,6 +26,8 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  Printer,
+  FileDown,
 } from 'lucide-react';
 
 export const FormularioCheckin: React.FC = () => {
@@ -88,8 +92,10 @@ export const FormularioCheckin: React.FC = () => {
   const [assinaturaNome, setAssinaturaNome] = useState('');
 
   const [uploadingFotoGeral, setUploadingFotoGeral] = useState(false);
-  const [modoAssinatura, setModoAssinatura] = useState<'presencial' | 'remoto'>('presencial');
+  const [modoAssinatura, setModoAssinatura] = useState<'presencial' | 'remoto' | 'manual'>('presencial');
   const [linkEnviado, setLinkEnviado] = useState(false);
+  const [gerandoPdfManual, setGerandoPdfManual] = useState(false);
+  const [pdfProgressManual, setPdfProgressManual] = useState('');
 
   const handleEnviarLinkRemoto = async () => {
     if (!checkin || !agendamento) return;
@@ -361,7 +367,7 @@ export const FormularioCheckin: React.FC = () => {
     }
   };
 
-  // Finalização do Checkin com Assinatura
+  // Finalização do Checkin com Assinatura Digital Presencial
   const handleFinalizarCheckin = async (signatureBlob: Blob) => {
     if (!checkin || !tenant || !assinaturaNome.trim()) {
       setError('Por favor, informe o nome de quem está assinando a vistoria.');
@@ -389,6 +395,97 @@ export const FormularioCheckin: React.FC = () => {
       setError('Erro ao finalizar vistoria: ' + err.message);
     } finally {
       setSavingStep(false);
+    }
+  };
+
+  // Finalização do Checkin com Assinatura Manual (física em papel)
+  const handleFinalizarCheckinManual = async () => {
+    if (!checkin || !tenant) return;
+
+    try {
+      setSavingStep(true);
+      setGerandoPdfManual(true);
+      setPdfProgressManual('Destravando vistoria no sistema...');
+
+      const nomeSignatario = assinaturaNome.trim() || agendamento?.cliente?.nome || 'Assinatura Manual';
+
+      // 1. Finaliza check-in no banco sem exigir upload de assinatura digital
+      const { error: rpcErr } = await supabase.rpc('finalizar_checkin', {
+        p_checkin: checkin.id,
+        p_assinatura_path: 'manual',
+        p_nome: nomeSignatario,
+      });
+
+      if (rpcErr) {
+        await supabase
+          .from('checkins')
+          .update({
+            finalizado: true,
+            aceite_tipo: 'manual',
+            assinatura_nome: nomeSignatario,
+            assinado_em: new Date().toISOString(),
+          })
+          .eq('id', checkin.id);
+      } else {
+        await supabase
+          .from('checkins')
+          .update({
+            aceite_tipo: 'manual',
+          })
+          .eq('id', checkin.id);
+      }
+
+      // 2. Dispara geração de PDF da vistoria com campo de assinatura manual
+      setPdfProgressManual('Gerando PDF para assinatura manual...');
+      const logoUrl = tenant.logo_path
+        ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
+        : undefined;
+
+      await gerarPDFCheckin(
+        {
+          checkin: {
+            ...checkin,
+            finalizado: true,
+            assinatura_nome: nomeSignatario,
+            assinatura_path: null,
+            aceite_tipo: 'manual',
+          },
+          avarias,
+          fotos,
+          clienteNome: agendamento.cliente?.nome || 'Cliente',
+          clienteTelefone: agendamento.cliente?.telefone || '',
+          veiculoModelo: agendamento.veiculo?.modelo || 'Veículo',
+          veiculoPlaca: agendamento.veiculo?.placa || '',
+          oficinaNome: tenant.nome || 'Oficina',
+          oficinaTelefone: tenant.telefone || '',
+          oficinaCidadeUF: tenant.cidade && tenant.uf ? `${tenant.cidade}/${tenant.uf}` : undefined,
+          oficinaLogoUrl: logoUrl,
+          oficinaDocumento: tenant.documento,
+          oficinaDocumentoTipo: tenant.documento_tipo,
+          oficinaRazaoSocial: tenant.razao_social,
+          svgElements: {},
+          planoCodigo: tenant.plano,
+          pdfCorPrimaria: tenant.pdf_cor_primaria,
+          pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
+          pdfCorTextoCabecalho: tenant.pdf_cor_texto_cabecalho,
+          pdfCorFundoSecoes: tenant.pdf_cor_fundo_secoes,
+          pdfCorTextoSecoes: tenant.pdf_cor_texto_secoes || (tenant?.id ? localStorage.getItem(`tenant_pdf_cor_texto_secoes_${tenant.id}`) : null),
+          pdfSubtituloCabecalho: tenant.pdf_subtitulo_cabecalho,
+          pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento,
+          pdfTextoRodape: tenant.pdf_texto_rodape,
+          pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
+        },
+        (msg) => setPdfProgressManual(msg)
+      );
+
+      navigate(`/checkin/${checkin.id}/ver`, { replace: true });
+    } catch (err: any) {
+      console.error('[Finalizar Checkin Manual Error]:', err);
+      setError('Erro ao concluir vistoria manual: ' + (err?.message || err));
+    } finally {
+      setSavingStep(false);
+      setGerandoPdfManual(false);
+      setPdfProgressManual('');
     }
   };
 
@@ -530,32 +627,12 @@ export const FormularioCheckin: React.FC = () => {
             </div>
           </div>
 
-          {/* Seletor Visual de Combustível em Oitavos (Botões Grandes 56px) */}
-          <div className="flex flex-col gap-3">
-            <label className="font-sans text-[14px] text-vapor-200 font-semibold flex justify-between">
-              <span>Nível de Combustível (em oitavos):</span>
-              <span className="font-mono text-amber-400 font-bold">
-                {nivelCombustivel === 0 ? 'E (Vazio)' : nivelCombustivel === 8 ? 'F (Cheio)' : `${nivelCombustivel}/8`}
-              </span>
-            </label>
-
-            <div className="grid grid-cols-3 sm:grid-cols-9 gap-2">
-              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setNivelCombustivel(n)}
-                  className={`p-2 rounded-lg border font-mono text-[14px] font-bold transition-all min-h-[56px] flex flex-col items-center justify-center ${
-                    nivelCombustivel === n
-                      ? 'bg-amber-500 text-graphite-950 border-amber-400 shadow-md scale-105'
-                      : 'bg-graphite-900 text-vapor-300 border-graphite-700 hover:bg-graphite-700'
-                  }`}
-                >
-                  <span>{n === 0 ? 'E' : n === 8 ? 'F' : `${n}/8`}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Marcador Digital de Combustível Estilo Painel Automotivo com Barra de Correr */}
+          <MarcadorCombustivelDigital
+            value={nivelCombustivel}
+            onChange={(n) => setNivelCombustivel(n)}
+            disabled={savingStep}
+          />
 
           {/* Luzes do Painel */}
           <div className="flex flex-col gap-3 pt-2">
@@ -840,7 +917,7 @@ export const FormularioCheckin: React.FC = () => {
           </div>
 
           {/* Seleção do Modo de Assinatura */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
               type="button"
               onClick={() => setModoAssinatura('presencial')}
@@ -850,11 +927,11 @@ export const FormularioCheckin: React.FC = () => {
                   : 'bg-graphite-900 border-graphite-700 text-vapor-400 hover:border-graphite-600'
               }`}
             >
-              <strong className="font-sans text-[14px] font-bold flex items-center gap-2">
-                📱 Cliente presente — assinar agora
+              <strong className="font-sans text-[13px] font-bold flex items-center gap-2">
+                📱 Digital na Tela
               </strong>
-              <span className="font-sans text-[12px] opacity-80">
-                Coleta a assinatura digital na própria tela do dispositivo.
+              <span className="font-sans text-[11px] opacity-80">
+                Coleta a assinatura na tela do dispositivo.
               </span>
             </button>
 
@@ -867,11 +944,28 @@ export const FormularioCheckin: React.FC = () => {
                   : 'bg-graphite-900 border-graphite-700 text-vapor-400 hover:border-graphite-600'
               }`}
             >
-              <strong className="font-sans text-[14px] font-bold flex items-center gap-2">
-                💬 Cliente ausente — enviar link para assinar
+              <strong className="font-sans text-[13px] font-bold flex items-center gap-2">
+                💬 Link WhatsApp
               </strong>
-              <span className="font-sans text-[12px] opacity-80">
-                Gera link público e envia no WhatsApp para assinatura à distância.
+              <span className="font-sans text-[11px] opacity-80">
+                Envia link para assinatura à distância.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setModoAssinatura('manual')}
+              className={`p-4 rounded-xl border-2 flex flex-col gap-1 text-left transition-all min-h-[56px] ${
+                modoAssinatura === 'manual'
+                  ? 'bg-cyan-500/10 border-cyan-500 text-vapor-100'
+                  : 'bg-graphite-900 border-graphite-700 text-vapor-400 hover:border-graphite-600'
+              }`}
+            >
+              <strong className="font-sans text-[13px] font-bold flex items-center gap-2 text-cyan-400">
+                📄 Assinatura em Papel
+              </strong>
+              <span className="font-sans text-[11px] opacity-80">
+                Gera PDF para assinatura física e destrava a OS.
               </span>
             </button>
           </div>
@@ -903,6 +997,50 @@ export const FormularioCheckin: React.FC = () => {
                   <strong>Aviso Importante:</strong> Após a assinatura, a vistoria torna-se imutável e não poderá mais ser alterada.
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* FLUXO MANUAL (IMPRESSÃO EM PAPEL) */}
+          {modoAssinatura === 'manual' && (
+            <div className="flex flex-col gap-5 pt-2">
+              <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-xl flex flex-col gap-3">
+                <div className="flex items-center gap-2 text-cyan-400 font-bold font-sans text-[14px]">
+                  <Printer size={18} />
+                  <span>Destravar Vistoria & Gerar PDF para Assinatura Manual</span>
+                </div>
+                <p className="font-sans text-[13px] text-vapor-300 leading-relaxed">
+                  Ao concluir neste modo, a vistoria será <strong>destravada no sistema</strong> sem exigir assinatura digital na tela, liberando a execução do serviço. O PDF oficial com campos para assinatura física no papel será gerado automaticamente.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="font-sans text-[13px] text-vapor-300 font-medium">Nome do Cliente / Signatário:</label>
+                <input
+                  type="text"
+                  value={assinaturaNome}
+                  onChange={(e) => setAssinaturaNome(e.target.value)}
+                  placeholder="Nome completo do cliente"
+                  className="appearance-none bg-graphite-700 border border-graphite-600 rounded-lg p-3 text-vapor-100 placeholder-vapor-600 font-sans text-[14px] outline-none focus:border-cyan-500 min-h-[50px]"
+                />
+              </div>
+
+              {pdfProgressManual && (
+                <div className="p-3 rounded-lg bg-graphite-900 border border-graphite-700 text-cyan-400 text-xs font-mono flex items-center gap-2 animate-pulse">
+                  <FileDown size={16} />
+                  <span>{pdfProgressManual}</span>
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleFinalizarCheckinManual}
+                disabled={savingStep || gerandoPdfManual}
+                className="min-h-[52px] bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-graphite-950 font-bold text-[14px] flex items-center justify-center gap-2 shadow-lg"
+              >
+                <Printer size={18} />
+                <span>{gerandoPdfManual ? 'Gerando Documento...' : 'Concluir Vistoria e Gerar PDF para Assinatura'}</span>
+              </Button>
             </div>
           )}
 

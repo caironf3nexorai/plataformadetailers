@@ -4,23 +4,30 @@ import type { CategoriaVeiculo } from '../../types/clientes';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
+import { useNavigate } from 'react-router-dom';
 import { formatTelefone, formatPlaca } from '../../utils/formatters';
-import { AlertTriangle, Car, Check, UserCheck } from 'lucide-react';
+import { AlertTriangle, Car, Check, UserCheck, FileText } from 'lucide-react';
 import { AlertaErro } from '../ui/AlertaErro';
 
 interface CadastroRapidoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (clienteId: string, veiculoId?: string) => void;
+  onCriarOrcamento?: (orcamentoId: string) => void;
+  iniciarComOrcamento?: boolean;
 }
 
 export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  onCriarOrcamento,
+  iniciarComOrcamento = false,
 }) => {
+  const navigate = useNavigate();
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [criarOrcamentoAgora, setCriarOrcamentoAgora] = useState(iniciarComOrcamento);
   
   // Bloco de veículo
   const [incluirVeiculo, setIncluirVeiculo] = useState(false);
@@ -48,6 +55,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
     setModelo('');
     setErrorMsg(null);
     setExistingVehicle(null);
+    setCriarOrcamentoAgora(iniciarComOrcamento);
 
     // Carrega categorias de veículo ativas
     const fetchCategorias = async () => {
@@ -135,7 +143,28 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         const result = Array.isArray(data) ? data[0] : data;
         const cId = result?.out_cliente_id || result?.cliente_id;
         const vId = result?.out_veiculo_id || result?.veiculo_id;
+
         onSuccess(cId, vId);
+
+        if (criarOrcamentoAgora && cId) {
+          const { data: newOrcId, error: orcErr } = await supabase.rpc('criar_orcamento', {
+            p_cliente: cId,
+            p_veiculo: vId || null,
+            p_categoria: incluirVeiculo ? categoriaId : null,
+            p_titulo: null,
+          });
+
+          if (!orcErr && newOrcId) {
+            onClose();
+            if (onCriarOrcamento) {
+              onCriarOrcamento(newOrcId);
+            } else {
+              navigate(`/orcamentos/${newOrcId}`);
+            }
+            return;
+          }
+        }
+
         onClose();
       }
     } catch (err: any) {
@@ -281,6 +310,22 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
           </div>
         )}
 
+        {/* OPÇÃO DE CRIAR ORÇAMENTO IMEDIATO */}
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
+          <label className="flex items-center gap-2.5 text-xs font-sans text-vapor-200 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={criarOrcamentoAgora}
+              onChange={(e) => setCriarOrcamentoAgora(e.target.checked)}
+              className="w-4 h-4 rounded bg-graphite-900 border-graphite-700 text-amber-500 focus:ring-0"
+            />
+            <span className="font-semibold text-amber-300">
+              Salvar e Abrir Orçamento Imediatamente
+            </span>
+          </label>
+          <FileText size={16} className="text-amber-400 shrink-0" />
+        </div>
+
         {/* Botões de Ação */}
         <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-graphite-700">
           <Button
@@ -295,14 +340,14 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
             type="submit"
             variant="primary"
             disabled={loading}
-            className="min-h-[48px] px-6 font-semibold"
+            className="min-h-[48px] px-6 font-semibold flex items-center gap-2"
           >
             {loading ? (
               'Salvando...'
             ) : (
               <>
                 <Check size={18} />
-                Salvar Cadastro
+                <span>{criarOrcamentoAgora ? 'Salvar & Criar Orçamento' : 'Salvar Cadastro'}</span>
               </>
             )}
           </Button>
