@@ -53,6 +53,7 @@ export const Orcamentos: React.FC = () => {
 
   // Modo de Entrada: Cliente Existente vs Cadastro Rápido Base
   const [modoEntrada, setModoEntrada] = useState<'existente' | 'rapido'>('existente');
+  const [modoOrcamento, setModoOrcamento] = useState<'3_niveis' | 'simples'>('3_niveis');
   const [novoNome, setNovoNome] = useState<string>('');
   const [novoTelefone, setNovoTelefone] = useState<string>('');
   const [novoModelo, setNovoModelo] = useState<string>('');
@@ -73,7 +74,7 @@ export const Orcamentos: React.FC = () => {
         .select(`
           *,
           cliente:clientes(id, nome, telefone),
-          veiculo:veiculos(id, placa, modelo, marca),
+          veiculo:veiculos(id, placa, modelo, marca, cor),
           categoria:categorias_veiculo(id, nome),
           niveis:orcamento_niveis(id, nivel, titulo, valor_total, duracao_total, destaque)
         `)
@@ -169,6 +170,7 @@ export const Orcamentos: React.FC = () => {
           p_categoria: finalCategoriaId,
           p_marca: null,
           p_modelo: novoModelo.trim() || 'Veículo',
+          p_cor: novaCor.trim() || null,
         });
 
         if (cadErr) throw cadErr;
@@ -196,9 +198,12 @@ export const Orcamentos: React.FC = () => {
 
       if (error) throw error;
       if (newId) {
+        const updatePayload: any = { modo_orcamento: modoOrcamento };
         if (validadeDias && validadeDias !== 7) {
-          await supabase.from('orcamentos').update({ validade_dias: validadeDias }).eq('id', newId);
+          updatePayload.validade_dias = validadeDias;
         }
+        await supabase.from('orcamentos').update(updatePayload).eq('id', newId);
+
         setShowModal(false);
         navigate(`/orcamentos/${newId}`);
       }
@@ -595,7 +600,7 @@ export const Orcamentos: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-vapor-300 font-medium">Carro / Modelo *</label>
                   <input
@@ -604,7 +609,7 @@ export const Orcamentos: React.FC = () => {
                     value={novoModelo}
                     onChange={(e) => setNovoModelo(e.target.value)}
                     required={modoEntrada === 'rapido'}
-                    className="bg-graphite-800 border border-graphite-700 rounded px-2 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -614,7 +619,7 @@ export const Orcamentos: React.FC = () => {
                     placeholder="Ex: Preto Cristal"
                     value={novaCor}
                     onChange={(e) => setNovaCor(e.target.value)}
-                    className="bg-graphite-800 border border-graphite-700 rounded px-2 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -624,12 +629,49 @@ export const Orcamentos: React.FC = () => {
                     placeholder="Ex: BRA2E19"
                     value={novaPlaca}
                     onChange={(e) => setNovaPlaca(e.target.value)}
-                    className="bg-graphite-800 border border-graphite-700 rounded px-2 py-1.5 text-xs text-vapor-100 font-mono outline-none focus:border-amber-500 uppercase"
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 font-mono outline-none focus:border-amber-500 uppercase"
                   />
                 </div>
               </div>
             </div>
           )}
+
+          {/* SELETOR DE MODO DO ORÇAMENTO (3 NÍVEIS VS SIMPLES) */}
+          <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-graphite-900 border border-graphite-700">
+            <span className="text-xs font-bold text-vapor-200 uppercase tracking-wider">
+              Formato da Apresentação
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-0.5">
+              <button
+                type="button"
+                onClick={() => setModoOrcamento('3_niveis')}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition ${
+                  modoOrcamento === '3_niveis'
+                    ? 'bg-amber-500/15 border-amber-500 text-amber-400 font-semibold shadow-sm'
+                    : 'bg-graphite-800/80 border-graphite-700 text-vapor-400 hover:text-vapor-200'
+                }`}
+              >
+                <span className="text-[13px] font-bold">Orçamento em 3 Níveis</span>
+                <span className="text-[11px] text-vapor-400 mt-0.5">
+                  Essencial, Recomendado e Premium (maior conversão)
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoOrcamento('simples')}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition ${
+                  modoOrcamento === 'simples'
+                    ? 'bg-amber-500/15 border-amber-500 text-amber-400 font-semibold shadow-sm'
+                    : 'bg-graphite-800/80 border-graphite-700 text-vapor-400 hover:text-vapor-200'
+                }`}
+              >
+                <span className="text-[13px] font-bold">Orçamento Simples</span>
+                <span className="text-[11px] text-vapor-400 mt-0.5">
+                  Lista direta de serviços em proposta de nível único
+                </span>
+              </button>
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="font-sans text-[13px] font-bold text-vapor-200">

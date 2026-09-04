@@ -97,6 +97,7 @@ export interface Agendamento {
     placa: string;
     modelo: string;
     marca: string;
+    cor?: string | null;
   } | null;
   servico?: {
     id: string;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -44,6 +44,7 @@ interface NavGroup {
 }
 
 export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClose }) => {
+  const location = useLocation();
   const { tenant, userTenants, trocarTenant, signOut, profile, membership } = useAuth();
   const { isOperador, podeVerFinanceiro, podeGerirEstoque, podeGerirServicos } = usePermissao();
   const { nomePlano } = usePlano();
@@ -214,28 +215,53 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
                 </div>
 
                 <div className="flex flex-col gap-0.5">
-                  {itensVisiveis.map((item) => (
-                    <NavLink
-                      key={item.path}
-                      to={item.path}
-                      end={item.path === '/'}
-                      onClick={onClose}
-                      className={({ isActive }) =>
-                        `relative flex items-center gap-3 px-3 py-2.5 rounded-lg min-h-[42px] font-sans text-[13.5px] transition-colors ${
-                          isActive
-                            ? 'text-amber-500 font-medium bg-graphite-800 border border-amber-500/30'
-                            : 'text-vapor-300 hover:text-vapor-100 hover:bg-graphite-800/60'
-                        }`
+                  {itensVisiveis.map((item) => {
+                    const isItemActive = (reactRouterActive: boolean) => {
+                      if (item.path === '/servicos') {
+                        return (
+                          (location.pathname === '/servicos' ||
+                            location.pathname.startsWith('/servicos/novo') ||
+                            location.pathname.startsWith('/servicos/precos') ||
+                            /^\/servicos\/[^/]+$/.test(location.pathname)) &&
+                          !location.pathname.startsWith('/servicos/precificacao')
+                        );
                       }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <item.icon size={18} className={isActive ? 'text-amber-500' : 'text-vapor-400'} />
-                          <span className="truncate">{item.label}</span>
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
+                      if (item.path === '/servicos/precificacao') {
+                        return (
+                          location.pathname.startsWith('/servicos/precificacao') ||
+                          location.pathname === '/precificacao'
+                        );
+                      }
+                      return reactRouterActive;
+                    };
+
+                    return (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        end={item.path === '/' || item.path === '/servicos'}
+                        onClick={onClose}
+                        className={({ isActive }) => {
+                          const active = isItemActive(isActive);
+                          return `relative flex items-center gap-3 px-3 py-2.5 rounded-lg min-h-[42px] font-sans text-[13.5px] transition-colors ${
+                            active
+                              ? 'text-amber-500 font-medium bg-graphite-800 border border-amber-500/30'
+                              : 'text-vapor-300 hover:text-vapor-100 hover:bg-graphite-800/60'
+                          }`;
+                        }}
+                      >
+                        {({ isActive }) => {
+                          const active = isItemActive(isActive);
+                          return (
+                            <>
+                              <item.icon size={18} className={active ? 'text-amber-500' : 'text-vapor-400'} />
+                              <span className="truncate">{item.label}</span>
+                            </>
+                          );
+                        }}
+                      </NavLink>
+                    );
+                  })}
                 </div>
               </div>
             );

@@ -4,6 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { Gift, AlertTriangle, Search, CheckCircle2, XCircle, ShieldAlert, Clock } from 'lucide-react';
 
 interface IndicacaoAdminItem {
@@ -33,28 +34,17 @@ export const AdminIndicacoes: React.FC = () => {
   const [indicacaoParaInvalidar, setIndicacaoParaInvalidar] = useState<IndicacaoAdminItem | null>(null);
   const [motivoInvalidacao, setMotivoInvalidacao] = useState('');
   const [processando, setProcessando] = useState(false);
+  const [itemParaConverter, setItemParaConverter] = useState<IndicacaoAdminItem | null>(null);
 
   const carregarIndicacoes = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('indicacoes')
-        .select(`
-          id,
-          codigo,
-          status,
-          motivo_invalidacao,
-          created_at,
-          indicador:tenants!indicacoes_indicador_tenant_id_fkey(id, nome),
-          indicado:tenants!indicacoes_indicado_tenant_id_fkey(id, nome)
-        `)
-        .order('created_at', { ascending: false });
-
+      const { data, error } = await supabase.rpc('admin_listar_todas_indicacoes');
       if (error) throw error;
-      setIndicacoes(data as any[]);
+      setIndicacoes(data || []);
     } catch (err: any) {
       console.error('Erro ao carregar indicações:', err);
-      showError('Erro ao carregar indicações');
+      showError(err.message || 'Erro ao carregar lista de indicações');
     } finally {
       setLoading(false);
     }
@@ -68,21 +58,16 @@ export const AdminIndicacoes: React.FC = () => {
     e.preventDefault();
     if (!indicacaoParaInvalidar) return;
 
-    if (!motivoInvalidacao.trim()) {
-      showError('Informe o motivo da invalidação.');
-      return;
-    }
-
     setProcessando(true);
     try {
       const { error } = await supabase.rpc('admin_invalidar_indicacao', {
         p_indicacao_id: indicacaoParaInvalidar.id,
-        p_motivo: motivoInvalidacao.trim(),
+        p_motivo: motivoInvalidacao,
       });
 
       if (error) throw error;
 
-      showSuccess('Indicação invalidada e estornos de -15 dias aplicados com sucesso!');
+      showSuccess('Indicação invalidada e bônus estornado de ambas as contas com sucesso!');
       setIndicacaoParaInvalidar(null);
       setMotivoInvalidacao('');
       await carregarIndicacoes();
@@ -94,10 +79,13 @@ export const AdminIndicacoes: React.FC = () => {
     }
   };
 
-  const handleConverterManualmente = async (item: IndicacaoAdminItem) => {
-    if (!confirm(`Confirma a conversão manual da indicação para ${item.indicado?.nome || 'a oficina indicada'}? O bônus de +15 dias será concedido ao indicador.`)) {
-      return;
-    }
+  const handleSolicitarConversao = (item: IndicacaoAdminItem) => {
+    setItemParaConverter(item);
+  };
+
+  const executeConverterManualmente = async () => {
+    if (!itemParaConverter) return;
+    const item = itemParaConverter;
 
     setProcessando(true);
     try {
@@ -108,6 +96,7 @@ export const AdminIndicacoes: React.FC = () => {
       if (error) throw error;
 
       showSuccess('Indicação convertida e bônus concedido ao indicador com sucesso!');
+      setItemParaConverter(null);
       await carregarIndicacoes();
     } catch (err: any) {
       console.error('Erro ao converter indicação:', err);
@@ -222,7 +211,7 @@ export const AdminIndicacoes: React.FC = () => {
                         <Button
                           type="button"
                           variant="ghost"
-                          onClick={() => handleConverterManualmente(item)}
+                          onClick={() => handleSolicitarConversao(item)}
                           disabled={processando}
                           className="text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-400/10"
                         >
@@ -304,6 +293,23 @@ export const AdminIndicacoes: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação para Aprovar Conversão */}
+      <ModalConfirmacao
+        isOpen={Boolean(itemParaConverter)}
+        onClose={() => setItemParaConverter(null)}
+        onConfirm={executeConverterManualmente}
+        titulo="Aprovar Conversão de Indicação"
+        mensagem={
+          'Confirma a conversão manual da indicação para ' +
+          (itemParaConverter?.indicado?.nome || 'a oficina indicada') +
+          '? O bônus de +15 dias será concedido imediatamente ao indicador.'
+        }
+        textoConfirmar="Aprovar Conversão"
+        textoCancelar="Cancelar"
+        variant="info"
+        loading={processando}
+      />
     </div>
   );
 };

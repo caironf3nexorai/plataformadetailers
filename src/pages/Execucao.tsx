@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { ModalConfirmacao } from '../components/ui/ModalConfirmacao';
 import {
   Play,
   Pause,
@@ -77,6 +78,13 @@ export const ExecucaoPage: React.FC = () => {
 
   // Estados de OS e Serviços Complementares
   const [showModalComplementar, setShowModalComplementar] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    titulo: string;
+    mensagem: string;
+    textoConfirmar: string;
+    variant?: 'danger' | 'warning' | 'info';
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
   const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
@@ -461,30 +469,37 @@ export const ExecucaoPage: React.FC = () => {
     }
   };
 
-  // Preservar / Despreservar Fotos do Atendimento (Apenas Dono / Gerente)
-  const handleTogglePreservarFotos = async (preservarAtual: boolean) => {
+  // Preservar fotos
+  const handleTogglePreservarFotos = (preservarAtual: boolean) => {
     if (!execucaoId) return;
     const confirmMsg = preservarAtual
       ? 'Deseja remover a preservação das fotos deste atendimento? Elas voltarão a contar o prazo de expurgo normal do seu plano.'
       : 'Deseja preservar as fotos deste atendimento? Elas deixarão de contar prazo de expurgo e passarão a ocupar espaço no acervo permanentemente.';
 
-    if (!window.confirm(confirmMsg)) return;
-
-    setPreservarLoading(true);
-    setErrorMsg(null);
-
-    try {
-      const { error } = await supabase.rpc('preservar_fotos_execucao', {
-        p_execucao: execucaoId,
-        p_preservar: !preservarAtual,
-      });
-
-      if (error) throw error;
-      await loadExecucaoData();
-    } catch (err: any) {
-      console.error('[Preservar fotos error]:', err);
-      setErrorMsg(err?.message || 'Erro ao alterar preservação das fotos.');
-    }
+    setConfirmAction({
+      titulo: 'Preservação de Fotos no Acervo',
+      mensagem: confirmMsg,
+      textoConfirmar: preservarAtual ? 'Remover Preservação' : 'Preservar Fotos',
+      variant: 'info',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setPreservarLoading(true);
+        setErrorMsg(null);
+        try {
+          const { error } = await supabase.rpc('preservar_fotos_execucao', {
+            p_execucao: execucaoId,
+            p_preservar: !preservarAtual,
+          });
+          if (error) throw error;
+          await loadExecucaoData();
+        } catch (err: any) {
+          console.error('[Preservar fotos error]:', err);
+          setErrorMsg(err?.message || 'Erro ao alterar preservação das fotos.');
+        } finally {
+          setPreservarLoading(false);
+        }
+      },
+    });
   };
 
   // Adicionar Co-Executor
@@ -508,24 +523,32 @@ export const ExecucaoPage: React.FC = () => {
   };
 
   // Remover Executor
-  const handleRemoveExecutor = async (memberId: string) => {
+  const handleRemoveExecutor = (memberId: string) => {
     if (!execucaoId || actionExecutorLoading) return;
-    if (!window.confirm('Remover este executor do atendimento?')) return;
-    setActionExecutorLoading(true);
-    setErrorMsg(null);
-    try {
-      const { error } = await supabase.rpc('remover_executor_execucao', {
-        p_execucao_id: execucaoId,
-        p_member_id: memberId,
-      });
-      if (error) throw error;
-      await loadExecucaoData();
-    } catch (err: any) {
-      console.error('[Remove executor error]:', err);
-      setErrorMsg('Não foi possível remover o executor. Tente novamente.');
-    } finally {
-      setActionExecutorLoading(false);
-    }
+    setConfirmAction({
+      titulo: 'Remover Executor da Equipe',
+      mensagem: 'Deseja realmente remover este executor do atendimento?',
+      textoConfirmar: 'Remover',
+      variant: 'danger',
+      onConfirm: async () => {
+        setConfirmAction(null);
+        setActionExecutorLoading(true);
+        setErrorMsg(null);
+        try {
+          const { error } = await supabase.rpc('remover_executor_execucao', {
+            p_execucao_id: execucaoId,
+            p_member_id: memberId,
+          });
+          if (error) throw error;
+          await loadExecucaoData();
+        } catch (err: any) {
+          console.error('[Remove executor error]:', err);
+          setErrorMsg('Não foi possível remover o executor. Tente novamente.');
+        } finally {
+          setActionExecutorLoading(false);
+        }
+      },
+    });
   };
 
   // Agrupamento dos serviços (do agendamento ou dos itens de execução)
@@ -1270,6 +1293,21 @@ export const ExecucaoPage: React.FC = () => {
           onSuccess={() => {
             loadExecucaoData();
           }}
+        />
+      )}
+
+      {/* Modal de Confirmação Genérico */}
+      {confirmAction && (
+        <ModalConfirmacao
+          isOpen={Boolean(confirmAction)}
+          onClose={() => setConfirmAction(null)}
+          onConfirm={confirmAction.onConfirm}
+          titulo={confirmAction.titulo}
+          mensagem={confirmAction.mensagem}
+          textoConfirmar={confirmAction.textoConfirmar}
+          textoCancelar="Cancelar"
+          variant={confirmAction.variant || 'info'}
+          loading={actionExecutorLoading || preservarLoading}
         />
       )}
     </div>

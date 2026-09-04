@@ -130,7 +130,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
       try {
         let q = supabase
           .from('clientes')
-          .select('id, nome, telefone, veiculos(id, placa, modelo, marca, categoria_id, categorias_veiculo(id, nome))')
+          .select('id, nome, telefone, veiculos(id, placa, modelo, marca, cor, categoria_id, categorias_veiculo(id, nome))')
           .eq('tenant_id', currentTenantId)
           .order('nome', { ascending: true })
           .limit(10);
@@ -333,7 +333,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
           nome: novoClienteNome.trim(),
           telefone: novoClienteTelefone.trim()
         })
-        .select('id, nome, telefone, veiculos(id, placa, modelo, marca, categoria_id, categorias_veiculo(id, nome))')
+        .select('id, nome, telefone, veiculos(id, placa, modelo, marca, cor, categoria_id, categorias_veiculo(id, nome))')
         .single();
 
       if (error) throw error;
@@ -552,7 +552,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                     >
                       <div className="flex flex-col">
                         <span className="font-mono text-[13px] font-bold text-vapor-100">
-                          {v.placa} — {v.modelo} ({v.marca})
+                          {v.placa} — {v.modelo} ({v.marca}{v.cor ? ` • Cor: ${v.cor}` : ''})
                         </span>
                         <span className="font-sans text-[11px] text-amber-400">
                           Categoria: {catNome}

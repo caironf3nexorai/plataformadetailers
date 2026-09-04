@@ -707,12 +707,14 @@ const VisaoAgenda: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* ESTADO VAZIO EXPLÍCITO QUANDO NÃO HÁ RESULTADOS */}
-          {agendamentos.length === 0 ? (
+          {/* ESTADO VAZIO EXPLÍCITO QUANDO NÃO HÁ RESULTADOS NA BUSCA OU LISTA */}
+          {agendamentos.length === 0 && (viewMode === 'lista' || debouncedSearch.trim() !== '') ? (
             <Card className="p-12 bg-graphite-900 border-graphite-800 text-center flex flex-col items-center gap-3">
               <CalendarIcon size={40} className="text-vapor-500" />
               <span className="font-display text-[16px] text-vapor-200 uppercase font-bold">
-                Nenhum atendimento encontrado com esses filtros
+                {debouncedSearch.trim()
+                  ? 'Nenhum atendimento encontrado para esta busca'
+                  : 'Nenhum atendimento encontrado com esses filtros'}
               </span>
               <span className="font-sans text-[13px] text-vapor-400 max-w-md">
                 Tente ajustar a busca por texto, selecionar outros status ou alterar o período de exibição.
@@ -744,6 +746,20 @@ const VisaoAgenda: React.FC = () => {
                     return { ag: a, papel };
                   })
                   .filter((item) => item.papel.pertenceAoDia);
+
+                if (agendamentosDiaView.length === 0) {
+                  return (
+                    <Card className="p-10 bg-graphite-900 border-graphite-800 text-center flex flex-col items-center gap-2">
+                      <CalendarIcon size={36} className="text-vapor-500" />
+                      <span className="font-display text-[15px] text-vapor-200 uppercase font-bold">
+                        Nenhum atendimento agendado para este dia
+                      </span>
+                      <span className="font-sans text-[12px] text-vapor-400">
+                        Use o botão acima para adicionar um novo atendimento nesta data.
+                      </span>
+                    </Card>
+                  );
+                }
 
                 return (
                   <div className="flex flex-col gap-3">
@@ -788,7 +804,7 @@ const VisaoAgenda: React.FC = () => {
                                   </span>
                                 )}
                                 <span className={`font-mono text-[16px] font-bold text-vapor-100 ${isCancelado ? 'line-through' : ''}`}>
-                                  {ag.veiculo ? `${ag.veiculo.placa} (${ag.veiculo.modelo})` : 'Sem veículo'}
+                                  {ag.veiculo ? `${ag.veiculo.placa} (${ag.veiculo.modelo || ''}${ag.veiculo.cor ? ` • ${ag.veiculo.cor}` : ''})` : 'Sem veículo'}
                                 </span>
                                 <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-graphite-800 text-amber-400 border border-graphite-700">
                                   {formatarOS(ag.numero_os)}
@@ -1052,7 +1068,7 @@ const VisaoAgenda: React.FC = () => {
                               <div className="flex flex-col gap-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`font-mono text-[15px] font-bold text-vapor-100 ${isCancelado ? 'line-through' : ''}`}>
-                                    {ag.veiculo ? `${ag.veiculo.placa} (${ag.veiculo.modelo})` : 'Sem veículo'}
+                                    {ag.veiculo ? `${ag.veiculo.placa} (${ag.veiculo.modelo || ''}${ag.veiculo.cor ? ` • ${ag.veiculo.cor}` : ''})` : 'Sem veículo'}
                                   </span>
                                   <span className="font-sans text-[12px] text-vapor-400">
                                     • {dataFormatada}

@@ -9,7 +9,7 @@ import {
   formatarNomeAvaria,
   formatarNomeVista,
 } from '../../utils/checkin';
-import { getEvidenciaSignedUrl } from '../../utils/evidencias';
+import { getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
 import { gerarPDFCheckin } from '../../utils/pdfCheckin';
 import { DiagramaVeiculo } from '../../components/checkin/DiagramaVeiculo';
 import { Card } from '../../components/ui/Card';
@@ -24,6 +24,8 @@ import {
   AlertTriangle,
   Camera,
   Play,
+  Eye,
+  X,
 } from 'lucide-react';
 
 export const VisualizarCheckin: React.FC = () => {
@@ -41,6 +43,7 @@ export const VisualizarCheckin: React.FC = () => {
   const [fotos, setFotos] = useState<CheckinFoto[]>([]);
   const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
   const [assinaturaSignedUrl, setAssinaturaSignedUrl] = useState<string>('');
+  const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; data?: string } | null>(null);
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string>('');
@@ -451,13 +454,43 @@ export const VisualizarCheckin: React.FC = () => {
               const url = signedPhotoUrls[ft.id];
               return (
                 <div key={ft.id} className="flex flex-col gap-1">
-                  <div className="group relative rounded-lg overflow-hidden border border-graphite-700 bg-graphite-950 aspect-video">
+                  <div
+                    onClick={() => {
+                      if (url) {
+                        setFotoModal({
+                          url,
+                          titulo: ft.descricao || 'Foto da Vistoria',
+                          data: ft.created_at,
+                        });
+                      }
+                    }}
+                    className="group relative rounded-lg overflow-hidden border border-graphite-700 bg-graphite-950 aspect-video cursor-pointer hover:border-amber-500 transition-colors"
+                  >
                     {url ? (
-                      <img src={url} alt={ft.descricao || 'Foto de vistoria'} className="w-full h-full object-cover" />
+                      <img src={url} alt={ft.descricao || 'Foto de vistoria'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-vapor-500 font-mono text-[11px]">
                         Carregando...
                       </div>
+                    )}
+                    <div className="absolute inset-0 bg-graphite-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <Eye size={20} className="text-vapor-100" />
+                    </div>
+                    {url && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          baixarFoto(
+                            url,
+                            `vistoria_${agendamento?.veiculo?.placa || 'foto'}_${ft.id.slice(0, 8)}.jpg`
+                          );
+                        }}
+                        className="absolute top-1.5 right-1.5 p-1.5 bg-graphite-950/80 hover:bg-amber-500 hover:text-graphite-950 text-vapor-200 rounded-md border border-graphite-700 opacity-0 group-hover:opacity-100 transition shadow"
+                        title="Baixar Foto"
+                      >
+                        <Download size={13} />
+                      </button>
                     )}
                     {ft.descricao && (
                       <div className="absolute inset-x-0 bottom-0 p-1.5 bg-graphite-950/80 backdrop-blur text-[11px] font-sans text-vapor-200 truncate">
@@ -517,8 +550,16 @@ export const VisualizarCheckin: React.FC = () => {
           </div>
 
           {assinaturaSignedUrl ? (
-            <div className="p-2 bg-graphite-950 rounded-lg border border-graphite-700">
+            <div className="p-2 bg-graphite-950 rounded-lg border border-graphite-700 flex items-center gap-2">
               <img src={assinaturaSignedUrl} alt="Assinatura do cliente" className="h-16 object-contain" />
+              <button
+                type="button"
+                onClick={() => baixarFoto(assinaturaSignedUrl, `assinatura_${agendamento?.veiculo?.placa || 'cliente'}.png`)}
+                className="p-1.5 text-vapor-400 hover:text-amber-400 hover:bg-graphite-800 rounded transition"
+                title="Baixar Assinatura"
+              >
+                <Download size={14} />
+              </button>
             </div>
           ) : (
             <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 text-center flex flex-col items-center">
@@ -528,6 +569,58 @@ export const VisualizarCheckin: React.FC = () => {
           )}
         </div>
       </Card>
+
+      {/* Modal Lightbox de Foto */}
+      {fotoModal && (
+        <div
+          className="fixed inset-0 z-50 bg-graphite-950/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setFotoModal(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full bg-graphite-900 border border-graphite-700 rounded-xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-graphite-800 flex items-center justify-between bg-graphite-950/50">
+              <div className="flex flex-col">
+                <span className="font-sans text-[13px] font-bold text-vapor-100">{fotoModal.titulo}</span>
+                {fotoModal.data && (
+                  <span className="font-mono text-[11px] text-vapor-400">
+                    {formatarData(fotoModal.data)} às {formatarHora(fotoModal.data)}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    baixarFoto(
+                      fotoModal.url,
+                      `vistoria_${agendamento?.veiculo?.placa ? agendamento.veiculo.placa + '_' : ''}${fotoModal.titulo || 'foto'}.jpg`
+                    )
+                  }
+                  className="h-8 px-3 text-xs flex items-center gap-1.5 text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                  title="Baixar foto no computador"
+                >
+                  <Download size={13} />
+                  <span>Baixar Foto</span>
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setFotoModal(null)}
+                  className="p-1.5 text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 rounded-lg transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="p-2 flex items-center justify-center bg-black/50 max-h-[75vh] overflow-auto">
+              <img src={fotoModal.url} alt={fotoModal.titulo} className="max-w-full max-h-[70vh] object-contain rounded" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

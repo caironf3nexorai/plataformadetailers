@@ -41,23 +41,23 @@ export const AdminLayout: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
       {/* Top Header Bar */}
       <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur border-b border-amber-500/20 shadow-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 gap-3">
+        <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-3">
             
             {/* Logo / Badge (Fixed Left) */}
-            <div className="flex items-center space-x-3 shrink-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
               <NavLink to="/" className="hover:opacity-90 transition-opacity">
-                <LogoNuvemWash size="xs" height={22} />
+                <LogoNuvemWash size="xs" height={20} />
               </NavLink>
-              <div className="flex items-center space-x-1.5 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/40 px-2 py-1 rounded-lg shadow-inner">
-                <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="font-heading font-black tracking-wider text-[11px] text-amber-400 uppercase hidden sm:inline">
+              <div className="flex items-center space-x-1 sm:space-x-1.5 bg-gradient-to-r from-amber-500/20 to-amber-600/10 border border-amber-500/40 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg shadow-inner">
+                <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+                <span className="font-heading font-black tracking-wider text-[10px] sm:text-[11px] text-amber-400 uppercase hidden sm:inline">
                   PAINEL ADMIN
                 </span>
               </div>
               
               {/* Admin level badge */}
-              <span className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-mono font-semibold border shrink-0 ${
+              <span className={`text-[9px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-mono font-semibold border shrink-0 ${
                 adminLevel === 'admin' 
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                   : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
@@ -76,7 +76,7 @@ export const AdminLayout: React.FC = () => {
                     to={item.path}
                     end={true}
                     className={({ isActive }) =>
-                      `flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-150 shrink-0 ${
+                      `flex items-center space-x-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
                         isActive
                           ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-bold'
                           : 'text-slate-300 hover:bg-slate-800 hover:text-white'
@@ -91,18 +91,19 @@ export const AdminLayout: React.FC = () => {
             </nav>
 
             {/* User info, Notifications & Exit (Fixed Right) */}
-            <div className="flex items-center space-x-2 shrink-0">
+            <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
               <CentralNotificacoesMenu align="right" />
               <span className="hidden xl:inline text-[11px] text-slate-400 font-mono max-w-[150px] truncate">
                 {adminEmail}
               </span>
               <button
                 onClick={() => navigate('/')}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition shrink-0 shadow-sm"
+                className="flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition shrink-0 shadow-sm"
                 title="Sair do Painel Admin e voltar para a Oficina"
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Voltar ao App</span>
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Voltar ao App</span>
+                <span className="sm:hidden text-[11px]">Voltar</span>
               </button>
             </div>
           </div>

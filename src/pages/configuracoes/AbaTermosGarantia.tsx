@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { EmptyState } from '../../components/ui/EmptyState';
 import {
   ShieldCheck,
@@ -177,18 +178,30 @@ export const AbaTermosGarantia: React.FC = () => {
     }
   };
 
-  const handleExcluirTermo = async (id: string) => {
-    if (!tenant) return;
-    if (!confirm('Deseja realmente remover este termo de garantia?')) return;
+  const [termoParaExcluir, setTermoParaExcluir] = useState<string | null>(null);
+  const [excluindoTermo, setExcluindoTermo] = useState(false);
+
+  const handleSolicitarExcluirTermo = (id: string) => {
+    setTermoParaExcluir(id);
+  };
+
+  const executeExcluirTermo = async () => {
+    if (!tenant || !termoParaExcluir) return;
+    const id = termoParaExcluir;
+    setExcluindoTermo(true);
 
     try {
       await supabase.from('termos_garantia').delete().eq('id', id);
       const restantes = termos.filter((t) => t.id !== id);
       setTermos(restantes);
       localStorage.setItem(`termos_garantia_${tenant.id}`, JSON.stringify(restantes));
-      showSuccess('Termo de garantia excluído.');
+      showSuccess('Termo de garantia excluído com sucesso.');
     } catch (e: any) {
       console.error('[Excluir Termo Error]:', e);
+      showError('Erro ao excluir termo de garantia.');
+    } finally {
+      setExcluindoTermo(false);
+      setTermoParaExcluir(null);
     }
   };
 
@@ -335,7 +348,7 @@ export const AbaTermosGarantia: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleExcluirTermo(termo.id)}
+                        onClick={() => handleSolicitarExcluirTermo(termo.id)}
                         className="p-1.5 text-vapor-400 hover:text-flare-400 hover:bg-graphite-800 rounded transition-colors"
                         title="Excluir Termo"
                       >
@@ -478,6 +491,19 @@ export const AbaTermosGarantia: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Modal de Confirmação para Excluir Termo */}
+      <ModalConfirmacao
+        isOpen={Boolean(termoParaExcluir)}
+        onClose={() => setTermoParaExcluir(null)}
+        onConfirm={executeExcluirTermo}
+        titulo="Excluir Termo de Garantia"
+        mensagem="Deseja realmente remover este termo de garantia? Ele não será mais sugerido automaticamente na geração de propostas e orçamentos."
+        textoConfirmar="Excluir Termo"
+        textoCancelar="Cancelar"
+        variant="danger"
+        loading={excluindoTermo}
+      />
     </div>
   );
 };

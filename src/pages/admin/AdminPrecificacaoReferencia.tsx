@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAdminAuth } from '../../components/admin/AdminGuard';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { 
   TrendingUp, 
   Plus, 
@@ -66,6 +67,7 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
   const [formFonte, setFormFonte] = useState<'plataforma' | 'comunidade'>('plataforma');
   const [formAmostra, setFormAmostra] = useState('0');
   const [saving, setSaving] = useState(false);
+  const [idParaExcluir, setIdParaExcluir] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -183,9 +185,14 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (isReadOnly) return;
-    if (!window.confirm('Tem certeza que deseja excluir esta faixa de referência?')) return;
+    setIdParaExcluir(id);
+  };
+
+  const executeDelete = async () => {
+    if (!idParaExcluir || isReadOnly) return;
+    const id = idParaExcluir;
 
     try {
       const { error: delErr } = await supabase
@@ -194,11 +201,13 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
         .eq('id', id);
 
       if (delErr) throw delErr;
-      setSuccess('Referência excluída!');
+      setSuccess('Referência excluída com sucesso!');
       await loadData();
     } catch (err: any) {
       console.error('[AdminPrecificacao] Erro ao excluir:', err);
       setError(err.message || 'Erro ao excluir referência.');
+    } finally {
+      setIdParaExcluir(null);
     }
   };
 
@@ -557,6 +566,19 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação para Excluir Referência */}
+      <ModalConfirmacao
+        isOpen={Boolean(idParaExcluir)}
+        onClose={() => setIdParaExcluir(null)}
+        onConfirm={executeDelete}
+        titulo="Excluir Faixa de Referência"
+        mensagem="Tem certeza que deseja excluir esta faixa de referência de mercado? As oficinas da região não terão mais este balizador."
+        textoConfirmar="Excluir Faixa"
+        textoCancelar="Cancelar"
+        variant="danger"
+        loading={saving}
+      />
     </div>
   );
 };

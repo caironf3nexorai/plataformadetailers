@@ -21,13 +21,19 @@ import {
   User as UserIcon,
   FileCheck,
   Clock,
+  Eye,
+  X,
+  ExternalLink,
 } from 'lucide-react';
 import { downloadFotosAtendimentoZip } from '../../utils/zipFotos';
 import { navegarParaAtendimento } from '../../utils/navegacaoAtendimento';
+import { getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
+import { ModalConfirmacao } from '../ui/ModalConfirmacao';
 
 interface AtendimentoAcervo {
   execucaoId: string;
-  agendamentoId: string;
+  agendamentoId?: string | null;
+  checkinId?: string | null;
   placa: string;
   modelo: string;
   clienteNome: string;
@@ -62,6 +68,16 @@ export const AbaArquivosDigitais: React.FC = () => {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [confirmPreservarOpen, setConfirmPreservarOpen] = useState(false);
+  const [previewModal, setPreviewModal] = useState<{
+    title: string;
+    placa?: string;
+    execucaoId?: string;
+    rawItem?: AtendimentoAcervo;
+    photos: Array<{ id: string; url: string; tipo?: string }>;
+  } | null>(null);
+  const [fotoExpandida, setFotoExpandida] = useState<{ url: string; titulo: string } | null>(null);
+  const [loadingPreviewId, setLoadingPreviewId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!tenant) return;
@@ -130,7 +146,9 @@ export const AbaArquivosDigitais: React.FC = () => {
       if (checkinFotosData) {
         checkinFotosData.forEach((f: any) => {
           const ag = f.checkins?.agendamentos;
-          const key = f.checkins?.agendamento_id || f.checkins?.id;
+          const chkId = f.checkins?.id;
+          const agendId = f.checkins?.agendamento_id;
+          const key = agendId || chkId;
           if (!key) return;
 
           const placa = ag?.veiculo?.placa || 'Sem placa';
@@ -141,7 +159,8 @@ export const AbaArquivosDigitais: React.FC = () => {
           if (!mapa.has(key)) {
             mapa.set(key, {
               execucaoId: key,
-              agendamentoId: f.checkins?.agendamento_id,
+              agendamentoId: agendId,
+              checkinId: chkId,
               placa,
               modelo,
               clienteNome,
@@ -156,6 +175,8 @@ export const AbaArquivosDigitais: React.FC = () => {
             const item = mapa.get(key)!;
             item.qtdVistoria += 1;
             item.totalFotos += 1;
+            if (chkId && !item.checkinId) item.checkinId = chkId;
+            if (agendId && !item.agendamentoId) item.agendamentoId = agendId;
             item.fotos.push({ id: f.id, path: f.path, tipo: 'vistoria' });
           }
         });
@@ -166,6 +187,9 @@ export const AbaArquivosDigitais: React.FC = () => {
         execFotosData.forEach((f: any) => {
           const execId = f.execucao_id;
           const ag = f.execucoes?.agendamentos;
+          const agendId = f.execucoes?.agendamento_id;
+          // Unifica no mesmo card se já existir no mapa pelo agendamento_id
+          const key = (agendId && mapa.has(agendId)) ? agendId : execId;
           const placa = ag?.veiculo?.placa || 'Sem placa';
           const modelo = ag?.veiculo?.modelo || '';
           const clienteNome = ag?.cliente?.nome || 'Cliente';
@@ -178,10 +202,10 @@ export const AbaArquivosDigitais: React.FC = () => {
             dias = Math.max(0, Math.ceil((expTime - Date.now()) / (1000 * 60 * 60 * 24)));
           }
 
-          if (!mapa.has(execId)) {
-            mapa.set(execId, {
+          if (!mapa.has(key)) {
+            mapa.set(key, {
               execucaoId: execId,
-              agendamentoId: f.execucoes?.agendamento_id,
+              agendamentoId: agendId,
               placa,
               modelo,
               clienteNome,
@@ -195,10 +219,14 @@ export const AbaArquivosDigitais: React.FC = () => {
               fotos: [{ id: f.id, path: f.path, momento: f.momento, tipo: 'execucao' }],
             });
           } else {
-            const item = mapa.get(execId)!;
+            const item = mapa.get(key)!;
             item.qtdExecucao += 1;
             item.totalFotos += 1;
-            if (!f.preservada) item.preservada = false; // se tiver ao menos uma não preservada
+            if (execId && item.execucaoId === item.agendamentoId) {
+              item.execucaoId = execId;
+            }
+            if (agendId && !item.agendamentoId) item.agendamentoId = agendId;
+            if (!f.preservada) item.preservada = false;
             if (dias !== null && (item.diasRestantes === undefined || item.diasRestantes === null || dias < item.diasRestantes)) {
               item.diasRestantes = dias;
               item.expiradoEm = expIso;
@@ -290,15 +318,36 @@ export const AbaArquivosDigitais: React.FC = () => {
     });
   };
 
-  const handlePreservarSelecionados = async () => {
-    if (selectedVencendoIds.size === 0) return;
-    if (
-      !window.confirm(
-        `Deseja preservar as fotos de ${selectedVencendoIds.size} atendimento(s) selecionado(s)? Elas passarão ao acervo permanente.`
-      )
-    ) {
-      return;
+  const handleAbrirFotosPreview = async (item: AtendimentoAcervo) => {
+    setLoadingPreviewId(item.execucaoId);
+    try {
+      const photosWithUrls = await Promise.all(
+        item.fotos.map(async (f) => {
+          const sUrl = await getEvidenciaSignedUrl(f.path);
+          return { id: f.id, url: sUrl || f.path, tipo: f.tipo };
+        })
+      );
+      setPreviewModal({
+        title: `${item.placa.toUpperCase()} - ${item.modelo || 'Veículo'} (${item.clienteNome})`,
+        placa: item.placa,
+        execucaoId: item.execucaoId,
+        rawItem: item,
+        photos: photosWithUrls,
+      });
+    } catch (err) {
+      console.error('[AbaArquivosDigitais] Erro ao carregar preview de fotos:', err);
+    } finally {
+      setLoadingPreviewId(null);
     }
+  };
+
+  const handlePreservarSelecionados = () => {
+    if (selectedVencendoIds.size === 0) return;
+    setConfirmPreservarOpen(true);
+  };
+
+  const handleConfirmarPreservar = async () => {
+    if (selectedVencendoIds.size === 0) return;
 
     setActionLoading(true);
     setErrorMsg(null);
@@ -313,12 +362,14 @@ export const AbaArquivosDigitais: React.FC = () => {
         if (error) throw error;
       }
 
-      setSuccessMsg(`${selectedVencendoIds.size} atendimento(s) preservado(s) com sucesso!`);
+      setSuccessMsg(
+        `${selectedVencendoIds.size} atendimento(s) preservados com sucesso no acervo permanente.`
+      );
       setSelectedVencendoIds(new Set());
+      setConfirmPreservarOpen(false);
       await loadData();
     } catch (err: any) {
-      console.error('[Preservar Lote error]:', err);
-      setErrorMsg('Erro ao preservar fotos em lote: ' + err.message);
+      setErrorMsg(err.message || 'Erro ao preservar fotos selecionadas.');
     } finally {
       setActionLoading(false);
     }
@@ -590,10 +641,33 @@ export const AbaArquivosDigitais: React.FC = () => {
                         <Button
                           type="button"
                           variant="secondary"
-                          onClick={() => navegarParaAtendimento(navigate, item.execucaoId, item.agendamentoId)}
-                          className="text-xs h-9 px-3"
+                          onClick={() => handleAbrirFotosPreview(item)}
+                          disabled={loadingPreviewId === item.execucaoId}
+                          className="text-xs h-9 px-3 flex items-center gap-1.5 text-amber-400 border-amber-500/30 hover:bg-amber-500/10 font-medium"
                         >
-                          Ver
+                          {loadingPreviewId === item.execucaoId ? (
+                            <div className="w-3.5 h-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Eye size={14} />
+                          )}
+                          <span>Ver Fotos</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            if (item.qtdExecucao === 0 && item.checkinId) {
+                              navigate(`/checkin/${item.checkinId}/ver`);
+                            } else {
+                              navegarParaAtendimento(navigate, item.execucaoId, item.agendamentoId);
+                            }
+                          }}
+                          className="text-xs h-9 px-2.5 flex items-center gap-1 text-vapor-300 hover:text-vapor-100"
+                          title="Abrir vistoria ou ficha completa deste atendimento"
+                        >
+                          <ExternalLink size={13} />
+                          <span>{item.qtdExecucao === 0 ? 'Ver Vistoria' : 'Ficha'}</span>
                         </Button>
                       </div>
                     </div>
@@ -761,6 +835,172 @@ export const AbaArquivosDigitais: React.FC = () => {
           </Card>
         </>
       )}
+
+      {/* Modal Lightbox de Preview de Fotos do Acervo */}
+      {previewModal && (
+        <div
+          className="fixed inset-0 z-50 bg-graphite-950/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setPreviewModal(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full bg-graphite-900 border border-graphite-700 rounded-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3.5 border-b border-graphite-800 flex items-center justify-between bg-graphite-950/60 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <HardDrive size={18} className="text-amber-400" />
+                <span className="font-sans text-[14px] font-bold text-vapor-100">
+                  {previewModal.title}
+                </span>
+                <span className="font-mono text-xs text-vapor-400 bg-graphite-800 px-2 py-0.5 rounded border border-graphite-700">
+                  {previewModal.photos.length} foto(s)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {previewModal.photos.length > 0 && previewModal.rawItem && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleBaixarZip(previewModal.rawItem!)}
+                    disabled={downloadingId === previewModal.rawItem.execucaoId}
+                    className="h-8 px-2.5 text-xs flex items-center gap-1.5 text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                    title="Baixar todas as fotos em arquivo ZIP"
+                  >
+                    <Download size={13} />
+                    <span>Baixar Todas (ZIP)</span>
+                  </Button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreviewModal(null)}
+                  className="p-1.5 text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 rounded-lg transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex flex-col gap-4">
+              {previewModal.photos.length === 0 ? (
+                <div className="p-8 text-center text-vapor-400 italic text-sm">
+                  Nenhuma foto encontrada neste atendimento.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {previewModal.photos.map((p, idx) => (
+                    <div
+                      key={p.id}
+                      className="flex flex-col gap-2 p-2.5 rounded-lg bg-graphite-800/80 border border-graphite-700 hover:border-graphite-600 transition"
+                    >
+                      <div
+                        onClick={() =>
+                          setFotoExpandida({
+                            url: p.url,
+                            titulo: `${previewModal.placa || 'Veículo'} - ${p.tipo === 'vistoria' ? 'Vistoria' : 'Execução'} (Foto ${idx + 1})`,
+                          })
+                        }
+                        className="aspect-square rounded overflow-hidden bg-graphite-900 relative group cursor-pointer"
+                        title="Clique para abrir e ampliar"
+                      >
+                        <img
+                          src={p.url}
+                          alt="Evidência"
+                          className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                          <Eye size={22} className="text-white" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-1 pt-1 border-t border-graphite-700/60">
+                        <span className="text-[11px] font-sans font-medium uppercase tracking-wider text-amber-400 truncate">
+                          {p.tipo === 'vistoria' ? 'Vistoria' : 'Execução / Saída'}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            baixarFoto(
+                              p.url,
+                              `foto_${previewModal.placa || 'atendimento'}_${p.tipo || 'evidencia'}_${idx + 1}.jpg`
+                            );
+                          }}
+                          className="h-7 px-2 text-[11px] flex items-center gap-1 text-amber-400 border-graphite-700 hover:bg-amber-500 hover:text-graphite-950 transition shrink-0"
+                          title="Baixar esta foto no dispositivo"
+                        >
+                          <Download size={12} />
+                          <span>Baixar</span>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox de Foto Expandida com Download */}
+      {fotoExpandida && (
+        <div
+          className="fixed inset-0 z-[60] bg-graphite-950/95 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setFotoExpandida(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full bg-graphite-900 border border-graphite-700 rounded-xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-graphite-800 flex items-center justify-between bg-graphite-950/70">
+              <span className="font-sans text-[13px] font-bold text-vapor-100 truncate pr-2">
+                {fotoExpandida.titulo}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => baixarFoto(fotoExpandida.url, `${fotoExpandida.titulo}.jpg`)}
+                  className="h-8 px-3 flex items-center gap-1.5 text-amber-400 border-amber-500/40 hover:bg-amber-500/20"
+                  title="Baixar foto em alta resolução"
+                >
+                  <Download size={14} />
+                  <span>Baixar Foto</span>
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setFotoExpandida(null)}
+                  className="p-1.5 text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 rounded-lg transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="p-2 flex items-center justify-center bg-black/60 max-h-[75vh] overflow-auto">
+              <img
+                src={fotoExpandida.url}
+                alt={fotoExpandida.titulo}
+                className="max-w-full max-h-[70vh] object-contain rounded"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de Preservação em Lote */}
+      <ModalConfirmacao
+        isOpen={confirmPreservarOpen}
+        onClose={() => setConfirmPreservarOpen(false)}
+        onConfirm={handleConfirmarPreservar}
+        title="Preservar Fotos no Acervo Permanente"
+        description={`Deseja preservar as fotos de ${selectedVencendoIds.size} atendimento(s) selecionado(s)? Elas serão mantidas permanentemente e não expirarão.`}
+        confirmText="Sim, Preservar"
+        cancelText="Cancelar"
+        variant="warning"
+        isLoading={actionLoading}
+      />
     </div>
   );
 };

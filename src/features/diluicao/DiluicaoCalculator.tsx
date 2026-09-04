@@ -11,21 +11,35 @@ interface DiluicaoCalculatorProps {
 export const DiluicaoCalculator: React.FC<DiluicaoCalculatorProps> = ({ variant }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'maquina'>('manual');
 
-  // Estado dos Perfis de Equipamento (somente React local nesta etapa, sem localStorage/Supabase)
-  const [perfis, setPerfis] = useState<EquipamentoPerfilData[]>([]);
+  // Estado dos Perfis de Equipamento persistido em localStorage
+  const [perfis, setPerfis] = useState<EquipamentoPerfilData[]>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_perfis');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
 
   const handleSavePerfil = (data: Omit<EquipamentoPerfilData, 'id' | 'createdAt'>) => {
-    if (perfis.length >= 3) return;
+    if (perfis.length >= 5) return;
     const newPerfil: EquipamentoPerfilData = {
       ...data,
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
     };
-    setPerfis([...perfis, newPerfil]);
+    const updated = [...perfis, newPerfil];
+    setPerfis(updated);
+    try {
+      localStorage.setItem('nuvemwash_lavadora_perfis', JSON.stringify(updated));
+    } catch {}
   };
 
   const handleDeletePerfil = (id: string) => {
-    setPerfis(perfis.filter((p) => p.id !== id));
+    const updated = perfis.filter((p) => p.id !== id);
+    setPerfis(updated);
+    try {
+      localStorage.setItem('nuvemwash_lavadora_perfis', JSON.stringify(updated));
+    } catch {}
   };
 
   return (

@@ -6,52 +6,54 @@ import { NotificacoesProvider } from './contexts/NotificacoesContext';
 import { RotaProtegida } from './components/auth/RotaProtegida';
 import { AppShell } from './components/layout/AppShell';
 
-// Páginas Públicas
-import { CalculadoraPublica } from './pages/CalculadoraPublica';
-import { CatalogoPublico } from './pages/CatalogoPublico';
-import { FluxoAgendamentoOnline } from './pages/FluxoAgendamentoOnline';
+// Páginas Públicas (Carregamento Assíncrono sob Demanda)
+const CalculadoraPublica = lazy(() => import('./pages/CalculadoraPublica').then(m => ({ default: m.CalculadoraPublica })));
+const CatalogoPublico = lazy(() => import('./pages/CatalogoPublico').then(m => ({ default: m.CatalogoPublico })));
+const FluxoAgendamentoOnline = lazy(() => import('./pages/FluxoAgendamentoOnline').then(m => ({ default: m.FluxoAgendamentoOnline })));
+const PoliticaPrivacidade = lazy(() => import('./pages/public/PoliticaPrivacidade').then(m => ({ default: m.PoliticaPrivacidade })));
+const TermosUso = lazy(() => import('./pages/public/TermosUso').then(m => ({ default: m.TermosUso })));
+const PaginaConvite = lazy(() => import('./pages/public/PaginaConvite').then(m => ({ default: m.PaginaConvite })));
+const PaginaParceiro = lazy(() => import('./pages/public/PaginaParceiro').then(m => ({ default: m.PaginaParceiro })));
+
+// Páginas de Autenticação
 import { Entrar } from './pages/auth/Entrar';
 import { CriarConta } from './pages/auth/CriarConta';
 import { NovaOficina } from './pages/auth/NovaOficina';
 import { Convite } from './pages/auth/Convite';
 import { RecuperarSenha } from './pages/auth/RecuperarSenha';
-import { PoliticaPrivacidade } from './pages/public/PoliticaPrivacidade';
-import { TermosUso } from './pages/public/TermosUso';
-import { PaginaConvite } from './pages/public/PaginaConvite';
-import { PaginaParceiro } from './pages/public/PaginaParceiro';
 
-// Páginas Internas
+// Páginas Principais (Core)
 import { Dashboard } from './pages/Dashboard';
 import { Agenda } from './pages/Agenda';
 import { Clientes } from './pages/Clientes';
-import { DetalheCliente } from './pages/clientes/DetalheCliente';
-import { DetalheVeiculo } from './pages/clientes/DetalheVeiculo';
-import { Orcamentos } from './pages/Orcamentos';
-import { DetalheOrcamento } from './pages/orcamentos/DetalheOrcamento';
-import { OrcamentoPublico } from './pages/OrcamentoPublico';
-import { Estoque } from './pages/Estoque';
-import { Financeiro } from './pages/Financeiro';
-import { ContasReceber } from './pages/financeiro/ContasReceber';
-import { ConfigFormasPagamento } from './pages/financeiro/ConfigFormasPagamento';
-import { Configuracoes } from './pages/Configuracoes';
-import { Treinamentos } from './pages/Treinamentos';
-import { ArquivosDigitaisPage } from './pages/ArquivosDigitaisPage';
-import { IndiqueEGanhe } from './pages/IndiqueEGanhe';
-import { DiluicaoInterna } from './pages/DiluicaoInterna';
-import { PaginaPlanos } from './pages/planos/PaginaPlanos';
 
-// Páginas de Serviços
-import { Servicos } from './pages/Servicos';
-import { FormularioServico } from './pages/servicos/FormularioServico';
-import { MatrizPrecos } from './pages/servicos/MatrizPrecos';
-import { Precificacao } from './pages/servicos/Precificacao';
+// Páginas Internas Especializadas (Carregamento Tardio / Lazy)
+const DetalheCliente = lazy(() => import('./pages/clientes/DetalheCliente').then(m => ({ default: m.DetalheCliente })));
+const DetalheVeiculo = lazy(() => import('./pages/clientes/DetalheVeiculo').then(m => ({ default: m.DetalheVeiculo })));
+const Orcamentos = lazy(() => import('./pages/Orcamentos').then(m => ({ default: m.Orcamentos })));
+const DetalheOrcamento = lazy(() => import('./pages/orcamentos/DetalheOrcamento').then(m => ({ default: m.DetalheOrcamento })));
+const OrcamentoPublico = lazy(() => import('./pages/OrcamentoPublico').then(m => ({ default: m.OrcamentoPublico })));
+const Estoque = lazy(() => import('./pages/Estoque').then(m => ({ default: m.Estoque })));
+const Financeiro = lazy(() => import('./pages/Financeiro').then(m => ({ default: m.Financeiro })));
+const ContasReceber = lazy(() => import('./pages/financeiro/ContasReceber').then(m => ({ default: m.ContasReceber })));
+const ConfigFormasPagamento = lazy(() => import('./pages/financeiro/ConfigFormasPagamento').then(m => ({ default: m.ConfigFormasPagamento })));
+const Configuracoes = lazy(() => import('./pages/Configuracoes').then(m => ({ default: m.Configuracoes })));
+const Treinamentos = lazy(() => import('./pages/Treinamentos').then(m => ({ default: m.Treinamentos })));
+const ArquivosDigitaisPage = lazy(() => import('./pages/ArquivosDigitaisPage').then(m => ({ default: m.ArquivosDigitaisPage })));
+const IndiqueEGanhe = lazy(() => import('./pages/IndiqueEGanhe').then(m => ({ default: m.IndiqueEGanhe })));
+const DiluicaoInterna = lazy(() => import('./pages/DiluicaoInterna').then(m => ({ default: m.DiluicaoInterna })));
+const PaginaPlanos = lazy(() => import('./pages/planos/PaginaPlanos').then(m => ({ default: m.PaginaPlanos })));
 
-import { FormularioCheckin } from './pages/checkin/FormularioCheckin';
-import { VisualizarCheckin } from './pages/checkin/VisualizarCheckin';
-import { ExecucaoPage } from './pages/Execucao';
-import { VisualizarAtendimento } from './pages/VisualizarAtendimento';
-
-import { VistoriaPublica } from './pages/VistoriaPublica';
+// Páginas de Serviços & Operação (Lazy)
+const Servicos = lazy(() => import('./pages/Servicos').then(m => ({ default: m.Servicos })));
+const FormularioServico = lazy(() => import('./pages/servicos/FormularioServico').then(m => ({ default: m.FormularioServico })));
+const MatrizPrecos = lazy(() => import('./pages/servicos/MatrizPrecos').then(m => ({ default: m.MatrizPrecos })));
+const Precificacao = lazy(() => import('./pages/servicos/Precificacao').then(m => ({ default: m.Precificacao })));
+const FormularioCheckin = lazy(() => import('./pages/checkin/FormularioCheckin').then(m => ({ default: m.FormularioCheckin })));
+const VisualizarCheckin = lazy(() => import('./pages/checkin/VisualizarCheckin').then(m => ({ default: m.VisualizarCheckin })));
+const ExecucaoPage = lazy(() => import('./pages/Execucao').then(m => ({ default: m.ExecucaoPage })));
+const VisualizarAtendimento = lazy(() => import('./pages/VisualizarAtendimento').then(m => ({ default: m.VisualizarAtendimento })));
+const VistoriaPublica = lazy(() => import('./pages/VistoriaPublica').then(m => ({ default: m.VistoriaPublica })));
 
 // Carregamento Tardio (Lazy Loading) do Módulo Admin da Plataforma
 const AdminGuard = lazy(() => import('./components/admin/AdminGuard').then(m => ({ default: m.AdminGuard })));
@@ -70,12 +72,20 @@ const AdminPrecificacaoReferencia = lazy(() => import('./pages/admin/AdminPrecif
 const AdminTreinamentos = lazy(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
 
 
+const PaginaCarregando = () => (
+  <div className="flex-1 flex flex-col items-center justify-center min-h-[400px] gap-3 text-vapor-400 py-12">
+    <div className="w-8 h-8 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+    <span className="font-mono text-xs text-vapor-400 tracking-wider uppercase">Carregando...</span>
+  </div>
+);
+
 function App() {
   return (
     <AuthProvider>
       <ToastProvider>
         <NotificacoesProvider>
-          <Routes>
+          <Suspense fallback={<PaginaCarregando />}>
+            <Routes>
             {/* Rotas Públicas */}
             <Route path="/termos-de-uso" element={<TermosUso />} />
             <Route path="/termos-uso" element={<TermosUso />} />
@@ -177,7 +187,8 @@ function App() {
                 <Route path="diluicao" element={<DiluicaoInterna />} />
               </Route>
             </Route>
-          </Routes>
+            </Routes>
+          </Suspense>
         </NotificacoesProvider>
       </ToastProvider>
     </AuthProvider>

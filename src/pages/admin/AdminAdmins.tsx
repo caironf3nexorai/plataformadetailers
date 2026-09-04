@@ -6,9 +6,10 @@ import {
   Lock, 
   Trash2, 
   CheckCircle2, 
-  Crown,
-  X
+  Crown, 
+  X 
 } from 'lucide-react';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 
 interface AdminUserItem {
   id: string;
@@ -86,24 +87,32 @@ export const AdminAdmins: React.FC = () => {
     }
   };
 
-  const handleRevokeAdmin = async (id: string, email: string, isSuper: boolean) => {
+  const [adminToRevoke, setAdminToRevoke] = useState<{ id: string; email: string } | null>(null);
+  const [revoking, setRevoking] = useState(false);
+
+  const handleRevokeClick = (id: string, email: string, isSuper: boolean) => {
     if (isReadOnly) return;
     if (isSuper) {
-      alert('Operação Negada: O Super Admin é imutável e não pode ser revogado.');
+      setMsg({ type: 'error', text: 'Operação Negada: O Super Admin é imutável e não pode ser revogado.' });
       return;
     }
+    setAdminToRevoke({ id, email });
+  };
 
-    const confirm = window.confirm(`Tem certeza que deseja revogar as permissões administrativas do usuário '${email}'?`);
-    if (!confirm) return;
-
+  const handleConfirmRevoke = async () => {
+    if (!adminToRevoke) return;
+    setRevoking(true);
     try {
-      const { error } = await supabase.rpc('admin_revogar_administrador', { p_admin_id: id });
+      const { error } = await supabase.rpc('admin_revogar_administrador', { p_admin_id: adminToRevoke.id });
       if (error) throw error;
 
-      setMsg({ type: 'success', text: `Acesso administrativo de '${email}' revogado.` });
+      setMsg({ type: 'success', text: `Acesso administrativo de '${adminToRevoke.email}' revogado.` });
+      setAdminToRevoke(null);
       await fetchAdmins();
     } catch (err: any) {
       setMsg({ type: 'error', text: 'Erro ao revogar acesso: ' + err.message });
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -156,83 +165,85 @@ export const AdminAdmins: React.FC = () => {
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="px-6 py-4">Administrador / E-mail</th>
-                <th className="px-6 py-4">Nível de Acesso</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Promovido Por</th>
-                <th className="px-6 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {admins.map((adm) => (
-                <tr key={adm.id} className="hover:bg-slate-800/40 transition">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-bold text-white">{adm.email}</span>
-                      {adm.super_admin && (
-                        <span className="inline-flex items-center space-x-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-mono px-2 py-0.5 rounded font-bold">
-                          <Crown className="w-3 h-3 text-amber-400" />
-                          <span>SUPER ADMIN</span>
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[650px] text-left text-sm text-slate-300">
+              <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="px-6 py-4">Administrador / E-mail</th>
+                  <th className="px-6 py-4">Nível de Acesso</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Promovido Por</th>
+                  <th className="px-6 py-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {admins.map((adm) => (
+                  <tr key={adm.id} className="hover:bg-slate-800/40 transition">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-white">{adm.email}</span>
+                        {adm.super_admin && (
+                          <span className="inline-flex items-center space-x-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-mono px-2 py-0.5 rounded font-bold">
+                            <Crown className="w-3 h-3 text-amber-400" />
+                            <span>SUPER ADMIN</span>
+                          </span>
+                        )}
+                      </div>
+                      {adm.observacao && (
+                        <p className="text-xs text-slate-400 mt-0.5">{adm.observacao}</p>
+                      )}
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
+                        adm.nivel === 'admin' 
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        {adm.nivel}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      {adm.ativo ? (
+                        <span className="inline-flex items-center space-x-1 text-emerald-400 text-xs font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Ativo</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 text-rose-400 text-xs font-semibold">
+                          <X className="w-3.5 h-3.5" />
+                          <span>Revogado</span>
                         </span>
                       )}
-                    </div>
-                    {adm.observacao && (
-                      <p className="text-xs text-slate-400 mt-0.5">{adm.observacao}</p>
-                    )}
-                  </td>
+                    </td>
 
-                  <td className="px-6 py-4">
-                    <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
-                      adm.nivel === 'admin' 
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                    }`}>
-                      {adm.nivel}
-                    </span>
-                  </td>
+                    <td className="px-6 py-4 text-xs font-mono text-slate-400">
+                      {adm.criado_por_email || 'Sistema (Bootstrap)'}
+                    </td>
 
-                  <td className="px-6 py-4">
-                    {adm.ativo ? (
-                      <span className="inline-flex items-center space-x-1 text-emerald-400 text-xs font-semibold">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Ativo</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center space-x-1 text-rose-400 text-xs font-semibold">
-                        <X className="w-3.5 h-3.5" />
-                        <span>Revogado</span>
-                      </span>
-                    )}
-                  </td>
-
-                  <td className="px-6 py-4 text-xs font-mono text-slate-400">
-                    {adm.criado_por_email || 'Sistema (Bootstrap)'}
-                  </td>
-
-                  <td className="px-6 py-4 text-right">
-                    {adm.super_admin ? (
-                      <span className="inline-flex items-center space-x-1 text-xs text-slate-500 font-mono" title="Super Admin é Imutável">
-                        <Lock className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Protegido</span>
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleRevokeAdmin(adm.id, adm.email, adm.super_admin)}
-                        disabled={!adm.ativo || isReadOnly}
-                        className="bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-30 text-rose-400 px-3 py-1 rounded text-xs font-semibold border border-rose-500/30 transition flex items-center space-x-1 ml-auto"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Revogar</span>
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <td className="px-6 py-4 text-right">
+                      {adm.super_admin ? (
+                        <span className="inline-flex items-center space-x-1 text-xs text-slate-500 font-mono" title="Super Admin é Imutável">
+                          <Lock className="w-3.5 h-3.5 text-amber-500" />
+                          <span>Protegido</span>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleRevokeClick(adm.id, adm.email, adm.super_admin)}
+                          disabled={!adm.ativo || isReadOnly}
+                          className="bg-rose-500/10 hover:bg-rose-500/20 disabled:opacity-30 text-rose-400 px-3 py-1 rounded text-xs font-semibold border border-rose-500/30 transition flex items-center space-x-1 ml-auto"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Revogar</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -318,6 +329,19 @@ export const AdminAdmins: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação de Revogação */}
+      <ModalConfirmacao
+        isOpen={Boolean(adminToRevoke)}
+        onClose={() => setAdminToRevoke(null)}
+        onConfirm={handleConfirmRevoke}
+        title="Revogar Acesso Administrativo"
+        description={`Tem certeza que deseja revogar os privilégios administrativos do usuário "${adminToRevoke?.email}"? Ele perderá acesso ao Painel Admin imediatamente.`}
+        confirmText="Sim, Revogar"
+        cancelText="Cancelar"
+        variant="danger"
+        isLoading={revoking}
+      />
     </div>
   );
 };

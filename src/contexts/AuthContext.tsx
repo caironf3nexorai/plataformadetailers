@@ -103,23 +103,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Session check inicial
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const initialUser = session?.user ?? null;
-      setUser(initialUser);
-      fetchUserData(initialUser);
-    });
+    let mounted = true;
 
-    // Escuta mudanças no estado de auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // Escuta mudanças no estado de auth e inicialização
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
-        fetchUserData(currentUser);
+
+      if (currentUser) {
+        await fetchUserData(currentUser);
+      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+        setProfile(null);
+        setUserTenants([]);
+        setLoading(false);
       }
     });
 
+    // Fallback de segurança para getSession se onAuthStateChange demorar
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        setUser(session.user);
+        fetchUserData(session.user);
+      } else {
+        // Apenas conclui loading se não houver sessão ativa
+        setLoading(false);
+      }
+    }).catch((err) => {
+      console.warn('[AuthContext] Erro ao recuperar sessão inicial:', err);
+      if (mounted) setLoading(false);
+    });
+
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);

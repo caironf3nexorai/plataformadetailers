@@ -8,6 +8,7 @@ import { usePermissao } from '../../hooks/usePermissao';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { formatarMoeda } from '../../utils/formatters';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -58,6 +59,7 @@ export const ContasReceber: React.FC = () => {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'vencidos' | 'a_vencer'>('todos');
   const [baixandoId, setBaixandoId] = useState<string | null>(null);
+  const [itemParaBaixar, setItemParaBaixar] = useState<{ id: string; clienteNome: string; valor: number } | null>(null);
 
   const fetchContasReceber = async () => {
     if (!tenant || !podeAcessar) return;
@@ -89,11 +91,13 @@ export const ContasReceber: React.FC = () => {
     fetchContasReceber();
   }, [tenant?.id]);
 
-  const handleDarBaixa = async (id: string, clienteNome: string, valor: number) => {
-    if (!window.confirm(`Confirmar o recebimento de ${formatarMoeda(valor)} de ${clienteNome}?`)) {
-      return;
-    }
+  const handleSolicitarBaixa = (id: string, clienteNome: string, valor: number) => {
+    setItemParaBaixar({ id, clienteNome, valor });
+  };
 
+  const handleConfirmarBaixa = async () => {
+    if (!itemParaBaixar) return;
+    const { id } = itemParaBaixar;
     setBaixandoId(id);
     try {
       const { error } = await supabase.rpc('dar_baixa_recebimento', {
@@ -103,6 +107,7 @@ export const ContasReceber: React.FC = () => {
       if (error) throw error;
 
       showToast('Baixa efetuada com sucesso!', 'success');
+      setItemParaBaixar(null);
       await fetchContasReceber();
     } catch (err: any) {
       console.error('Erro ao dar baixa:', err);
@@ -383,7 +388,7 @@ export const ContasReceber: React.FC = () => {
                       <td className="py-3.5 px-3 text-center">
                         <Button
                           variant="primary"
-                          onClick={() => handleDarBaixa(item.id, item.cliente_nome, item.valor_bruto)}
+                          onClick={() => handleSolicitarBaixa(item.id, item.cliente_nome, item.valor_bruto)}
                           disabled={baixandoId === item.id}
                           className="text-xs px-3 py-1 bg-mint-500 hover:bg-mint-400 text-graphite-950 font-bold border-none"
                         >
@@ -398,6 +403,19 @@ export const ContasReceber: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* Modal de Confirmação para Baixa de Recebimento */}
+      <ModalConfirmacao
+        isOpen={Boolean(itemParaBaixar)}
+        onClose={() => setItemParaBaixar(null)}
+        onConfirm={handleConfirmarBaixa}
+        titulo="Confirmar Baixa de Recebimento"
+        mensagem={`Deseja confirmar o recebimento de ${itemParaBaixar ? formatarMoeda(itemParaBaixar.valor) : ''} do cliente ${itemParaBaixar?.clienteNome || ''}? Esta ação marcará a parcela como paga e atualizará os saldos financeiros imediatamente.`}
+        textoConfirmar="Confirmar Baixa"
+        textoCancelar="Cancelar"
+        variant="info"
+        loading={baixandoId !== null}
+      />
     </div>
   );
 };

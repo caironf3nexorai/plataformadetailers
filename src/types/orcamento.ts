@@ -68,6 +68,20 @@ export interface Orcamento {
   desconto_cupom_codigo?: string | null;
   desconto_aplicado_por?: string | null;
   desconto_aplicado_em?: string | null;
+  // Assinaturas Digitais
+  assinatura_path?: string | null;
+  assinatura_nome?: string | null;
+  assinatura_data?: string | null;
+  assinatura_url?: string | null;
+  assinatura_usuario_path?: string | null;
+  assinatura_usuario_nome?: string | null;
+  assinado_usuario_em?: string | null;
+  assinatura_usuario_url?: string | null;
+  aceite_manual?: boolean;
+  incluir_fotos?: boolean;
+  incluir_termos?: boolean;
+  termo_garantia_id?: string | null;
+  modo_orcamento?: 'simples' | '3_niveis' | string | null;
   cliente?: {
     id: string;
     nome: string;

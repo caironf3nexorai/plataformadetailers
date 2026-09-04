@@ -75,6 +75,7 @@ export interface PDFOrcamentoData {
   // Assinatura do Usuário/Oficina
   assinaturaUsuarioUrl?: string | null;
   assinaturaUsuarioNome?: string | null;
+  assinadoUsuarioEm?: string | null;
 
   // Branding Customizado
   planoCodigo?: string;
@@ -512,63 +513,117 @@ export async function gerarPDFOrcamento(
   }
 
   // 7. Bloco de Assinaturas (Digital ou Linhas Físicas para Impressão Manual)
-  if (data.assinaturaUrl) {
-    onProgress?.('Iniciando renderização da assinatura digital do cliente...');
-    if (y + 35 > 275) {
+  const temAssinaturaDigital = Boolean(data.assinaturaUrl || data.assinaturaUsuarioUrl);
+
+  if (temAssinaturaDigital) {
+    onProgress?.('Iniciando renderização das assinaturas digitais...');
+    if (y + 44 > 275) {
       doc.addPage();
       y = 15;
     }
 
+    const boxH = 40;
     doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
     doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
     doc.setLineWidth(0.25);
-    doc.roundedRect(pageMargin, y, usableWidth, 32, 2, 2, 'FD');
+    doc.roundedRect(pageMargin, y, usableWidth, boxH, 2, 2, 'FD');
 
     doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
-    doc.text('ACEITE DIGITAL E CONFIRMAÇÃO DO CLIENTE', pageMargin + 5, y + 6);
+    doc.text('ACEITE E VALIDAÇÃO DA PROPOSTA COMERCIAL', pageMargin + 5, y + 5.5);
 
     doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-    doc.setFontSize(7.5);
+    doc.setFontSize(7.2);
     doc.setFont('helvetica', 'italic');
     const termoAceite = '"Declaro que li e concordo com as condições, prazos e valores apresentados nesta proposta de orçamento."';
-    const termoLines = doc.splitTextToSize(termoAceite, usableWidth - 60);
-    termoLines.forEach((line: string, idx: number) => {
-      doc.text(line, pageMargin + 5, y + 11 + idx * 3.5);
-    });
+    doc.text(termoAceite, pageMargin + 5, y + 9.5);
 
-    try {
-      const assBase64 = await obterAssinaturaBase64(data.assinaturaUrl);
-      if (assBase64) {
-        const sigW = 48;
-        const sigH = 18;
-        const sigX = rightMarginX - 52;
-        const sigY = y + 2;
+    const colW = (usableWidth - 14) / 2;
+    const col1X = pageMargin + 5;
+    const col2X = pageMargin + 5 + colW + 4;
+    const sigStartY = y + 12.5;
+    const sigBoxH = 15;
 
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
-        doc.roundedRect(sigX, sigY, sigW, sigH, 1, 1, 'FD');
-
-        await drawProportionalImage(doc, assBase64, 'PNG', sigX, sigY, sigW, sigH);
+    // COLUNA 1: ASSINATURA DO CLIENTE
+    if (data.assinaturaUrl) {
+      try {
+        const assBase64 = await obterAssinaturaBase64(data.assinaturaUrl);
+        if (assBase64) {
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+          doc.roundedRect(col1X, sigStartY, colW, sigBoxH, 1, 1, 'FD');
+          await drawProportionalImage(doc, assBase64, 'PNG', col1X, sigStartY, colW, sigBoxH);
+        }
+      } catch (e) {
+        console.error('[PDFOrcamento] Erro ao renderizar assinatura do cliente:', e);
       }
-    } catch (e) {
-      console.error('[PDFOrcamento] Erro ao renderizar imagem de assinatura:', e);
-    }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.text(`Cliente: ${data.assinaturaNome || data.clienteNome}`, col1X, sigStartY + sigBoxH + 3.5);
 
-    doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Assinado por: ${data.assinaturaNome || data.clienteNome}`, pageMargin + 5, y + 22);
-
-    if (data.assinaturaData) {
+      if (data.assinaturaData) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.8);
+        doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+        doc.text(`Confirmado em: ${formatarData(data.assinaturaData)} às ${formatarHora(data.assinaturaData)}`, col1X, sigStartY + sigBoxH + 6.8);
+      }
+    } else {
+      // Linha manual cliente
+      doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+      doc.setLineWidth(0.3);
+      doc.line(col1X, sigStartY + 10, col1X + colW, sigStartY + 10);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.text(data.clienteNome, col1X + colW / 2, sigStartY + 14, { align: 'center' });
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7);
+      doc.setFontSize(6.8);
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-      doc.text(`Confirmado em: ${formatarData(data.assinaturaData)} ${formatarHora(data.assinaturaData)}`, pageMargin + 5, y + 26.5);
+      doc.text('Assinatura do Cliente (Pendente)', col1X + colW / 2, sigStartY + 17.5, { align: 'center' });
     }
 
-    y += 36;
+    // COLUNA 2: ASSINATURA DA OFICINA / RESPONSÁVEL
+    if (data.assinaturaUsuarioUrl) {
+      try {
+        const assOficinaBase64 = await obterAssinaturaBase64(data.assinaturaUsuarioUrl);
+        if (assOficinaBase64) {
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+          doc.roundedRect(col2X, sigStartY, colW, sigBoxH, 1, 1, 'FD');
+          await drawProportionalImage(doc, assOficinaBase64, 'PNG', col2X, sigStartY, colW, sigBoxH);
+        }
+      } catch (e) {
+        console.error('[PDFOrcamento] Erro ao renderizar assinatura da oficina:', e);
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.text(`Oficina: ${data.assinaturaUsuarioNome || data.oficinaNome}`, col2X, sigStartY + sigBoxH + 3.5);
+
+      if (data.assinadoUsuarioEm) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.8);
+        doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+        doc.text(`Confirmado em: ${formatarData(data.assinadoUsuarioEm)} às ${formatarHora(data.assinadoUsuarioEm)}`, col2X, sigStartY + sigBoxH + 6.8);
+      }
+    } else {
+      // Linha manual oficina
+      doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+      doc.setLineWidth(0.3);
+      doc.line(col2X, sigStartY + 10, col2X + colW, sigStartY + 10);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.text(data.assinaturaUsuarioNome || data.oficinaNome, col2X + colW / 2, sigStartY + 14, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.8);
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+      doc.text('Responsável Técnico / Oficina', col2X + colW / 2, sigStartY + 17.5, { align: 'center' });
+    }
+
+    y += boxH + 4;
   } else {
     // Linhas de Assinatura Manual Dupla (Cliente e Oficina) para Via Impressa
     if (y + 34 > 275) {

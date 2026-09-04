@@ -6,6 +6,7 @@ import { ShieldCheck, Calendar, CreditCard, AlertTriangle, ExternalLink, Refresh
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { useNavigate } from 'react-router-dom';
 
 export const AbaAssinatura: React.FC = () => {
@@ -14,6 +15,7 @@ export const AbaAssinatura: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [cancelando, setCancelando] = useState(false);
+  const [showConfirmCancelar, setShowConfirmCancelar] = useState(false);
   const [assinatura, setAssinatura] = useState<any>(null);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [selectedPlano, setSelectedPlano] = useState<{
@@ -29,7 +31,7 @@ export const AbaAssinatura: React.FC = () => {
   const carregarAssinatura = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('obter_assinatura_tenant');
+      const { data, error } = await supabase.rpc('obter_resumo_assinatura_tenant');
       if (error) throw error;
       setAssinatura(data);
     } catch (err: any) {
@@ -43,11 +45,12 @@ export const AbaAssinatura: React.FC = () => {
     carregarAssinatura();
   }, []);
 
-  const handleCancelarAssinatura = async () => {
-    if (!window.confirm('Tem certeza que deseja cancelar sua assinatura? O plano será alterado ao fim do período atual.')) {
-      return;
-    }
+  const handleCancelarAssinatura = () => {
+    setShowConfirmCancelar(true);
+  };
 
+  const executeCancelarAssinatura = async () => {
+    setShowConfirmCancelar(false);
     setCancelando(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -64,10 +67,10 @@ export const AbaAssinatura: React.FC = () => {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Erro ao cancelar assinatura');
 
-      showSuccess('Assinatura cancelada com sucesso no Asaas e no sistema.');
+      showSuccess('Assinatura cancelada com sucesso. Seu acesso continuará ativo até o término do ciclo atual.');
       await carregarAssinatura();
     } catch (err: any) {
-      showError(err.message || 'Erro ao efetuar cancelamento');
+      showError(err.message || 'Falha ao cancelar assinatura.');
     } finally {
       setCancelando(false);
     }
@@ -254,6 +257,19 @@ export const AbaAssinatura: React.FC = () => {
           setCheckoutModalOpen(false);
           carregarAssinatura();
         }}
+      />
+
+      {/* Modal de Confirmação para Cancelar Assinatura */}
+      <ModalConfirmacao
+        isOpen={showConfirmCancelar}
+        onClose={() => setShowConfirmCancelar(false)}
+        onConfirm={executeCancelarAssinatura}
+        titulo="Confirmar Cancelamento da Assinatura"
+        mensagem="Tem certeza que deseja cancelar sua assinatura? O plano atual permanecerá ativo até o fim do período já pago e depois passará para o plano gratuito."
+        textoConfirmar="Cancelar Assinatura"
+        textoCancelar="Manter Plano"
+        variant="danger"
+        loading={cancelando}
       />
     </div>
   );

@@ -765,7 +765,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                 <Car size={14} className="text-amber-500" /> Veículo / Categoria:
               </span>
               <span className="font-mono text-vapor-100">
-                {agendamento.veiculo ? `${agendamento.veiculo.placa} (${agendamento.veiculo.modelo})` : 'Sem veículo'} • {agendamento.categoria?.nome || 'Categoria'}
+                {agendamento.veiculo ? `${agendamento.veiculo.placa} (${agendamento.veiculo.modelo || ''}${agendamento.veiculo.cor ? ` • ${agendamento.veiculo.cor}` : ''})` : 'Sem veículo'} • {agendamento.categoria?.nome || 'Categoria'}
               </span>
             </div>
           </div>

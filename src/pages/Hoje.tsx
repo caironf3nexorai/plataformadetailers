@@ -40,11 +40,13 @@ import { dispensarVistoriaAgendamento } from '../utils/checkin';
 import { obterAcaoAgendamento } from '../utils/acaoAgendamento';
 import { BannerAlertaLimites } from '../components/layout/BannerAlertaLimites';
 import { obterNivelAlertaTempo } from '../utils/cronometro';
+import { useToast } from '../contexts/ToastContext';
 
 export const Hoje: React.FC = () => {
   const navigate = useNavigate();
   const { tenant, membership } = useAuth();
   const { podeVerValor } = usePermissao();
+  const { showError } = useToast();
   const { activeMilestone, dismissMilestone, checkMilestone } = useMilestoneCheck();
   const isGestor = membership?.role === 'dono' || membership?.role === 'gerente';
 
@@ -404,7 +406,7 @@ export const Hoje: React.FC = () => {
       } else if (msg.includes('sem acesso')) {
         userMessage = 'Você não tem permissão para acessar esta oficina.';
       }
-      alert(userMessage);
+      showError(userMessage);
     } finally {
       setStartingExecId(null);
     }
@@ -495,7 +497,7 @@ export const Hoje: React.FC = () => {
       navigate(`/execucao/${execId}`);
     } catch (err: any) {
       console.error('[Hoje Pular Vistoria Error]:', err);
-      alert(err?.message || 'Erro ao dispensar vistoria.');
+      showError(err?.message || 'Erro ao dispensar vistoria.');
       setAgendamentoParaPularVistoria(null);
     } finally {
       setPularLoading(false);

@@ -193,10 +193,10 @@ BEGIN
     v_pai_id := coalesce(v_rec.despesa_pai_id, v_rec.id);
     INSERT INTO public.despesas_fixas (
       tenant_id, nome, valor_mensal, vigencia_inicio, vigencia_fim,
-      tipo, despesa_pai_id, categoria_custo, confirmado, confirmado_em, confirmado_por
+      tipo, despesa_pai_id, categoria, confirmado, confirmado_em, confirmado_por, criado_por
     ) VALUES (
       p_tenant, v_rec.nome, v_rec.valor_mensal, v_inicio_mes, v_fim_mes,
-      'variavel', v_pai_id, v_rec.categoria_custo, false, null, null
+      'variavel', v_pai_id, coalesce(v_rec.categoria, 'Geral'), false, null, null, coalesce(v_rec.criado_por, auth.uid())
     );
   END LOOP;
 END;

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { PageHeader } from '../../components/layout/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { 
   AlertTriangle, 
   CheckCircle, 
@@ -88,6 +89,7 @@ export const Precificacao: React.FC = () => {
   const [precosSimulados, setPrecosSimulados] = useState<Record<string, number>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [applyingAll, setApplyingAll] = useState(false);
+  const [showConfirmAplicarTodos, setShowConfirmAplicarTodos] = useState(false);
 
   // Modais explicativos dos cards do topo
   const [topModal, setTopModal] = useState<'perda' | 'oportunidade' | 'custo_hora' | null>(null);
@@ -166,9 +168,19 @@ export const Precificacao: React.FC = () => {
       return;
     }
 
-    if (!window.confirm(`Deseja atualizar os preços de ${itemsToUpdate.length} serviços para a margem alvo da sua oficina (${data.tenant_info.margem_alvo_percentual}%)?`)) {
-      return;
-    }
+    setShowConfirmAplicarTodos(true);
+  };
+
+  const executeApplyAllSuggested = async () => {
+    setShowConfirmAplicarTodos(false);
+    if (!data?.itens || data.itens.length === 0) return;
+    
+    const itemsToUpdate = data.itens
+      .filter(i => i.status === 'prejuizo' || i.status === 'abaixo_alvo')
+      .map(i => ({
+        servico_preco_id: i.servico_preco_id,
+        novo_preco: i.preco_alvo
+      }));
 
     setApplyingAll(true);
     setError(null);
@@ -871,6 +883,19 @@ export const Precificacao: React.FC = () => {
           })
         )}
       </div>
+      
+      {/* Modal de Confirmação para Aplicar Preços em Lote */}
+      <ModalConfirmacao
+        isOpen={showConfirmAplicarTodos}
+        onClose={() => setShowConfirmAplicarTodos(false)}
+        onConfirm={executeApplyAllSuggested}
+        titulo="Confirmar Atualização de Preços em Lote"
+        mensagem={`Deseja atualizar os preços dos serviços que estão abaixo da margem alvo (${data?.tenant_info?.margem_alvo_percentual || 40}%)? Esta ação atualizará a tabela de preços do catálogo da oficina.`}
+        textoConfirmar="Atualizar Preços"
+        textoCancelar="Cancelar"
+        variant="info"
+        loading={applyingAll}
+      />
     </div>
   );
 };

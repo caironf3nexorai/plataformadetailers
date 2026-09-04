@@ -227,7 +227,8 @@ export async function uploadOrcamentoFoto(
   orcamentoId: string,
   fileOrBlob: File | Blob,
   isSignature = false,
-  placaVeiculo?: string
+  placaVeiculo?: string,
+  tipoAssinatura?: 'cliente' | 'oficina'
 ): Promise<UploadFotoResult> {
   let capturadaEm = new Date().toISOString();
   if (fileOrBlob instanceof File && !isSignature) {
@@ -244,7 +245,8 @@ export async function uploadOrcamentoFoto(
   }
 
   const fileExt = isSignature ? 'png' : 'jpg';
-  const fileName = isSignature ? `assinatura_${gerarId().slice(0, 8)}.png` : `${gerarId()}.${fileExt}`;
+  const prefixo = tipoAssinatura ? `assinatura_${tipoAssinatura}` : 'assinatura';
+  const fileName = isSignature ? `${prefixo}_${gerarId().slice(0, 8)}.${fileExt}` : `${gerarId()}.${fileExt}`;
   const filePath = `${tenantId}/orcamentos/${orcamentoId}/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
@@ -270,16 +272,35 @@ export async function getEvidenciaSignedUrl(
 ): Promise<string> {
   if (!path) return '';
 
-  const { data, error } = await supabase.storage
-    .from('evidencias')
-    .createSignedUrl(path, expiresInSeconds);
+  try {
+    const { data, error } = await supabase.storage
+      .from('evidencias')
+      .createSignedUrl(path, expiresInSeconds);
 
-  if (error || !data?.signedUrl) {
-    console.error('[Evidencias Signed URL Error]:', error);
-    return '';
+    if (!error && data?.signedUrl) {
+      return data.signedUrl;
+    }
+
+    if (error) {
+      console.warn('[Evidencias Signed URL Warning]:', error.message || error);
+    }
+  } catch (err) {
+    console.warn('[Evidencias Signed URL Exception]:', err);
   }
 
-  return data.signedUrl;
+  // Fallback para getPublicUrl
+  try {
+    const { data: pubData } = supabase.storage
+      .from('evidencias')
+      .getPublicUrl(path);
+    if (pubData?.publicUrl) {
+      return pubData.publicUrl;
+    }
+  } catch (pubErr) {
+    // Ignora
+  }
+
+  return '';
 }
 
 /**
@@ -350,3 +371,75 @@ export async function obterAssinaturaBase64(pathOrData: string): Promise<string>
   }
 }
 
+/**
+ * Baixa uma foto para o computador ou dispositivo do usuário com nome amigável e tratamento robusto de CORS/blobs.
+ * Suporta signed URLs, URLs públicas, data URLs, blobs e caminhos relativos do bucket evidencias.
+ */
+export async function baixarFoto(
+  urlOuPath: string,
+  nomeArquivo: string = 'foto.jpg'
+): Promise<void> {
+  if (!urlOuPath) return;
+
+  // Garante extensão válida no nome do arquivo
+  let nomeLimpo = (nomeArquivo || 'foto').trim();
+  if (!/\.(jpg|jpeg|png|webp)$/i.test(nomeLimpo)) {
+    nomeLimpo = `${nomeLimpo}.jpg`;
+  }
+  // Sanitiza caracteres proibidos em nomes de arquivos no Windows/Linux
+  nomeLimpo = nomeLimpo.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_');
+
+  try {
+    let finalUrl = urlOuPath;
+
+    // Se for um caminho relativo de arquivo no bucket evidencias e não uma URL web completa
+    if (
+      !urlOuPath.startsWith('http://') &&
+      !urlOuPath.startsWith('https://') &&
+      !urlOuPath.startsWith('data:') &&
+      !urlOuPath.startsWith('blob:')
+    ) {
+      const signed = await getEvidenciaSignedUrl(urlOuPath);
+      if (signed) {
+        finalUrl = signed;
+      }
+    }
+
+    // Se for data URL, faz o download direto
+    if (finalUrl.startsWith('data:')) {
+      const a = document.createElement('a');
+      a.href = finalUrl;
+      a.download = nomeLimpo;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Tenta fetch para criar Blob e forçar download local com nome personalizado
+    const response = await fetch(finalUrl);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = nomeLimpo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 2500);
+  } catch (err) {
+    console.warn('[baixarFoto] Fetch de blob falhou, tentando fallback com abertura direta:', err);
+    // Fallback: cria link direto no DOM
+    const a = document.createElement('a');
+    a.href = urlOuPath;
+    a.download = nomeLimpo;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}

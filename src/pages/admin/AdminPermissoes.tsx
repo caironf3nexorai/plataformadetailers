@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAdminAuth } from '../../components/admin/AdminGuard';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { 
   Save, 
   AlertTriangle, 
@@ -42,6 +43,8 @@ export const AdminPermissoes: React.FC = () => {
   const [novaDesc, setNovaDesc] = useState('');
   const [novoGrupo, setNovoGrupo] = useState('Personalização');
   const [creating, setCreating] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [showConfirmSave, setShowConfirmSave] = useState(false);
 
   const fetchFeatures = async () => {
     try {
@@ -54,22 +57,20 @@ export const AdminPermissoes: React.FC = () => {
 
       setCatalogo(cat);
 
-      // Build matrix map: matrix[featureKey][planCode] = boolean
-      const map: Record<string, Record<string, boolean>> = {};
+      // Build initial matrix
+      const m: Record<string, Record<string, boolean>> = {};
       cat.forEach((f) => {
-        map[f.chave] = { free: false, pro: false, studio: false };
+        m[f.chave] = { free: false, pro: false, studio: false };
       });
-
       featList.forEach((pf) => {
-        if (!map[pf.feature]) {
-          map[pf.feature] = { free: false, pro: false, studio: false };
+        if (!m[pf.feature]) {
+          m[pf.feature] = { free: false, pro: false, studio: false };
         }
-        map[pf.feature][pf.plano] = pf.habilitado;
+        m[pf.feature][pf.plano] = pf.habilitado;
       });
-
-      setMatrix(map);
+      setMatrix(m);
     } catch (err: any) {
-      console.error('[AdminPermissoes] Erro ao carregar permissões:', err.message);
+      setMsg({ type: 'error', text: 'Erro ao carregar permissões: ' + err.message });
     } finally {
       setLoading(false);
     }
@@ -92,11 +93,11 @@ export const AdminPermissoes: React.FC = () => {
 
   const handleSaveAll = async () => {
     if (isReadOnly) return;
-    const confirm = window.confirm(
-      'Atenção: Desmarcar uma funcionalidade de um plano removerá o acesso de TODAS as oficinas daquele plano imediatamente. Deseja prosseguir?'
-    );
-    if (!confirm) return;
+    setShowConfirmSave(true);
+  };
 
+  const executeSaveAll = async () => {
+    setShowConfirmSave(false);
     setSaving(true);
     setMsg(null);
 
@@ -127,8 +128,9 @@ export const AdminPermissoes: React.FC = () => {
 
   const handleCreateFeature = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
     if (!novaChave.trim() || !novoNome.trim()) {
-      alert('Informe o código identificador e o nome da funcionalidade.');
+      setModalError('Informe o código identificador e o nome da funcionalidade.');
       return;
     }
 
@@ -151,7 +153,7 @@ export const AdminPermissoes: React.FC = () => {
       setNovaDesc('');
       await fetchFeatures();
     } catch (err: any) {
-      alert('Erro ao cadastrar funcionalidade: ' + err.message);
+      setModalError('Erro ao cadastrar funcionalidade: ' + err.message);
     } finally {
       setCreating(false);
     }
@@ -354,6 +356,13 @@ export const AdminPermissoes: React.FC = () => {
                 />
               </div>
 
+              {modalError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertTriangle size={15} className="shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
@@ -374,6 +383,19 @@ export const AdminPermissoes: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Confirmação para Salvar Matriz */}
+      <ModalConfirmacao
+        isOpen={showConfirmSave}
+        onClose={() => setShowConfirmSave(false)}
+        onConfirm={executeSaveAll}
+        titulo="Confirmar Alteração de Permissões dos Planos"
+        mensagem="Atenção: Desmarcar uma funcionalidade de um plano removerá o acesso de TODAS as oficinas daquele plano imediatamente. Deseja prosseguir?"
+        textoConfirmar="Salvar Alterações"
+        textoCancelar="Voltar"
+        variant="warning"
+        loading={saving}
+      />
     </div>
   );
 };

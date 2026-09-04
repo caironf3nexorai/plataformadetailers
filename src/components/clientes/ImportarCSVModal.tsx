@@ -45,6 +45,8 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
     null
   );
 
+  const [modalError, setModalError] = useState<string | null>(null);
+
   const resetState = () => {
     setStep('upload');
     setLoading(false);
@@ -52,6 +54,7 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
     setShowRecusasDetails(false);
     setSavingProgress(false);
     setResultSummary(null);
+    setModalError(null);
   };
 
   const handleClose = () => {
@@ -61,8 +64,9 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
 
   const handleFileChange = async (file: File) => {
     if (!tenant?.id) return;
+    setModalError(null);
     if (!file.name.toLowerCase().endsWith('.csv') && file.type !== 'text/csv') {
-      alert('Por favor, selecione um arquivo válido no formato CSV.');
+      setModalError('Por favor, selecione um arquivo válido no formato CSV.');
       return;
     }
 
@@ -75,7 +79,7 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
         setStep('preview');
       }
     } catch (err: any) {
-      alert(err.message || 'Erro ao ler e processar o arquivo CSV.');
+      setModalError(err.message || 'Erro ao ler e processar o arquivo CSV.');
     } finally {
       setLoading(false);
     }
@@ -85,6 +89,7 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
     if (!tenant?.id || !previewData || previewData.linhasParaProcessar.length === 0) return;
 
     setSavingProgress(true);
+    setModalError(null);
     try {
       const { sucessosCount, erros } = await executarGravaçãoCSV(
         tenant.id,
@@ -93,7 +98,7 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
       setResultSummary({ sucessos: sucessosCount, erros });
       setStep('result');
     } catch (err: any) {
-      alert(err.message || 'Erro durante a gravação dos dados.');
+      setModalError(err.message || 'Erro durante a gravação dos dados.');
     } finally {
       setSavingProgress(false);
     }
@@ -102,6 +107,12 @@ export const ImportarCSVModal: React.FC<ImportarCSVModalProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Importar Clientes e Veículos (CSV)" maxWidth="2xl">
       <div className="flex flex-col gap-5 py-2">
+        {modalError && (
+          <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs flex items-center gap-2">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span>{modalError}</span>
+          </div>
+        )}
         {/* ETAPA 1: UPLOAD DO ARQUIVO */}
         {step === 'upload' && (
           <div className="flex flex-col gap-5">

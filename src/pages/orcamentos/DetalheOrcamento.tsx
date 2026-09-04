@@ -34,6 +34,8 @@ import {
   ShieldCheck,
   FileDown,
   PlusCircle,
+  Download,
+  RotateCcw,
 } from 'lucide-react';
 import type { Orcamento, TipoNivelOrcamento } from '../../types/orcamento';
 import type { Servico } from '../../types/servicos';
@@ -42,7 +44,7 @@ import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '..
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../../utils/pdfOrcamento';
 import { getFotoPublicUrl } from '../../utils/imagens';
-import { uploadOrcamentoFoto, getEvidenciaSignedUrl } from '../../utils/evidencias';
+import { uploadOrcamentoFoto, getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
 import { formatarDataHora } from '../../utils/datas';
 import { CanvasAssinatura } from '../../components/checkin/CanvasAssinatura';
 import { ModalServicoRapido } from '../../components/orcamentos/ModalServicoRapido';
@@ -98,6 +100,9 @@ export const DetalheOrcamento: React.FC = () => {
     completo: new Set(),
   });
 
+  // Preços Personalizados por Item de Nível (key: `${nivel}_${servicoId}` -> number)
+  const [customPrecos, setCustomPrecos] = useState<Record<string, number>>({});
+
   // Observações e Termos Personalizados do Orçamento
   const [observacoes, setObservacoes] = useState<string>('');
 
@@ -120,6 +125,7 @@ export const DetalheOrcamento: React.FC = () => {
   const [dataAgendamento, setDataAgendamento] = useState<string>('');
   const [horaAgendamento, setHoraAgendamento] = useState<string>('09:00');
   const [converting, setConverting] = useState<boolean>(false);
+  const [showConfirmAceiteManual, setShowConfirmAceiteManual] = useState<boolean>(false);
 
   // Modal Confirmação de Saída com alteração pendente
   const [showVoltarModal, setShowVoltarModal] = useState<boolean>(false);
@@ -159,6 +165,10 @@ export const DetalheOrcamento: React.FC = () => {
   const [assinandoTipo, setAssinandoTipo] = useState<'cliente' | 'usuario'>('cliente');
   const [nomeSignatario, setNomeSignatario] = useState<string>('');
   const [savingAssinatura, setSavingAssinatura] = useState<boolean>(false);
+  const [assinaturaClienteUrl, setAssinaturaClienteUrl] = useState<string>('');
+  const [assinaturaOficinaUrl, setAssinaturaOficinaUrl] = useState<string>('');
+  const [recriarAssinaturaCliente, setRecriarAssinaturaCliente] = useState<boolean>(false);
+  const [recriarAssinaturaOficina, setRecriarAssinaturaOficina] = useState<boolean>(false);
 
   // Aceite Manual do Orçamento Impresso
   const [aceitandoManual, setAceitandoManual] = useState<boolean>(false);
@@ -208,6 +218,23 @@ export const DetalheOrcamento: React.FC = () => {
       setIncluirFotos((quote as any).incluir_fotos ?? true);
       setIncluirTermos((quote as any).incluir_termos ?? true);
       setTermoGarantiaSelecionado((quote as any).termo_garantia_id || '');
+
+      // Carrega URLs assinadas das assinaturas existentes de forma independente
+      if (quote.assinatura_path) {
+        getEvidenciaSignedUrl(quote.assinatura_path).then((url) => {
+          if (url) setAssinaturaClienteUrl(url);
+        });
+      } else {
+        setAssinaturaClienteUrl('');
+      }
+
+      if ((quote as any).assinatura_usuario_path) {
+        getEvidenciaSignedUrl((quote as any).assinatura_usuario_path).then((url) => {
+          if (url) setAssinaturaOficinaUrl(url);
+        });
+      } else {
+        setAssinaturaOficinaUrl('');
+      }
 
       // Carrega fotos de avaliação
       const { data: fotosData } = await supabase
@@ -380,6 +407,7 @@ export const DetalheOrcamento: React.FC = () => {
         completo: new Set(),
       };
 
+      const initialCustomPrecos: Record<string, number> = {};
       if (quote.niveis) {
         quote.niveis.forEach((n) => {
           if (n.nivel === 'essencial' || n.nivel === 'recomendado' || n.nivel === 'completo') {
@@ -390,6 +418,9 @@ export const DetalheOrcamento: React.FC = () => {
               n.itens.forEach((it) => {
                 if (it.servico_id) {
                   newItens[n.nivel].add(it.servico_id);
+                  if (it.preco !== null && it.preco !== undefined) {
+                    initialCustomPrecos[`${n.nivel}_${it.servico_id}`] = Number(it.preco);
+                  }
                 }
               });
             }
@@ -400,6 +431,7 @@ export const DetalheOrcamento: React.FC = () => {
       setTitulosNiveis(newTitulos);
       setDescricoesNiveis(newDescricoes);
       setItensNivel(newItens);
+      setCustomPrecos(initialCustomPrecos);
       setObservacoes(quote.observacoes || '');
       setSaveStatus('salvo');
 
@@ -438,19 +470,28 @@ export const DetalheOrcamento: React.FC = () => {
       currentItens: Record<TipoNivelOrcamento, Set<string>>,
       currentTitulos: Record<TipoNivelOrcamento, string>,
       currentDescricoes: Record<TipoNivelOrcamento, string>,
-      currentObservacoes?: string
+      currentObservacoes?: string,
+      currentCustomPrecos?: Record<string, number>
     ) => {
       if (!orcamento || !tenant) return;
       setSaveStatus('salvando');
 
       try {
         const niveisList = orcamento.niveis || [];
+        const precosEfetivos = currentCustomPrecos || customPrecos;
 
         for (const nivelKey of ['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]) {
           const nivelRecord = niveisList.find((n) => n.nivel === nivelKey);
           if (nivelRecord) {
             const servicosIds = Array.from(currentItens[nivelKey]);
-            const payloadItens = servicosIds.map((sId) => ({ servico_id: sId, combo_id: null }));
+            const payloadItens = servicosIds.map((sId) => {
+              const cPrice = precosEfetivos[`${nivelKey}_${sId}`];
+              return {
+                servico_id: sId,
+                combo_id: null,
+                preco: cPrice !== undefined ? cPrice : null,
+              };
+            });
 
             const { error } = await supabase.rpc('salvar_nivel_orcamento', {
               p_nivel: nivelRecord.id,
@@ -482,7 +523,7 @@ export const DetalheOrcamento: React.FC = () => {
         showError('Não foi possível salvar o orçamento. Tente novamente.', err);
       }
     },
-    [orcamento, tenant, observacoes, showError]
+    [orcamento, tenant, observacoes, customPrecos, showError]
   );
 
   // TRIGGER AUTOSAVE COM DEBOUNCE (800ms)
@@ -491,7 +532,8 @@ export const DetalheOrcamento: React.FC = () => {
       updatedItens: Record<TipoNivelOrcamento, Set<string>>,
       updatedTitulos: Record<TipoNivelOrcamento, string>,
       updatedDescricoes: Record<TipoNivelOrcamento, string>,
-      updatedObservacoes?: string
+      updatedObservacoes?: string,
+      updatedCustomPrecos?: Record<string, number>
     ) => {
       if (!isLoadedRef.current) return;
 
@@ -501,11 +543,21 @@ export const DetalheOrcamento: React.FC = () => {
       }
 
       autoSaveTimerRef.current = setTimeout(() => {
-        executarSalvarNoBanco(updatedItens, updatedTitulos, updatedDescricoes, updatedObservacoes);
+        executarSalvarNoBanco(updatedItens, updatedTitulos, updatedDescricoes, updatedObservacoes, updatedCustomPrecos);
       }, 800);
     },
     [executarSalvarNoBanco]
   );
+
+  // ATUALIZAR PREÇO ESPECÍFICO DE UM SERVIÇO NO NÍVEL (com autosave)
+  const handleAtualizarPrecoItem = (nivel: TipoNivelOrcamento, servicoId: string, novoPreco: number) => {
+    const updated = {
+      ...customPrecos,
+      [`${nivel}_${servicoId}`]: Math.max(0, novoPreco),
+    };
+    setCustomPrecos(updated);
+    triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, observacoes, updated);
+  };
 
   // TOGGLE SERVIÇO COM HERANÇA E DISPARO DE AUTOSAVE
   const handleToggleServico = (nivel: TipoNivelOrcamento, servicoId: string) => {
@@ -582,7 +634,7 @@ export const DetalheOrcamento: React.FC = () => {
     triggerAutoSave(copy, titulosNiveis, descricoesNiveis);
   };
 
-  // CÁLCULOS AO VIVO DOS TOTAIS DE CADA NÍVEL (COM DESCONTO SE ATIVO)
+  // CÁLCULOS AO VIVO DOS TOTAIS DE CADA NÍVEL (COM DESCONTO SE ATIVO E PREÇOS EDITADOS)
   const calcularTotaisNivel = (nivel: TipoNivelOrcamento) => {
     let valorTotal = 0;
     let duracaoTotal = 0;
@@ -591,9 +643,12 @@ export const DetalheOrcamento: React.FC = () => {
     itensNivel[nivel].forEach((sId) => {
       const serv = servicosCatalogo.find((s) => s.id === sId);
       if (serv) {
-        valorTotal += serv.precoMatriz;
+        const precoItem = customPrecos[`${nivel}_${sId}`] !== undefined
+          ? customPrecos[`${nivel}_${sId}`]
+          : serv.precoMatriz;
+        valorTotal += precoItem;
         duracaoTotal += serv.duracaoMatriz;
-        if (!serv.temPrecoCadastrado) {
+        if (!serv.temPrecoCadastrado && customPrecos[`${nivel}_${sId}`] === undefined) {
           itensSemPrecoCount += 1;
         }
       }
@@ -628,7 +683,7 @@ export const DetalheOrcamento: React.FC = () => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    await executarSalvarNoBanco(itensNivel, titulosNiveis, descricoesNiveis);
+    await executarSalvarNoBanco(itensNivel, titulosNiveis, descricoesNiveis, observacoes, customPrecos);
     showSuccess('Orçamento salvo com sucesso!');
   };
 
@@ -885,9 +940,13 @@ export const DetalheOrcamento: React.FC = () => {
   };
 
   // ACEITE MANUAL DO ORÇAMENTO IMPRESSO
-  const handleDarAceiteManual = async () => {
+  const handleDarAceiteManual = () => {
+    setShowConfirmAceiteManual(true);
+  };
+
+  const executeAceiteManual = async () => {
+    setShowConfirmAceiteManual(false);
     if (!orcamento || !tenant) return;
-    if (!confirm('Confirmar aceite manual deste orçamento impresso? Isso marcará a proposta como aprovada e liberará a conversão para Ordem de Serviço.')) return;
 
     setAceitandoManual(true);
     try {
@@ -926,8 +985,18 @@ export const DetalheOrcamento: React.FC = () => {
 
     setSavingAssinatura(true);
     try {
-      const { path } = await uploadOrcamentoFoto(tenant.id, orcamento.id, blob, true);
+      // Salva cada assinatura em um arquivo distinto com prefixo explícito no bucket
+      const tipo = assinandoTipo === 'cliente' ? 'cliente' : 'oficina';
+      const { path } = await uploadOrcamentoFoto(
+        tenant.id,
+        orcamento.id,
+        blob,
+        true,
+        orcamento.veiculo?.placa,
+        tipo
+      );
       const agora = new Date().toISOString();
+      const signedUrl = await getEvidenciaSignedUrl(path);
 
       if (assinandoTipo === 'cliente') {
         await supabase
@@ -954,6 +1023,8 @@ export const DetalheOrcamento: React.FC = () => {
               } as any
             : null
         );
+        if (signedUrl) setAssinaturaClienteUrl(signedUrl);
+        setRecriarAssinaturaCliente(false);
         showSuccess('Assinatura do cliente salva e orçamento aprovado!');
       } else {
         await supabase
@@ -976,7 +1047,9 @@ export const DetalheOrcamento: React.FC = () => {
               } as any
             : null
         );
-        showSuccess('Assinatura do responsável registrada!');
+        if (signedUrl) setAssinaturaOficinaUrl(signedUrl);
+        setRecriarAssinaturaOficina(false);
+        showSuccess('Assinatura da oficina registrada!');
       }
 
       setShowAssinaturaModal(false);
@@ -1027,10 +1100,11 @@ export const DetalheOrcamento: React.FC = () => {
           destaque: n.destaque,
           itens: Array.from(itensNivel[n.nivel]).map((sId) => {
             const s = servicosCatalogo.find((serv) => serv.id === sId);
+            const cPrice = customPrecos[`${n.nivel}_${sId}`];
             return {
               servico_nome: s?.nome || 'Serviço',
               servico_descricao: s?.descricao_publica || s?.descricao_interna,
-              preco: s?.precoMatriz,
+              preco: cPrice !== undefined ? cPrice : s?.precoMatriz,
               duracao_minutos: s?.duracaoMatriz,
             };
           }),
@@ -1064,7 +1138,9 @@ export const DetalheOrcamento: React.FC = () => {
           assinaturaUrl: (orcamento as any).assinatura_path || (orcamento as any).assinatura_url,
           assinaturaNome: (orcamento as any).assinatura_nome,
           assinaturaData: (orcamento as any).assinatura_data,
+          assinaturaUsuarioUrl: (orcamento as any).assinatura_usuario_path || (orcamento as any).assinatura_usuario_url,
           assinaturaUsuarioNome: (orcamento as any).assinatura_usuario_nome || tenant.nome,
+          assinadoUsuarioEm: (orcamento as any).assinado_usuario_em,
           incluirFotos,
           fotos: fotosAvaliacao.map((f) => ({
             url: f.url,
@@ -1620,6 +1696,20 @@ export const DetalheOrcamento: React.FC = () => {
                         <Clock size={10} className="text-amber-400 shrink-0" />
                         <span className="truncate">{formatarDataHora(foto.created_at)}</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          baixarFoto(
+                            foto.url,
+                            `orcamento_${orcamento?.numero ? String(orcamento.numero) : (orcamento?.id ? orcamento.id.slice(0, 8) : 'proposta')}_${isDepois ? 'depois' : 'antes'}_${foto.id.slice(0, 6)}.jpg`
+                          );
+                        }}
+                        className={`absolute top-1 ${!isAprovado ? 'right-7' : 'right-1'} p-1 bg-graphite-900/80 hover:bg-amber-500 hover:text-graphite-950 text-white rounded opacity-0 group-hover:opacity-100 transition shadow`}
+                        title="Baixar Foto"
+                      >
+                        <Download size={12} />
+                      </button>
                       {!isAprovado && (
                         <button
                           type="button"
@@ -1638,85 +1728,192 @@ export const DetalheOrcamento: React.FC = () => {
         </div>
 
         {/* STATUS DAS ASSINATURAS */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-graphite-800 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-vapor-400">Assinatura Cliente:</span>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-graphite-800 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-vapor-400 font-medium">Assinatura Cliente:</span>
             {(orcamento as any).assinatura_path || (orcamento as any).assinatura_data ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                <Check size={13} /> Assinado por {(orcamento as any).assinatura_nome || 'Cliente'} em {formatarDataHora((orcamento as any).assinatura_data)}
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssinandoTipo('cliente');
+                  setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || '');
+                  setRecriarAssinaturaCliente(false);
+                  setShowAssinaturaModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 text-emerald-400 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/20 transition cursor-pointer"
+                title="Clique para ver ou assinar novamente"
+              >
+                <Check size={13} /> {(orcamento as any).assinatura_nome || 'Cliente'} em {formatarDataHora((orcamento as any).assinatura_data)}
+              </button>
             ) : (
-              <span className="text-amber-400 font-medium italic">Pendente</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssinandoTipo('cliente');
+                  setNomeSignatario(orcamento.cliente?.nome || '');
+                  setRecriarAssinaturaCliente(true);
+                  setShowAssinaturaModal(true);
+                }}
+                className="text-amber-400 font-medium italic hover:underline cursor-pointer"
+              >
+                Pendente (Clique para coletar)
+              </button>
+            )}
+            {assinaturaClienteUrl && (
+              <button
+                type="button"
+                onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || 'cliente'}.png`)}
+                className="p-1 text-vapor-400 hover:text-amber-400 hover:bg-graphite-800 rounded transition"
+                title="Baixar Assinatura do Cliente"
+              >
+                <Download size={13} />
+              </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-vapor-400">Assinatura Oficina:</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-vapor-400 font-medium">Assinatura Oficina:</span>
             {(orcamento as any).assinatura_usuario_path || (orcamento as any).assinado_usuario_em ? (
-              <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                <Check size={13} /> Assinado por {(orcamento as any).assinatura_usuario_nome || 'Oficina'}
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssinandoTipo('usuario');
+                  setNomeSignatario((orcamento as any).assinatura_usuario_nome || tenant?.nome || '');
+                  setRecriarAssinaturaOficina(false);
+                  setShowAssinaturaModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 text-emerald-400 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/20 transition cursor-pointer"
+                title="Clique para ver ou assinar novamente"
+              >
+                <Check size={13} /> {(orcamento as any).assinatura_usuario_nome || 'Oficina'}
+              </button>
             ) : (
-              <span className="text-vapor-400 italic">Não coletada</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssinandoTipo('usuario');
+                  setNomeSignatario((orcamento as any).assinatura_usuario_nome || tenant?.nome || '');
+                  setRecriarAssinaturaOficina(true);
+                  setShowAssinaturaModal(true);
+                }}
+                className="text-vapor-400 italic hover:text-amber-400 hover:underline cursor-pointer"
+              >
+                Não coletada (Clique para assinar)
+              </button>
+            )}
+            {assinaturaOficinaUrl && (
+              <button
+                type="button"
+                onClick={() => baixarFoto(assinaturaOficinaUrl, `assinatura_oficina_${tenant?.nome || 'oficina'}.png`)}
+                className="p-1 text-vapor-400 hover:text-amber-400 hover:bg-graphite-800 rounded transition"
+                title="Baixar Assinatura da Oficina"
+              >
+                <Download size={13} />
+              </button>
             )}
           </div>
         </div>
       </Card>
 
-      {/* SELETOR DE NÍVEL EM ABAS (< 1280px / xl) */}
-      <div className="flex xl:hidden bg-graphite-900 p-1.5 rounded-xl border border-graphite-800 gap-1">
-        {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nKey) => (
-          <button
-            key={nKey}
-            type="button"
-            onClick={() => setActiveTabMobile(nKey)}
-            className={`flex-1 py-2.5 rounded-lg font-sans text-[12px] font-bold uppercase tracking-wider transition-colors min-h-[48px] ${activeTabMobile === nKey
-                ? nKey === 'recomendado'
-                  ? 'bg-amber-500 text-graphite-950 shadow'
-                  : 'bg-graphite-700 text-vapor-100 shadow'
-                : 'text-vapor-400 hover:text-vapor-200'
-              }`}
-          >
-            {nKey} {nKey === 'recomendado' && '★'}
-          </button>
-        ))}
+      {/* BANNER DE FORMATO DO ORÇAMENTO (3 NÍVEIS VS SIMPLES) */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 bg-graphite-900 border border-graphite-800 rounded-xl">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
+            Formato: {(orcamento as any)?.modo_orcamento === 'simples' ? 'Orçamento Simples (Nível Único)' : 'Orçamento em 3 Níveis'}
+          </span>
+          <span className="text-[11px] text-vapor-400 hidden sm:inline">
+            {(orcamento as any)?.modo_orcamento === 'simples'
+              ? '• Exibindo lista única de serviços'
+              : '• Níveis Essencial, Recomendado e Completo separados'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={async () => {
+            const novoModo = (orcamento as any)?.modo_orcamento === 'simples' ? '3_niveis' : 'simples';
+            await supabase.from('orcamentos').update({ modo_orcamento: novoModo }).eq('id', orcamento.id);
+            setOrcamento((prev) => prev ? { ...prev, modo_orcamento: novoModo } : null);
+            showSuccess(novoModo === 'simples' ? 'Alternado para Orçamento Simples' : 'Alternado para Orçamento em 3 Níveis');
+          }}
+          className="text-xs font-bold text-vapor-300 hover:text-amber-400 underline transition-colors"
+        >
+          {(orcamento as any)?.modo_orcamento === 'simples' ? 'Ativar Apresentação em 3 Níveis' : 'Mudar para Orçamento Simples'}
+        </button>
       </div>
 
-      {/* 3 COLUNAS LADO A LADO (>= 1280px / xl) E ABAS ABAIXO DE 1280px */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nivelKey) => {
+      {/* SELETOR DE NÍVEL EM ABAS (< 1280px / xl) */}
+      {(orcamento as any)?.modo_orcamento !== 'simples' && (
+        <div className="flex xl:hidden bg-graphite-900 p-1.5 rounded-xl border border-graphite-800 gap-1">
+          {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nKey) => (
+            <button
+              key={nKey}
+              type="button"
+              onClick={() => setActiveTabMobile(nKey)}
+              className={`flex-1 py-2.5 rounded-lg font-sans text-[12px] font-bold uppercase tracking-wider transition-colors min-h-[48px] ${activeTabMobile === nKey
+                  ? nKey === 'recomendado'
+                    ? 'bg-amber-500 text-graphite-950 shadow'
+                    : 'bg-graphite-700 text-vapor-100 shadow'
+                  : 'text-vapor-400 hover:text-vapor-200'
+                }`}
+            >
+              {nKey} {nKey === 'recomendado' && '★'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 3 COLUNAS LADO A LADO (>= 1280px / xl) OU COLUNA ÚNICA EM MODO SIMPLES */}
+      <div className={`grid gap-6 ${(orcamento as any)?.modo_orcamento === 'simples' ? 'grid-cols-1 max-w-2xl mx-auto w-full' : 'grid-cols-1 xl:grid-cols-3'}`}>
+        {(((orcamento as any)?.modo_orcamento === 'simples' ? ['essencial'] : ['essencial', 'recomendado', 'completo']) as TipoNivelOrcamento[]).map((nivelKey) => {
           const isDestaque = nivelKey === 'recomendado';
-          const isTabVisible = activeTabMobile === nivelKey;
+          const isTabVisible = activeTabMobile === nivelKey || (orcamento as any)?.modo_orcamento === 'simples';
+
+          const nivelConfig = {
+            essencial: {
+              tag: (orcamento as any)?.modo_orcamento === 'simples' ? 'PROPOSTA PRINCIPAL' : 'NÍVEL 1: ESSENCIAL',
+              tagClass: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+              cardBorder: 'border-cyan-500/40 bg-gradient-to-b from-cyan-950/20 to-graphite-900',
+              titleClass: 'text-amber-400 font-extrabold',
+            },
+            recomendado: {
+              tag: 'NÍVEL 2: RECOMENDADO ★ MAIS ESCOLHIDO',
+              tagClass: 'bg-amber-500 text-graphite-950 font-black shadow-md shadow-amber-500/20',
+              cardBorder: 'border-2 border-amber-500 bg-gradient-to-b from-amber-950/30 to-graphite-900 shadow-xl shadow-amber-500/10',
+              titleClass: 'text-amber-300 font-black drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]',
+            },
+            completo: {
+              tag: 'NÍVEL 3: COMPLETO / PREMIUM',
+              tagClass: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+              cardBorder: 'border-purple-500/40 bg-gradient-to-b from-purple-950/20 to-graphite-900',
+              titleClass: 'text-amber-400 font-extrabold',
+            },
+          }[nivelKey];
 
           return (
             <div
               key={nivelKey}
               className={`flex flex-col gap-4 ${isTabVisible ? 'flex' : 'hidden xl:flex'}`}
             >
-              {/* CARD HEADER DO NÍVEL */}
-              <Card
-                className={`p-4 flex flex-col gap-3 relative transition-all ${isDestaque
-                    ? 'bg-graphite-900 border-2 border-amber-500 shadow-xl shadow-amber-500/10'
-                    : 'bg-graphite-900 border-graphite-700'
-                  }`}
-              >
-                {isDestaque ? (
-                  <div className="self-center bg-amber-500 text-graphite-950 font-mono text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1 shadow-md whitespace-nowrap -mt-2 mb-1">
-                    <Star size={11} fill="currentColor" />
-                    <span>MAIS ESCOLHIDO</span>
-                  </div>
-                ) : (
-                  <div className="self-center invisible font-mono text-[10px] uppercase px-3 py-1 -mt-2 mb-1 pointer-events-none select-none">
-                    <span>Espaçador</span>
-                  </div>
-                )}
+              {/* CARD HEADER DO NÍVEL COM DESIGN DESTACADO E TÍTULO DOURADO */}
+              <Card className={`p-4 flex flex-col gap-3 relative transition-all rounded-xl border ${nivelConfig.cardBorder}`}>
+                <div className="flex items-center justify-between">
+                  <span className={`font-mono text-[10px] uppercase tracking-wider px-2.5 py-0.5 rounded-full border font-bold ${nivelConfig.tagClass}`}>
+                    {nivelConfig.tag}
+                  </span>
+                  {isDestaque && (
+                    <div className="flex items-center gap-1 text-amber-400 font-mono text-[11px] font-bold">
+                      <Star size={12} fill="currentColor" />
+                      <span>DESTAQUE</span>
+                    </div>
+                  )}
+                </div>
 
                 <div className="flex flex-col gap-1 mt-1">
                   <textarea
                     rows={2}
                     value={titulosNiveis[nivelKey]}
                     onChange={(e) => handleAtualizarTitulo(nivelKey, e.target.value)}
-                    className="font-display text-[15px] sm:text-[16px] text-vapor-100 uppercase tracking-wide bg-transparent border-b border-transparent hover:border-graphite-700 focus:border-amber-500 focus:outline-none resize-none h-[48px] leading-tight overflow-hidden text-ellipsis line-clamp-2"
+                    className={`font-display text-[16px] uppercase tracking-wide bg-transparent border-b border-transparent hover:border-graphite-700 focus:border-amber-500 focus:outline-none resize-none h-[48px] leading-tight overflow-hidden text-ellipsis line-clamp-2 ${nivelConfig.titleClass}`}
                     placeholder="Título do Nível..."
                   />
 
@@ -1724,12 +1921,12 @@ export const DetalheOrcamento: React.FC = () => {
                     rows={2}
                     value={descricoesNiveis[nivelKey]}
                     onChange={(e) => handleAtualizarDescricao(nivelKey, e.target.value)}
-                    className="font-sans text-[12px] text-vapor-400 bg-transparent border-b border-transparent hover:border-graphite-700 focus:border-amber-500 focus:outline-none resize-none h-[38px] leading-tight overflow-hidden text-ellipsis line-clamp-2"
+                    className="font-sans text-[12px] text-vapor-300 bg-transparent border-b border-transparent hover:border-graphite-700 focus:border-amber-500 focus:outline-none resize-none h-[38px] leading-tight overflow-hidden text-ellipsis line-clamp-2"
                     placeholder="Descrição curta para o cliente..."
                   />
                 </div>
 
-                <div className="flex items-center justify-between bg-graphite-950/60 p-2.5 rounded-lg border border-graphite-800/80 min-h-[42px]">
+                <div className="flex items-center justify-between bg-graphite-950/80 p-2.5 rounded-lg border border-graphite-800 min-h-[42px]">
                   {totais[nivelKey].itensCount === 0 ? (
                     <span className="text-[12px] font-sans text-vapor-500 italic w-full text-center">
                       Nenhum serviço selecionado
@@ -1758,12 +1955,12 @@ export const DetalheOrcamento: React.FC = () => {
                             <span className="font-mono text-[11px] text-vapor-500 line-through">
                               {formatarMoeda(totais[nivelKey].valorTotal)}
                             </span>
-                            <span className="font-mono text-[16px] font-bold text-amber-400">
+                            <span className="font-mono text-[18px] font-black text-amber-400">
                               {formatarMoeda(totais[nivelKey].valorComDesconto)}
                             </span>
                           </div>
                         ) : (
-                          <span className="font-mono text-[16px] font-bold text-amber-400">
+                          <span className="font-mono text-[18px] font-black text-amber-400">
                             {formatarMoeda(totais[nivelKey].valorTotal)}
                           </span>
                         )}
@@ -1867,20 +2064,50 @@ export const DetalheOrcamento: React.FC = () => {
                                     </span>
                                   </div>
 
-                                  {/* LINHA 2: DURAÇÃO À ESQUERDA, PREÇO À DIREITA */}
-                                  <div className="flex items-center justify-between w-full pt-1.5 border-t border-graphite-800/50 text-[11px] font-mono">
-                                    <span className="text-vapor-400 flex items-center gap-1">
+                                  {/* LINHA 2: DURAÇÃO À ESQUERDA, PREÇO À DIREITA COM CAMPO EDITÁVEL */}
+                                  <div className="flex items-center justify-between w-full pt-1.5 border-t border-graphite-800/50 text-[11px] font-mono gap-2">
+                                    <span className="text-vapor-400 flex items-center gap-1 shrink-0">
                                       <Clock size={11} className="text-vapor-500" />
                                       {serv.duracaoMatriz} min
                                     </span>
 
-                                    {serv.temPrecoCadastrado ? (
-                                      <span className="font-bold text-amber-400">
+                                    {isChecked ? (
+                                      <div
+                                        className="flex items-center gap-1 bg-graphite-950/80 px-2 py-0.5 rounded border border-amber-500/40 hover:border-amber-500 transition-colors"
+                                        onClick={(e) => e.stopPropagation()}
+                                        title="Clique para editar o valor deste serviço no orçamento"
+                                      >
+                                        <span className="text-amber-400 font-bold text-[11px]">R$</span>
+                                        <input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={
+                                            customPrecos[`${nivelKey}_${serv.id}`] !== undefined
+                                              ? customPrecos[`${nivelKey}_${serv.id}`]
+                                              : serv.precoMatriz || ''
+                                          }
+                                          onChange={(e) => {
+                                            const val = parseFloat(e.target.value);
+                                            handleAtualizarPrecoItem(nivelKey, serv.id, isNaN(val) ? 0 : val);
+                                          }}
+                                          placeholder="0,00"
+                                          className="w-20 bg-transparent text-right font-mono font-bold text-amber-400 text-xs outline-none focus:text-white"
+                                        />
+                                        {customPrecos[`${nivelKey}_${serv.id}`] !== undefined &&
+                                          customPrecos[`${nivelKey}_${serv.id}`] !== serv.precoMatriz && (
+                                            <span className="text-[9px] text-amber-400 font-sans font-bold">
+                                              *editado
+                                            </span>
+                                          )}
+                                      </div>
+                                    ) : serv.temPrecoCadastrado ? (
+                                      <span className="font-bold text-vapor-300">
                                         {formatarMoeda(serv.precoMatriz)}
                                       </span>
                                     ) : (
                                       <span className="font-sans text-[10px] font-medium text-amber-500">
-                                        Preço não cadastrado para esta categoria
+                                        Preço não cadastrado
                                       </span>
                                     )}
                                   </div>
@@ -2273,53 +2500,236 @@ export const DetalheOrcamento: React.FC = () => {
               type="button"
               onClick={() => {
                 setAssinandoTipo('cliente');
-                setNomeSignatario(orcamento.cliente?.nome || '');
+                setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || '');
               }}
-              className={`flex-1 py-1.5 text-xs font-bold rounded ${
-                assinandoTipo === 'cliente' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400'
+              className={`flex-1 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1.5 transition ${
+                assinandoTipo === 'cliente' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400 hover:text-vapor-100'
               }`}
             >
-              Cliente
+              <span>Cliente</span>
+              {(assinaturaClienteUrl || (orcamento as any).assinatura_path) && (
+                <span className={`w-2 h-2 rounded-full ${assinandoTipo === 'cliente' ? 'bg-graphite-950' : 'bg-emerald-400'}`} title="Já assinado" />
+              )}
             </button>
             <button
               type="button"
               onClick={() => {
                 setAssinandoTipo('usuario');
-                setNomeSignatario(tenant?.nome || '');
+                setNomeSignatario((orcamento as any).assinatura_usuario_nome || tenant?.nome || '');
               }}
-              className={`flex-1 py-1.5 text-xs font-bold rounded ${
-                assinandoTipo === 'usuario' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400'
+              className={`flex-1 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1.5 transition ${
+                assinandoTipo === 'usuario' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400 hover:text-vapor-100'
               }`}
             >
-              Responsável Técnico
+              <span>Oficina / Responsável</span>
+              {(assinaturaOficinaUrl || (orcamento as any).assinatura_usuario_path) && (
+                <span className={`w-2 h-2 rounded-full ${assinandoTipo === 'usuario' ? 'bg-graphite-950' : 'bg-emerald-400'}`} title="Já assinado" />
+              )}
             </button>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
-              Nome do Signatário:
-            </label>
-            <input
-              type="text"
-              value={nomeSignatario}
-              onChange={(e) => setNomeSignatario(e.target.value)}
-              placeholder="Nome completo de quem está assinando..."
-              className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm outline-none focus:border-amber-500"
-            />
-          </div>
+          {assinandoTipo === 'cliente' ? (
+            (assinaturaClienteUrl || (orcamento as any).assinatura_path) && !recriarAssinaturaCliente ? (
+              /* CARD DE ASSINATURA DO CLIENTE JÁ COLETADA */
+              <div className="flex flex-col items-center justify-center p-5 bg-graphite-950 rounded-xl border border-emerald-500/30 gap-3 text-center">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <Check size={18} />
+                  <span>Assinatura do Cliente já Coletada</span>
+                </div>
+                {assinaturaClienteUrl ? (
+                  <div className="p-3 bg-white rounded-lg border border-graphite-700 max-w-xs w-full flex items-center justify-center">
+                    <img src={assinaturaClienteUrl} alt="Assinatura do Cliente" className="max-h-20 object-contain" />
+                  </div>
+                ) : (
+                  <div className="p-3 bg-graphite-900 text-xs font-mono text-vapor-400 rounded">
+                    Arquivo de assinatura registrado
+                  </div>
+                )}
+                <div className="flex flex-col gap-0.5 text-xs">
+                  <span className="font-semibold text-vapor-100">
+                    {orcamento.assinatura_nome || orcamento.cliente?.nome || 'Cliente'}
+                  </span>
+                  {orcamento.assinatura_data && (
+                    <span className="font-mono text-[11px] text-vapor-400">
+                      Assinado em {formatarDataHora(orcamento.assinatura_data)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  {assinaturaClienteUrl && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || 'cliente'}.png`)}
+                      className="text-xs h-8 px-3 flex items-center gap-1.5 text-amber-400 border-graphite-700 hover:bg-graphite-800"
+                      title="Baixar imagem da assinatura do cliente"
+                    >
+                      <Download size={13} />
+                      <span>Baixar</span>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRecriarAssinaturaCliente(true)}
+                    className="text-xs h-8 px-3 flex items-center gap-1.5 text-vapor-300 border-graphite-700 hover:text-amber-400 hover:bg-graphite-800"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Assinar Novamente</span>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* FORMULÁRIO DE CAPTURA DA ASSINATURA DO CLIENTE */
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+                    Nome do Cliente Signatário:
+                  </label>
+                  <input
+                    type="text"
+                    value={nomeSignatario}
+                    onChange={(e) => setNomeSignatario(e.target.value)}
+                    placeholder="Nome completo do cliente..."
+                    className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm outline-none focus:border-amber-500"
+                  />
+                </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
-              Desenhe a Assinatura Abaixo:
-            </label>
-            <CanvasAssinatura
-              onSaveSignature={handleSalvarAssinaturaCanvas}
-              saveButtonText="Confirmar e Salvar Assinatura"
-              disabled={savingAssinatura}
-            />
-          </div>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+                      Desenhe a Assinatura do Cliente:
+                    </label>
+                    {(assinaturaClienteUrl || (orcamento as any).assinatura_path) && (
+                      <button
+                        type="button"
+                        onClick={() => setRecriarAssinaturaCliente(false)}
+                        className="text-[11px] text-vapor-400 hover:text-amber-400 underline"
+                      >
+                        Cancelar e manter existente
+                      </button>
+                    )}
+                  </div>
+                  <CanvasAssinatura
+                    key="canvas-assinatura-cliente"
+                    onSaveSignature={handleSalvarAssinaturaCanvas}
+                    saveButtonText="Confirmar e Salvar Assinatura do Cliente"
+                    disabled={savingAssinatura}
+                  />
+                </div>
+              </div>
+            )
+          ) : (
+            (assinaturaOficinaUrl || (orcamento as any).assinatura_usuario_path) && !recriarAssinaturaOficina ? (
+              /* CARD DE ASSINATURA DA OFICINA JÁ REGISTRADA */
+              <div className="flex flex-col items-center justify-center p-5 bg-graphite-950 rounded-xl border border-emerald-500/30 gap-3 text-center">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <Check size={18} />
+                  <span>Assinatura da Oficina já Registrada</span>
+                </div>
+                {assinaturaOficinaUrl ? (
+                  <div className="p-3 bg-white rounded-lg border border-graphite-700 max-w-xs w-full flex items-center justify-center">
+                    <img src={assinaturaOficinaUrl} alt="Assinatura da Oficina" className="max-h-20 object-contain" />
+                  </div>
+                ) : (
+                  <div className="p-3 bg-graphite-900 text-xs font-mono text-vapor-400 rounded">
+                    Arquivo de assinatura registrado
+                  </div>
+                )}
+                <div className="flex flex-col gap-0.5 text-xs">
+                  <span className="font-semibold text-vapor-100">
+                    {(orcamento as any).assinatura_usuario_nome || tenant?.nome || 'Oficina'}
+                  </span>
+                  {(orcamento as any).assinado_usuario_em && (
+                    <span className="font-mono text-[11px] text-vapor-400">
+                      Registrado em {formatarDataHora((orcamento as any).assinado_usuario_em)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  {assinaturaOficinaUrl && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => baixarFoto(assinaturaOficinaUrl, `assinatura_oficina_${tenant?.nome || 'oficina'}.png`)}
+                      className="text-xs h-8 px-3 flex items-center gap-1.5 text-amber-400 border-graphite-700 hover:bg-graphite-800"
+                      title="Baixar imagem da assinatura da oficina"
+                    >
+                      <Download size={13} />
+                      <span>Baixar</span>
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRecriarAssinaturaOficina(true)}
+                    className="text-xs h-8 px-3 flex items-center gap-1.5 text-vapor-300 border-graphite-700 hover:text-amber-400 hover:bg-graphite-800"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Assinar Novamente</span>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* FORMULÁRIO DE CAPTURA DA ASSINATURA DA OFICINA */
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+                    Nome do Responsável / Oficina:
+                  </label>
+                  <input
+                    type="text"
+                    value={nomeSignatario}
+                    onChange={(e) => setNomeSignatario(e.target.value)}
+                    placeholder="Nome do responsável técnico..."
+                    className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+                      Desenhe a Assinatura da Oficina:
+                    </label>
+                    {(assinaturaOficinaUrl || (orcamento as any).assinatura_usuario_path) && (
+                      <button
+                        type="button"
+                        onClick={() => setRecriarAssinaturaOficina(false)}
+                        className="text-[11px] text-vapor-400 hover:text-amber-400 underline"
+                      >
+                        Cancelar e manter existente
+                      </button>
+                    )}
+                  </div>
+                  <CanvasAssinatura
+                    key="canvas-assinatura-oficina"
+                    onSaveSignature={handleSalvarAssinaturaCanvas}
+                    saveButtonText="Confirmar e Salvar Assinatura da Oficina"
+                    disabled={savingAssinatura}
+                  />
+                </div>
+              </div>
+            )
+          )}
         </div>
       </Modal>
+      
+      {/* Modal de Confirmação para Aceite Manual */}
+      <ModalConfirmacao
+        isOpen={showConfirmAceiteManual}
+        onClose={() => setShowConfirmAceiteManual(false)}
+        onConfirm={executeAceiteManual}
+        titulo="Confirmar Aceite Manual do Orçamento"
+        mensagem="Deseja confirmar o aceite manual deste orçamento impresso? Isso marcará a proposta como aprovada e liberará a conversão para Ordem de Serviço."
+        textoConfirmar="Confirmar Aceite"
+        textoCancelar="Cancelar"
+        variant="info"
+        loading={aceitandoManual}
+      />
     </div>
   );
 };

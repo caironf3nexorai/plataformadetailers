@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type {
   DiluicaoConvention,
   DiluicaoVariant,
@@ -25,21 +25,109 @@ export const MaquinaMode: React.FC<MaquinaModeProps> = ({
   onSavePerfil,
   onDeletePerfil,
 }) => {
-  // Estado dos Inputs (Valores iniciais úteis: 420 L/h, registro fechado, pote 1 L, alvo 1:100)
+  // Estado dos Inputs (Inicializa a partir da calibração padrão salva no localStorage)
   const [selectedPerfilId, setSelectedPerfilId] = useState<string | null>(null);
 
-  const [vazaoStr, setVazaoStr] = useState<string>('420');
-  const [vazaoUnit, setVazaoUnit] = useState<'L/h' | 'L/min'>('L/h');
-  const [psiStr, setPsiStr] = useState<string>('');
-  const [posicaoRegistro, setPosicaoRegistro] = useState<PosicaoRegistro>('fechado');
+  const [vazaoStr, setVazaoStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).vazao || '420';
+    } catch {}
+    return '420';
+  });
 
-  const [isCalibrated, setIsCalibrated] = useState<boolean>(false);
-  const [saiuBaldeStr, setSaiuBaldeStr] = useState<string>('');
-  const [sumiuPoteStr, setSumiuPoteStr] = useState<string>('');
+  const [vazaoUnit, setVazaoUnit] = useState<'L/h' | 'L/min'>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).vazaoUnit || 'L/h';
+    } catch {}
+    return 'L/h';
+  });
 
-  const [volumePoteStr, setVolumePoteStr] = useState<string>('1000');
-  const [targetRatioXStr, setTargetRatioXStr] = useState<string>('100');
-  const [convention, setConvention] = useState<DiluicaoConvention>('agua');
+  const [psiStr, setPsiStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).psi || '';
+    } catch {}
+    return '';
+  });
+
+  const [posicaoRegistro, setPosicaoRegistro] = useState<PosicaoRegistro>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).posicaoRegistro || 'fechado';
+    } catch {}
+    return 'fechado';
+  });
+
+  const [isCalibrated, setIsCalibrated] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).isCalibrated || false;
+    } catch {}
+    return false;
+  });
+
+  const [saiuBaldeStr, setSaiuBaldeStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).saiuBalde || '';
+    } catch {}
+    return '';
+  });
+
+  const [sumiuPoteStr, setSumiuPoteStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).sumiuPote || '';
+    } catch {}
+    return '';
+  });
+
+  const [volumePoteStr, setVolumePoteStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).volumePote || '1000';
+    } catch {}
+    return '1000';
+  });
+
+  const [targetRatioXStr, setTargetRatioXStr] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).targetRatioX || '100';
+    } catch {}
+    return '100';
+  });
+
+  const [convention, setConvention] = useState<DiluicaoConvention>(() => {
+    try {
+      const saved = localStorage.getItem('nuvemwash_lavadora_padrao');
+      if (saved) return JSON.parse(saved).convention || 'agua';
+    } catch {}
+    return 'agua';
+  });
+
+  // Salva automaticamente a calibração atual como padrão
+  useEffect(() => {
+    try {
+      const dataToSave = {
+        vazao: vazaoStr,
+        vazaoUnit,
+        psi: psiStr,
+        posicaoRegistro,
+        isCalibrated,
+        saiuBalde: saiuBaldeStr,
+        sumiuPote: sumiuPoteStr,
+        volumePote: volumePoteStr,
+        targetRatioX: targetRatioXStr,
+        convention,
+      };
+      localStorage.setItem('nuvemwash_lavadora_padrao', JSON.stringify(dataToSave));
+    } catch (e) {
+      console.warn('[MaquinaMode] Erro ao salvar lavadora padrão:', e);
+    }
+  }, [vazaoStr, vazaoUnit, psiStr, posicaoRegistro, isCalibrated, saiuBaldeStr, sumiuPoteStr, volumePoteStr, targetRatioXStr, convention]);
 
   // Seleção de perfil gravado
   const handleSelectPerfil = (perfil: EquipamentoPerfilData | null) => {

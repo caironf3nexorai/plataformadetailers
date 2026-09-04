@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePermissao } from '../hooks/usePermissao';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { ModalConfirmacao } from '../components/ui/ModalConfirmacao';
 import {
   Archive,
   AlertTriangle,
@@ -45,6 +46,7 @@ export const FotosPrestesAExpirarPage: React.FC = () => {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [showConfirmPreservarLote, setShowConfirmPreservarLote] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!tenant) return;
@@ -177,12 +179,14 @@ export const FotosPrestesAExpirarPage: React.FC = () => {
   };
 
   // Preservar em lote os selecionados
-  const handlePreservarSelecionados = async () => {
+  const handlePreservarSelecionados = () => {
     if (selectedIds.size === 0) return;
+    setShowConfirmPreservarLote(true);
+  };
 
-    if (!window.confirm(`Deseja preservar as fotos de ${selectedIds.size} atendimento(s) selecionado(s)? Elas passarão ao acervo permanente e deixarão de expirar.`)) {
-      return;
-    }
+  const executePreservarSelecionados = async () => {
+    setShowConfirmPreservarLote(false);
+    if (selectedIds.size === 0) return;
 
     setActionLoading(true);
     setErrorMsg(null);
@@ -445,6 +449,19 @@ export const FotosPrestesAExpirarPage: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Modal de Confirmação para Preservar em Lote */}
+      <ModalConfirmacao
+        isOpen={showConfirmPreservarLote}
+        onClose={() => setShowConfirmPreservarLote(false)}
+        onConfirm={executePreservarSelecionados}
+        titulo="Preservar Fotos no Acervo Permanente"
+        mensagem={`Deseja preservar as fotos de ${selectedIds.size} atendimento(s) selecionado(s)? Elas passarão ao acervo permanente e deixarão de expirar automaticamente.`}
+        textoConfirmar="Preservar Fotos"
+        textoCancelar="Cancelar"
+        variant="info"
+        loading={actionLoading}
+      />
     </div>
   );
 };

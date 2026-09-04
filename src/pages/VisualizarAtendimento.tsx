@@ -19,11 +19,15 @@ import {
   CheckCircle2,
   Printer,
   FileDown,
+  Download,
+  Eye,
+  X,
 } from 'lucide-react';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
 import { formatarDataHora } from '../utils/datas';
 import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
 import { gerarPDFOS } from '../utils/pdfOS';
+import { getEvidenciaSignedUrl, baixarFoto } from '../utils/evidencias';
 
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -41,7 +45,12 @@ export const VisualizarAtendimento: React.FC = () => {
   const [checklist, setChecklist] = useState<any[]>([]);
   const [consumos, setConsumos] = useState<any[]>([]);
   const [valores, setValores] = useState<any[]>([]);
-  const [fotos, setFotos] = useState<{ durante: any[]; saida: any[] }>({ durante: [], saida: [] });
+  const [fotos, setFotos] = useState<{ vistoria: any[]; durante: any[]; saida: any[] }>({
+    vistoria: [],
+    durante: [],
+    saida: [],
+  });
+  const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; data?: string } | null>(null);
   const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
@@ -140,6 +149,9 @@ export const VisualizarAtendimento: React.FC = () => {
           console.error('[VisualizarAtendimento] Erro ao buscar por execucao.id:', { paramId, error: err1 });
         }
 
+        let agendOnlyData: any = null;
+        let checkinDirectData: any = null;
+
         if (byExecId) {
           execData = byExecId;
         } else {
@@ -168,34 +180,116 @@ export const VisualizarAtendimento: React.FC = () => {
             }
 
             if (agendOnly) {
+              agendOnlyData = agendOnly;
               setAgendamento(agendOnly);
             } else {
-              console.warn('[VisualizarAtendimento] Registro não encontrado para paramId:', paramId);
-              setErrorMsg('Não foi possível carregar este atendimento.');
+              // Tentar carregar se paramId for o ID direto da vistoria (check-in)
+              const { data: chkDirect } = await supabase
+                .from('checkins')
+                .select('*, agendamento:agendamentos(*, cliente:clientes(*), veiculo:veiculos(*), agendamento_itens(*, servicos(*)))')
+                .eq('id', paramId)
+                .maybeSingle();
+
+              if (chkDirect) {
+                checkinDirectData = chkDirect;
+                if (chkDirect.agendamento) {
+                  agendOnlyData = chkDirect.agendamento;
+                  setAgendamento(chkDirect.agendamento);
+                }
+              } else {
+                console.warn('[VisualizarAtendimento] Registro não encontrado para paramId:', paramId);
+                setErrorMsg('Não foi possível carregar este atendimento.');
+              }
             }
           }
         }
 
+        const currentAgend = execData?.agendamentos || agendOnlyData;
+        if (currentAgend) {
+          setAgendamento(currentAgend);
+        }
         if (execData) {
           setExecucao(execData);
-          setAgendamento(execData.agendamentos);
+        }
 
-          const execId = execData.id;
-          const agendId = execData.agendamento_id;
+        const execId = execData?.id;
+        const agendId = execData?.agendamento_id || agendOnlyData?.id || currentAgend?.id;
 
-          // 2. Buscar Check-in (Vistoria)
-          if (agendId) {
-            const { data: checkinData } = await supabase
-              .from('checkins')
-              .select('id')
-              .eq('agendamento_id', agendId)
-              .maybeSingle();
+        let fotosVistoria: any[] = [];
+        let fotosDurante: any[] = [];
+        let fotosSaida: any[] = [];
 
-            if (checkinData) {
-              setCheckinId(checkinData.id);
-            }
+        // 2. Buscar Check-in (Vistoria)
+        let chkId = checkinDirectData?.id;
+        if (!chkId && agendId) {
+          const { data: checkinData, error: checkinErr } = await supabase
+            .from('checkins')
+            .select('id, created_at, km, nivel_combustivel')
+            .eq('agendamento_id', agendId)
+            .maybeSingle();
+
+          if (checkinErr) {
+            console.error('[VisualizarAtendimento] Erro ao buscar check-in:', checkinErr);
+          }
+          if (checkinData) {
+            chkId = checkinData.id;
+          }
+        }
+
+        // Se ainda não achou chkId, tenta ver se paramId é o próprio checkin_id
+        if (!chkId && paramId) {
+          const { data: chkById } = await supabase
+            .from('checkins')
+            .select('id')
+            .eq('id', paramId)
+            .maybeSingle();
+          if (chkById) {
+            chkId = chkById.id;
+          }
+        }
+
+        if (chkId) {
+          setCheckinId(chkId);
+
+          const { data: chkFotos, error: errChkFotos } = await supabase
+            .from('checkin_fotos')
+            .select('*')
+            .eq('checkin_id', chkId)
+            .order('created_at', { ascending: true });
+
+          if (errChkFotos) {
+            console.error('[VisualizarAtendimento] Erro ao buscar checkin_fotos:', errChkFotos);
           }
 
+          if (chkFotos && chkFotos.length > 0) {
+            fotosVistoria = await Promise.all(
+              chkFotos.map(async (ft: any) => {
+                const signedUrl = await getEvidenciaSignedUrl(ft.path);
+                return { ...ft, signedUrl: signedUrl || ft.path, tipo: 'vistoria' };
+              })
+            );
+          }
+        }
+
+        // Fallback: se fotosVistoria ainda estiver vazia, tenta buscar por paramId direto na tabela checkin_fotos
+        if (fotosVistoria.length === 0 && paramId) {
+          const { data: directChkFotos } = await supabase
+            .from('checkin_fotos')
+            .select('*')
+            .eq('checkin_id', paramId)
+            .order('created_at', { ascending: true });
+
+          if (directChkFotos && directChkFotos.length > 0) {
+            fotosVistoria = await Promise.all(
+              directChkFotos.map(async (ft: any) => {
+                const signedUrl = await getEvidenciaSignedUrl(ft.path);
+                return { ...ft, signedUrl: signedUrl || ft.path, tipo: 'vistoria' };
+              })
+            );
+          }
+        }
+
+        if (execId) {
           // 3. Buscar Checklist (execucao_itens)
           const { data: itemsData } = await supabase
             .from('execucao_itens')
@@ -228,12 +322,19 @@ export const VisualizarAtendimento: React.FC = () => {
             .eq('execucao_id', execId)
             .order('created_at', { ascending: true });
 
-          if (fotosData) {
-            const durante = fotosData.filter((f) => f.tipo === 'durante');
-            const saida = fotosData.filter((f) => f.tipo === 'saida');
-            setFotos({ durante, saida });
+          if (fotosData && fotosData.length > 0) {
+            const fotosComUrl = await Promise.all(
+              fotosData.map(async (f: any) => {
+                const signedUrl = await getEvidenciaSignedUrl(f.path);
+                return { ...f, signedUrl: signedUrl || f.path };
+              })
+            );
+            fotosDurante = fotosComUrl.filter((f) => f.momento === 'durante' || f.tipo === 'durante');
+            fotosSaida = fotosComUrl.filter((f) => f.momento === 'saida' || f.tipo === 'saida');
           }
         }
+
+        setFotos({ vistoria: fotosVistoria, durante: fotosDurante, saida: fotosSaida });
 
         // Buscar ordinal do cliente ("Xº atendimento deste cliente")
         const targetAgend = execData?.agendamentos || agendamento;
@@ -582,17 +683,80 @@ export const VisualizarAtendimento: React.FC = () => {
         )}
       </Card>
 
-      {/* BLOCO 5: FOTOS DE EXECUÇÃO E SAÍDA */}
-      <Card className="p-4 flex flex-col gap-4 bg-graphite-900 border-graphite-700">
+      {/* BLOCO 5: FOTOS E EVIDÊNCIAS (VISTORIA, EXECUÇÃO E SAÍDA) */}
+      <Card className="p-4 flex flex-col gap-5 bg-graphite-900 border-graphite-700">
         <div className="flex items-center gap-2 border-b border-graphite-800 pb-2">
           <Camera size={18} className="text-amber-400" />
           <h2 className="font-display text-[14px] font-bold text-vapor-100 uppercase tracking-wider">
-            Fotos e Evidências
+            Fotos e Evidências do Atendimento
           </h2>
         </div>
 
-        {/* Fotos Durante o Serviço */}
-        <div className="flex flex-col gap-2">
+        {/* 5.1 Fotos de Vistoria de Entrada (Check-in) */}
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-sans text-mint-400 font-semibold flex items-center gap-1.5">
+              <span>Vistoria de Entrada / Check-in ({fotos.vistoria.length})</span>
+            </span>
+            {checkinId && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => navigate(`/checkin/${checkinId}/ver`)}
+                className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 h-7 px-2"
+              >
+                <ClipboardCheck size={14} />
+                <span>Ver Vistoria Completa</span>
+              </Button>
+            )}
+          </div>
+          {fotos.vistoria.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {fotos.vistoria.map((f) => (
+                <div key={f.id} className="flex flex-col gap-1">
+                  <div
+                    onClick={() => setFotoModal({ url: f.signedUrl, titulo: f.descricao || 'Foto da Vistoria', data: f.created_at })}
+                    className="aspect-square rounded-lg bg-graphite-800 border border-mint-500/30 overflow-hidden relative group hover:border-mint-400 transition-colors cursor-pointer"
+                  >
+                    <img src={f.signedUrl} alt="Vistoria" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                    <div className="absolute inset-0 bg-graphite-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <Eye size={20} className="text-vapor-100" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        baixarFoto(
+                          f.signedUrl,
+                          `vistoria_${agendamento?.veiculo?.placa || 'foto'}_${f.id.slice(0, 8)}.jpg`
+                        );
+                      }}
+                      className="absolute top-1.5 right-1.5 p-1.5 bg-graphite-950/80 hover:bg-amber-500 hover:text-graphite-950 text-vapor-200 rounded-md border border-graphite-700 opacity-0 group-hover:opacity-100 transition shadow"
+                      title="Baixar Foto"
+                    >
+                      <Download size={13} />
+                    </button>
+                  </div>
+                  {f.descricao && (
+                    <span className="font-sans text-[11px] text-vapor-200 truncate" title={f.descricao}>
+                      {f.descricao}
+                    </span>
+                  )}
+                  {f.created_at && (
+                    <span className="font-mono text-[10px] text-mint-400 font-medium px-0.5 truncate" title="Data do check-in">
+                      Check-in: {formatarDataHora(f.created_at)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <span className="text-[12px] font-sans text-vapor-400 italic">Nenhuma foto registrada na vistoria inicial.</span>
+          )}
+        </div>
+
+        {/* 5.2 Fotos Durante o Serviço */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-graphite-800">
           <span className="text-[12px] font-sans text-vapor-300 font-semibold">
             Durante o Serviço ({fotos.durante.length})
           </span>
@@ -600,14 +764,29 @@ export const VisualizarAtendimento: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {fotos.durante.map((f) => (
                 <div key={f.id} className="flex flex-col gap-1">
-                  <a
-                    href={f.signedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors"
+                  <div
+                    onClick={() => setFotoModal({ url: f.signedUrl, titulo: 'Foto Durante o Serviço', data: f.created_at })}
+                    className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors cursor-pointer"
                   >
-                    <img src={f.signedUrl} alt="Execução" className="w-full h-full object-cover" />
-                  </a>
+                    <img src={f.signedUrl} alt="Execução" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                    <div className="absolute inset-0 bg-graphite-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <Eye size={20} className="text-vapor-100" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        baixarFoto(
+                          f.signedUrl,
+                          `execucao_${agendamento?.veiculo?.placa || 'foto'}_${f.id.slice(0, 8)}.jpg`
+                        );
+                      }}
+                      className="absolute top-1.5 right-1.5 p-1.5 bg-graphite-950/80 hover:bg-amber-500 hover:text-graphite-950 text-vapor-200 rounded-md border border-graphite-700 opacity-0 group-hover:opacity-100 transition shadow"
+                      title="Baixar Foto"
+                    >
+                      <Download size={13} />
+                    </button>
+                  </div>
                   {f.created_at && (
                     <span className="font-mono text-[10px] text-amber-400 font-medium px-0.5 truncate" title="Data e hora imutável">
                       Upload: {formatarDataHora(f.created_at)}
@@ -621,7 +800,7 @@ export const VisualizarAtendimento: React.FC = () => {
           )}
         </div>
 
-        {/* Fotos de Saída */}
+        {/* 5.3 Fotos de Saída */}
         <div className="flex flex-col gap-2 pt-2 border-t border-graphite-800">
           <span className="text-[12px] font-sans text-vapor-300 font-semibold">
             Saída do Veículo ({fotos.saida.length})
@@ -630,14 +809,29 @@ export const VisualizarAtendimento: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {fotos.saida.map((f) => (
                 <div key={f.id} className="flex flex-col gap-1">
-                  <a
-                    href={f.signedUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors"
+                  <div
+                    onClick={() => setFotoModal({ url: f.signedUrl, titulo: 'Foto de Saída do Veículo', data: f.created_at })}
+                    className="aspect-square rounded-lg bg-graphite-800 border border-graphite-700 overflow-hidden relative group hover:border-amber-500 transition-colors cursor-pointer"
                   >
-                    <img src={f.signedUrl} alt="Saída" className="w-full h-full object-cover" />
-                  </a>
+                    <img src={f.signedUrl} alt="Saída" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+                    <div className="absolute inset-0 bg-graphite-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <Eye size={20} className="text-vapor-100" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        baixarFoto(
+                          f.signedUrl,
+                          `saida_${agendamento?.veiculo?.placa || 'foto'}_${f.id.slice(0, 8)}.jpg`
+                        );
+                      }}
+                      className="absolute top-1.5 right-1.5 p-1.5 bg-graphite-950/80 hover:bg-amber-500 hover:text-graphite-950 text-vapor-200 rounded-md border border-graphite-700 opacity-0 group-hover:opacity-100 transition shadow"
+                      title="Baixar Foto"
+                    >
+                      <Download size={13} />
+                    </button>
+                  </div>
                   {f.created_at && (
                     <span className="font-mono text-[10px] text-amber-400 font-medium px-0.5 truncate" title="Data e hora imutável">
                       Upload: {formatarDataHora(f.created_at)}
@@ -768,6 +962,56 @@ export const VisualizarAtendimento: React.FC = () => {
           <div className="flex items-center gap-2">
             <ShieldCheck size={16} className="text-mint-400" />
             <span>Valores financeiros visíveis apenas para perfil de Gestão (Dono / Gerente).</span>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Lightbox de Foto */}
+      {fotoModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-graphite-950/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setFotoModal(null)}
+        >
+          <div 
+            className="relative max-w-3xl w-full bg-graphite-900 border border-graphite-700 rounded-xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-3 border-b border-graphite-800 flex items-center justify-between bg-graphite-950/50">
+              <div className="flex flex-col">
+                <span className="font-sans text-[13px] font-bold text-vapor-100">{fotoModal.titulo}</span>
+                {fotoModal.data && (
+                  <span className="font-mono text-[11px] text-vapor-400">{formatarDataHora(fotoModal.data)}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    baixarFoto(
+                      fotoModal.url,
+                      `foto_${agendamento?.veiculo?.placa ? agendamento.veiculo.placa + '_' : ''}${fotoModal.titulo || 'foto'}.jpg`
+                    )
+                  }
+                  className="h-8 px-3 text-xs flex items-center gap-1.5 text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                  title="Baixar foto no computador"
+                >
+                  <Download size={13} />
+                  <span>Baixar Foto</span>
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setFotoModal(null)}
+                  className="p-1.5 text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 rounded-lg transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="p-2 flex items-center justify-center bg-black/50 max-h-[75vh] overflow-auto">
+              <img src={fotoModal.url} alt={fotoModal.titulo} className="max-w-full max-h-[70vh] object-contain rounded" />
+            </div>
           </div>
         </div>
       )}

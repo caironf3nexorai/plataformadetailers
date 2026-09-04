@@ -50,6 +50,7 @@ export const DetalheCliente: React.FC = () => {
   const [vCategoriaId, setVCategoriaId] = useState('');
   const [vMarca, setVMarca] = useState('');
   const [vModelo, setVModelo] = useState('');
+  const [vCor, setVCor] = useState('');
   const [savingVeiculo, setSavingVeiculo] = useState(false);
   const [veiculoError, setVeiculoError] = useState<string | null>(null);
 
@@ -201,6 +202,7 @@ export const DetalheCliente: React.FC = () => {
         p_categoria: vCategoriaId,
         p_marca: vMarca.trim() || null,
         p_modelo: vModelo.trim() || null,
+        p_cor: vCor.trim() || null,
       });
 
       if (error) {
@@ -210,6 +212,7 @@ export const DetalheCliente: React.FC = () => {
         setVPlaca('');
         setVMarca('');
         setVModelo('');
+        setVCor('');
         await fetchClienteDetails();
       }
     } catch (err: any) {
@@ -424,8 +427,13 @@ export const DetalheCliente: React.FC = () => {
                   {v.categoria && <Badge tone="mint">{v.categoria.nome}</Badge>}
                 </div>
 
-                <div className="font-sans text-[14px] text-vapor-100 font-semibold">
-                  {v.marca || v.modelo ? `${v.marca || ''} ${v.modelo || ''}`.trim() : 'Modelo não informado'}
+                <div className="font-sans text-[14px] text-vapor-100 font-semibold flex items-center justify-between">
+                  <span>{v.marca || v.modelo ? `${v.marca || ''} ${v.modelo || ''}`.trim() : 'Modelo não informado'}</span>
+                  {v.cor && (
+                    <span className="font-sans text-xs text-vapor-300 bg-graphite-700/80 px-2 py-0.5 rounded border border-graphite-600">
+                      Cor: {v.cor}
+                    </span>
+                  )}
                 </div>
 
                 {v.observacoes && (
@@ -487,7 +495,7 @@ export const DetalheCliente: React.FC = () => {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className="flex flex-col gap-1">
               <label className="font-sans text-[13px] text-vapor-400 font-medium">Marca</label>
               <Input
@@ -505,6 +513,16 @@ export const DetalheCliente: React.FC = () => {
                 placeholder="Onix"
                 value={vModelo}
                 onChange={(e) => setVModelo(e.target.value)}
+                className="min-h-[44px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="font-sans text-[13px] text-vapor-400 font-medium">Cor</label>
+              <Input
+                type="text"
+                placeholder="Ex: Preto"
+                value={vCor}
+                onChange={(e) => setVCor(e.target.value)}
                 className="min-h-[44px]"
               />
             </div>
