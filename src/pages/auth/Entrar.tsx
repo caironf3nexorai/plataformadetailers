@@ -127,6 +127,16 @@ export const Entrar: React.FC = () => {
             </p>
           </div>
         </Card>
+
+        <div className="flex items-center justify-center gap-4 text-xs text-vapor-400">
+          <Link to="/" className="hover:text-amber-400 transition-colors">
+            ← Conhecer o NuvemWash
+          </Link>
+          <span>•</span>
+          <Link to="/calculadora" className="hover:text-amber-400 transition-colors">
+            Calculadora Grátis
+          </Link>
+        </div>
       </div>
     </PublicLayout>
   );

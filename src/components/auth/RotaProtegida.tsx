@@ -8,6 +8,8 @@ interface RotaProtegidaProps {
   allowedRoles?: AppRole[];
 }
 
+const LandingPage = React.lazy(() => import('../../pages/LandingPage').then(m => ({ default: m.LandingPage })));
+
 export const RotaProtegida: React.FC<RotaProtegidaProps> = ({ allowedRoles }) => {
   const { user, tenant, membership, loading } = useAuth();
   const location = useLocation();
@@ -26,8 +28,28 @@ export const RotaProtegida: React.FC<RotaProtegidaProps> = ({ allowedRoles }) =>
   const searchParams = new URLSearchParams(location.search);
   const conviteParam = searchParams.get('convite') || (location.state as any)?.convite;
 
-  // 1. Sem usuário logado -> vai para login (preservando convite se houver)
+  // 1. Sem usuário logado
   if (!user) {
+    // Se acessou a raiz '/', exibe a Landing Page de alta conversão
+    if (location.pathname === '/') {
+      return (
+        <React.Suspense
+          fallback={
+            <div className="min-h-screen bg-graphite-950 flex items-center justify-center text-amber-500">
+              Carregando...
+            </div>
+          }
+        >
+          <LandingPage />
+        </React.Suspense>
+      );
+    }
+
+    // Se acessou o atalho '/diluicao' de fora da plataforma, redireciona para a calculadora pública
+    if (location.pathname === '/diluicao') {
+      return <Navigate to="/calculadora" replace />;
+    }
+
     const loginTarget = conviteParam ? `/entrar?convite=${conviteParam}` : '/entrar';
     return <Navigate to={loginTarget} replace />;
   }

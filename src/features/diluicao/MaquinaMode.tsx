@@ -10,6 +10,7 @@ import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { EquipamentoPerfil } from './EquipamentoPerfil';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, ChevronDown, HelpCircle, Info, Sparkles } from 'lucide-react';
 
 interface MaquinaModeProps {
@@ -108,8 +109,9 @@ export const MaquinaMode: React.FC<MaquinaModeProps> = ({
     return 'agua';
   });
 
-  // Salva automaticamente a calibração atual como padrão
+  // Salva automaticamente a calibração atual como padrão (apenas no modo interno autenticado)
   useEffect(() => {
+    if (variant === 'publico') return;
     try {
       const dataToSave = {
         vazao: vazaoStr,
@@ -127,7 +129,7 @@ export const MaquinaMode: React.FC<MaquinaModeProps> = ({
     } catch (e) {
       console.warn('[MaquinaMode] Erro ao salvar lavadora padrão:', e);
     }
-  }, [vazaoStr, vazaoUnit, psiStr, posicaoRegistro, isCalibrated, saiuBaldeStr, sumiuPoteStr, volumePoteStr, targetRatioXStr, convention]);
+  }, [variant, vazaoStr, vazaoUnit, psiStr, posicaoRegistro, isCalibrated, saiuBaldeStr, sumiuPoteStr, volumePoteStr, targetRatioXStr, convention]);
 
   // Seleção de perfil gravado
   const handleSelectPerfil = (perfil: EquipamentoPerfilData | null) => {
@@ -622,17 +624,15 @@ export const MaquinaMode: React.FC<MaquinaModeProps> = ({
               Crie uma conta gratuita para guardar seus perfis de equipamento e nunca mais precisar medir de novo.
             </p>
           </div>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={() => {
-              // Redireciona ou abre convite
-              window.location.href = '#';
-            }}
-            className="w-full sm:w-auto shrink-0 min-h-[48px] px-6 font-semibold"
-          >
-            Criar conta grátis
-          </Button>
+          <Link to="/criar-conta" className="w-full sm:w-auto shrink-0">
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full sm:w-auto min-h-[48px] px-6 font-semibold"
+            >
+              Criar conta grátis
+            </Button>
+          </Link>
         </Card>
       )}
     </div>
