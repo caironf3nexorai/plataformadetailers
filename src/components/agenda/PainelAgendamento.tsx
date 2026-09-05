@@ -420,16 +420,79 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
     }
   };
 
-  // Adicionar item via RPC
-  const handleConfirmAddServico = async () => {
+  // Adicionar item via RPC com suporte a forçar horário em atendimentos em andamento
+  const handleConfirmAddServico = async (forcar: boolean = false) => {
     if (!selectedAddServicoId) return;
     setSavingAddItem(true);
     setErrorMessage(null);
     try {
-      const { error } = await supabase.rpc('adicionar_item_agendamento', {
+      const deveForcar = forcar || agendamento.status === 'em_andamento' || agendamento.status === 'concluido';
+
+      // 1. Tenta RPC com p_forcar
+      let { error } = await supabase.rpc('adicionar_item_agendamento', {
         p_agendamento: agendamento.id,
-        p_servico: selectedAddServicoId
+        p_servico: selectedAddServicoId,
+        p_forcar: deveForcar
       });
+
+      // Se a assinatura com p_forcar ainda não existir no banco, tenta assinatura padrão
+      if (error && (error.code === 'PGRST202' || error.message?.includes('parameter') || error.message?.includes('adicionar_item_agendamento'))) {
+        const res = await supabase.rpc('adicionar_item_agendamento', {
+          p_agendamento: agendamento.id,
+          p_servico: selectedAddServicoId
+        });
+        error = res.error;
+      }
+
+      // Se a RPC falhou devido ao horário de fechamento e o atendimento já está em andamento (ou o usuário forçou):
+      if (error && (deveForcar || agendamento.status === 'em_andamento' || error.message?.includes('fechamento'))) {
+        if (deveForcar) {
+          console.warn('[PainelAgendamento] RPC bloqueou por fechamento; aplicando inserção direta segura para o serviço em andamento...');
+          
+          const { data: servData } = await supabase
+            .from('servicos')
+            .select('id, nome, duracao_minutos, modo_ocupacao, dias_ocupados, servico_precos(preco_base, categoria_id, ativo)')
+            .eq('id', selectedAddServicoId)
+            .single();
+
+          if (servData) {
+            const precos = (servData.servico_precos as any[]) || [];
+            const precoCat = precos.find((p: any) => p.ativo && p.categoria_id === agendamento.categoria_id);
+            const precoFallback = precos.find((p: any) => p.ativo);
+            const precoFinal = Number(precoCat?.preco_base ?? precoFallback?.preco_base ?? 0);
+            const duracaoFinal = Number(servData.duracao_minutos || 60);
+
+            const { error: insertErr } = await supabase
+              .from('agendamento_itens')
+              .upsert({
+                tenant_id: agendamento.tenant_id,
+                agendamento_id: agendamento.id,
+                servico_id: servData.id,
+                duracao_minutos: duracaoFinal,
+                preco_estimado: precoFinal,
+                modo_ocupacao: servData.modo_ocupacao || 'slot',
+                dias_ocupados: servData.dias_ocupados || 1,
+                ordem: 99
+              }, { onConflict: 'agendamento_id,servico_id' });
+
+            if (!insertErr) {
+              error = null;
+              if (execucaoInfo?.id) {
+                await supabase.from('execucao_itens').insert({
+                  tenant_id: agendamento.tenant_id,
+                  execucao_id: execucaoInfo.id,
+                  servico_nome: servData.nome,
+                  descricao: 'Item adicionado via gestão do atendimento',
+                  obrigatorio: true,
+                  ordem: 99,
+                  concluido: false
+                });
+              }
+              await supabase.rpc('recalcular_agendamento_totais', { p_agendamento_id: agendamento.id });
+            }
+          }
+        }
+      }
 
       if (error) throw error;
 
@@ -630,7 +693,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                     type="button"
                     variant="primary"
                     disabled={!selectedAddServicoId || savingAddItem}
-                    onClick={handleConfirmAddServico}
+                    onClick={() => handleConfirmAddServico(false)}
                     className="text-[11px] py-1"
                   >
                     {savingAddItem ? 'Adicionando...' : 'Adicionar'}
@@ -831,9 +894,22 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
           )}
 
           {errorMessage && (
-            <div className="p-3 bg-flare-500/10 border border-flare-500/30 rounded text-flare-400 font-sans text-[12px] flex items-center gap-2">
-              <AlertTriangle size={16} className="shrink-0" />
-              <span>{errorMessage}</span>
+            <div className="p-3 bg-flare-500/10 border border-flare-500/30 rounded text-flare-400 font-sans text-[12px] flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+              {errorMessage.includes('fechamento') && selectedAddServicoId && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => handleConfirmAddServico(true)}
+                  disabled={savingAddItem}
+                  className="self-start text-[11px] py-1 px-3 mt-1"
+                >
+                  {savingAddItem ? 'Adicionando...' : 'Adicionar Mesmo Assim (Forçar Horário)'}
+                </Button>
+              )}
             </div>
           )}
         </div>

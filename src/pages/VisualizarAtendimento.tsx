@@ -72,11 +72,12 @@ export const VisualizarAtendimento: React.FC = () => {
         ? execucao.tempo_efetivo_minutos
         : (segundosTrabalhados > 0 ? Math.round(segundosTrabalhados / 60) : undefined);
 
-      const itensFormatados = (agendamento.agendamento_itens || []).map((it: any) => ({
+      const rawItens = (agendamento.agendamento_itens || []);
+      const itensFormatados = rawItens.map((it: any) => ({
         servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
         categoria_nome: it.categoria?.nome,
-        preco: Number(it.preco_praticado ?? it.preco ?? it.servicos?.preco ?? 0),
-        duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && (agendamento.agendamento_itens || []).length <= 1)
+        preco: Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? it.valor ?? it.servicos?.preco ?? 0),
+        duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && rawItens.length <= 1)
           ? tempoRealTrabalhadoMinutos
           : (it.duracao_minutos || it.servicos?.duracao_minutos || agendamento.duracao_total || agendamento.duracao_minutos),
         quantidade: it.quantidade || 1,
@@ -93,6 +94,8 @@ export const VisualizarAtendimento: React.FC = () => {
       // Se há um serviço único ou item principal e o valor final faturado foi ajustado (ex: R$ 150),
       // alinha o preço do item para bater com o total faturado no documento da OS
       if (itensFormatados.length === 1 && valorFinalTotal > 0) {
+        itensFormatados[0].preco = valorFinalTotal;
+      } else if (itensFormatados.length > 1 && totalItens === 0 && valorFinalTotal > 0) {
         itensFormatados[0].preco = valorFinalTotal;
       }
 
