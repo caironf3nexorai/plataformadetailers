@@ -39,6 +39,7 @@ export interface PDFOrcamentoData {
   clienteTelefone?: string | null;
   veiculoModelo?: string | null;
   veiculoPlaca?: string | null;
+  veiculoCor?: string | null;
   categoriaNome?: string | null;
 
   // Oficina
@@ -162,6 +163,14 @@ export async function gerarPDFOrcamento(
   }
 
   const codProposta = formatarCodigoProposta(data);
+  const diasValidade = data.validade_dias || 7;
+  let dataValidadeLimiteStr = data.data_validade_limite;
+  if (!dataValidadeLimiteStr) {
+    const baseDt = data.enviado_em ? new Date(data.enviado_em) : new Date();
+    baseDt.setDate(baseDt.getDate() + diasValidade);
+    dataValidadeLimiteStr = baseDt.toISOString().split('T')[0];
+  }
+  const validadeTextoCompleto = `Válido até ${formatarData(dataValidadeLimiteStr)} (${diasValidade} dias)`;
 
   // Renderiza cabeçalho oficial
   let y = cabecalhoDocumento(doc, {
@@ -173,7 +182,8 @@ export async function gerarPDFOrcamento(
     oficinaTelefone: data.oficinaTelefone || undefined,
     oficinaCidadeUF: data.oficinaCidadeUF || undefined,
     documentoTitulo: `PROPOSTA COMERCIAL ${codProposta}`,
-    documentoSubtitulo: `Validade da Proposta: ${data.validade_dias || 7} dias`,
+    documentoSubtitulo: validadeTextoCompleto,
+    validadeTexto: validadeTextoCompleto,
     dataEmissao: data.enviado_em
       ? `${formatarData(data.enviado_em)} ${formatarHora(data.enviado_em)}`
       : `${formatarData(new Date().toISOString())} ${formatarHora(new Date().toISOString())}`,
@@ -217,11 +227,11 @@ export async function gerarPDFOrcamento(
     ? (corPrimariaRgb[0] > 200 && corPrimariaRgb[1] > 180 ? [180, 83, 9] : corPrimariaRgb)
     : [251, 191, 36];
 
-  // 2. Bloco Cliente e Veículo Unificado
+  // 2. Bloco Cliente e Veículo Unificado (com Validade)
   doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
   doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
   doc.setLineWidth(0.25);
-  doc.roundedRect(pageMargin, y, usableWidth, 20, 2, 2, 'FD');
+  doc.roundedRect(pageMargin, y, usableWidth, 24, 2, 2, 'FD');
 
   // Coluna Cliente
   doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
@@ -232,15 +242,15 @@ export async function gerarPDFOrcamento(
   doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Nome: ${data.clienteNome}`, pageMargin + 5, y + 11);
+  doc.text(`Nome: ${data.clienteNome}`, pageMargin + 5, y + 10.5);
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-  doc.text(`Telefone: ${data.clienteTelefone || 'Não informado'}`, pageMargin + 5, y + 15.5);
+  doc.text(`Telefone: ${data.clienteTelefone || 'Não informado'}`, pageMargin + 5, y + 15);
 
   // Separador vertical sutil entre colunas
   const colCentroX = pageMargin + 92;
   doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
   doc.setLineWidth(0.15);
-  doc.line(colCentroX - 6, y + 3, colCentroX - 6, y + 17);
+  doc.line(colCentroX - 6, y + 3, colCentroX - 6, y + 15.5);
 
   // Coluna Veículo
   doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
@@ -251,13 +261,27 @@ export async function gerarPDFOrcamento(
   doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Modelo: ${data.veiculoModelo || 'Não informado'}`, colCentroX, y + 11);
+  doc.text(`Modelo: ${data.veiculoModelo || 'Não informado'}`, colCentroX, y + 10.5);
   const placaTxt = data.veiculoPlaca ? data.veiculoPlaca.toUpperCase() : 'Não informada';
   const catTxt = data.categoriaNome ? ` • ${data.categoriaNome}` : '';
+  const corTxt = ` • Cor: ${data.veiculoCor?.trim() || 'Não informada'}`;
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-  doc.text(`Placa: ${placaTxt}${catTxt}`, colCentroX, y + 15.5);
+  doc.text(`Placa: ${placaTxt}${catTxt}${corTxt}`, colCentroX, y + 15);
 
-  y += 24;
+  // Linha divisória horizontal para a Validade da Proposta
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.15);
+  doc.line(pageMargin + 5, y + 17.5, rightMarginX - 5, y + 17.5);
+
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PRAZO DE VALIDADE DA PROPOSTA:', pageMargin + 5, y + 21.5);
+  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+  doc.setFont('helvetica', 'normal');
+  doc.text(validadeTextoCompleto, pageMargin + 60, y + 21.5);
+
+  y += 28;
 
   // 3. Níveis de Proposta (Cartões Unificados e Estruturados)
   onProgress?.('Renderizando opções de proposta...');

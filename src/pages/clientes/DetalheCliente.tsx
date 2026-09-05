@@ -21,7 +21,9 @@ import {
   Save,
   Trash2,
   AlertTriangle,
+  Pencil,
 } from 'lucide-react';
+import { ModalEditarVeiculo, type VeiculoEditavel } from '../../components/clientes/ModalEditarVeiculo';
 
 export const DetalheCliente: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -53,6 +55,10 @@ export const DetalheCliente: React.FC = () => {
   const [vCor, setVCor] = useState('');
   const [savingVeiculo, setSavingVeiculo] = useState(false);
   const [veiculoError, setVeiculoError] = useState<string | null>(null);
+
+  // Modal Edição de Veículo Existente
+  const [showEditVeiculoModal, setShowEditVeiculoModal] = useState(false);
+  const [veiculoParaEditar, setVeiculoParaEditar] = useState<VeiculoEditavel | null>(null);
 
   const fetchClienteDetails = async () => {
     if (!id || !tenant) return;
@@ -164,17 +170,34 @@ export const DetalheCliente: React.FC = () => {
     setDesativandoCliente(true);
 
     try {
-      const { error } = await supabase
+      // 1. Tentar deletar definitivamente do banco
+      const { error: delError } = await supabase
+        .from('clientes')
+        .delete()
+        .eq('id', cliente.id);
+
+      if (!delError) {
+        setShowConfirmDesativar(false);
+        navigate('/clientes');
+        return;
+      }
+
+      // 2. Se houver vínculos históricos (agendamentos, orçamentos, títulos), faz soft-delete (ativo = false)
+      console.warn('[DetalheCliente] Exclusão física bloqueada por registros vinculados. Desativando cliente...', delError);
+      const { error: updError } = await supabase
         .from('clientes')
         .update({ ativo: false, updated_at: new Date().toISOString() })
         .eq('id', cliente.id);
 
-      if (!error) {
+      if (!updError) {
         setShowConfirmDesativar(false);
         navigate('/clientes');
+      } else {
+        throw updError;
       }
-    } catch (err) {
-      console.error('Erro ao desativar cliente:', err);
+    } catch (err: any) {
+      console.error('Erro ao excluir/desativar cliente:', err);
+      setFeedbackMsg({ type: 'error', text: 'Não foi possível excluir o cliente: ' + (err.message || 'Erro desconhecido') });
     } finally {
       setDesativandoCliente(false);
     }
@@ -287,7 +310,7 @@ export const DetalheCliente: React.FC = () => {
               className="min-h-[44px] px-3 text-flare-400 hover:bg-flare-400/10 hover:text-flare-400"
             >
               <Trash2 size={18} />
-              Desativar cliente
+              Excluir cliente
             </Button>
           )}
         </div>
@@ -434,11 +457,15 @@ export const DetalheCliente: React.FC = () => {
                   {v.categoria && <Badge tone="mint">{v.categoria.nome}</Badge>}
                 </div>
 
-                <div className="font-sans text-[14px] text-vapor-100 font-semibold flex items-center justify-between">
+                <div className="font-sans text-[14px] text-vapor-100 font-semibold flex items-center justify-between flex-wrap gap-2">
                   <span>{v.marca || v.modelo ? `${v.marca || ''} ${v.modelo || ''}`.trim() : 'Modelo não informado'}</span>
-                  {v.cor && (
-                    <span className="font-sans text-xs text-vapor-300 bg-graphite-700/80 px-2 py-0.5 rounded border border-graphite-600">
+                  {v.cor ? (
+                    <span className="font-sans text-xs text-vapor-200 bg-graphite-700/80 px-2 py-0.5 rounded border border-graphite-600 font-medium">
                       Cor: {v.cor}
+                    </span>
+                  ) : (
+                    <span className="font-sans text-xs text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 font-semibold">
+                      ⚠️ Sem cor informada
                     </span>
                   )}
                 </div>
@@ -448,6 +475,28 @@ export const DetalheCliente: React.FC = () => {
                     <strong>Obs:</strong> {v.observacoes}
                   </p>
                 )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-graphite-700/60 mt-1">
+                  <span className="text-[11px] text-vapor-400 group-hover:text-vapor-300">
+                    Clique para ver ficha completa
+                  </span>
+                  {!isOperador && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setVeiculoParaEditar(v);
+                        setShowEditVeiculoModal(true);
+                      }}
+                      className="min-h-[32px] px-2.5 text-[12px] flex items-center gap-1.5"
+                    >
+                      <Pencil size={13} />
+                      Editar Veículo
+                    </Button>
+                  )}
+                </div>
               </Card>
             ))}
           </div>
@@ -546,14 +595,27 @@ export const DetalheCliente: React.FC = () => {
         </form>
       </Modal>
 
-      {/* Modal de Confirmação para Desativar Cliente */}
+      {/* Modal Editar Veículo Existente */}
+      <ModalEditarVeiculo
+        isOpen={showEditVeiculoModal}
+        onClose={() => {
+          setShowEditVeiculoModal(false);
+          setVeiculoParaEditar(null);
+        }}
+        veiculo={veiculoParaEditar}
+        onSuccess={() => {
+          fetchClienteDetails();
+        }}
+      />
+
+      {/* Modal de Confirmação para Excluir / Desativar Cliente */}
       <ModalConfirmacao
         isOpen={showConfirmDesativar}
         onClose={() => setShowConfirmDesativar(false)}
         onConfirm={handleDesativarCliente}
-        title="Desativar Cliente"
-        mensagem="Deseja realmente desativar este cliente? Ele não aparecerá nas listagens principais da oficina."
-        textoConfirmar="Desativar"
+        title="Excluir Cliente"
+        mensagem="Deseja realmente remover este cliente? Se não houver histórico vinculado (agendamentos, orçamentos ou pagamentos), ele será excluído definitivamente do banco de dados. Caso já possua histórico, será desativado e ocultado das listas e seletores."
+        textoConfirmar="Excluir"
         textoCancelar="Voltar"
         variant="danger"
         loading={desativandoCliente}

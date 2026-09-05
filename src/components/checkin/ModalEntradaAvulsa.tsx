@@ -152,6 +152,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
         .from('clientes')
         .select('id, nome, telefone')
         .eq('tenant_id', tenant.id)
+        .eq('ativo', true)
         .order('nome');
       setClientes(clData || []);
 

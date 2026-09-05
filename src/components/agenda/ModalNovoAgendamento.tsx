@@ -132,6 +132,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
           .from('clientes')
           .select('id, nome, telefone, veiculos(id, placa, modelo, marca, cor, categoria_id, categorias_veiculo(id, nome))')
           .eq('tenant_id', currentTenantId)
+          .eq('ativo', true)
           .order('nome', { ascending: true })
           .limit(10);
 

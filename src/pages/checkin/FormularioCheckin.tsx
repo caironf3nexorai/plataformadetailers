@@ -54,6 +54,7 @@ export const FormularioCheckin: React.FC = () => {
 
   // Estados dos Campos
   const [km, setKm] = useState<string>('');
+  const [veiculoCor, setVeiculoCor] = useState<string>('');
   const [nivelCombustivel, setNivelCombustivel] = useState<number | null>(4); // Default 1/2
   const [luzesPainel, setLuzesPainel] = useState<string[]>([]);
   const [estepe, setEstepe] = useState<boolean | null>(true);
@@ -104,15 +105,34 @@ export const FormularioCheckin: React.FC = () => {
       setSavingStep(true);
       const agora = new Date().toISOString();
 
+      const dadosAtualizados = {
+        km: km ? parseInt(km, 10) : null,
+        nivel_combustivel: nivelCombustivel,
+        luzes_painel: luzesPainel,
+        estepe: estepe,
+        iluminacao: iluminacao,
+        sujidade: sujidade,
+        fluidos: fluidos,
+        observacoes: observacoes.trim() || null,
+      };
+
       const { error: updateErr } = await supabase
         .from('checkins')
         .update({
+          ...dadosAtualizados,
           enviado_em: agora,
           aceite_tipo: 'remoto',
+          updated_at: agora,
         })
         .eq('id', checkin.id);
 
       if (updateErr) throw updateErr;
+
+      if (agendamento.veiculo?.id && veiculoCor.trim()) {
+        await supabase.from('veiculos').update({ cor: veiculoCor.trim() }).eq('id', agendamento.veiculo.id);
+      }
+
+      setCheckin((prev) => prev ? { ...prev, ...dadosAtualizados, enviado_em: agora, aceite_tipo: 'remoto' } : null);
 
       const urlAceite = `${window.location.origin}/vistoria/${checkin.token_aceite}`;
       const nomeCliente = agendamento.cliente?.nome ? agendamento.cliente.nome.split(' ')[0] : 'Cliente';
@@ -179,6 +199,7 @@ export const FormularioCheckin: React.FC = () => {
 
       if (agErr || !agData) throw new Error('Agendamento não encontrado.');
       setAgendamento(agData);
+      setVeiculoCor(agData.veiculo?.cor || '');
       setAssinaturaNome((agData.cliente as any)?.nome || '');
 
       // Se o atendimento já foi concluído/finalizado, bloqueia nova vistoria de entrada
@@ -261,20 +282,28 @@ export const FormularioCheckin: React.FC = () => {
     if (!checkin || checkin.finalizado) return;
     setSavingStep(true);
     try {
+      const payload = {
+        km: km ? parseInt(km, 10) : null,
+        nivel_combustivel: nivelCombustivel,
+        luzes_painel: luzesPainel,
+        estepe: estepe,
+        iluminacao: iluminacao,
+        sujidade: sujidade,
+        fluidos: fluidos,
+        observacoes: observacoes.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+
       await supabase
         .from('checkins')
-        .update({
-          km: km ? parseInt(km, 10) : null,
-          nivel_combustivel: nivelCombustivel,
-          luzes_painel: luzesPainel,
-          estepe: estepe,
-          iluminacao: iluminacao,
-          sujidade: sujidade,
-          fluidos: fluidos,
-          observacoes: observacoes.trim() || null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', checkin.id);
+
+      if (agendamento?.veiculo?.id && veiculoCor.trim()) {
+        await supabase.from('veiculos').update({ cor: veiculoCor.trim() }).eq('id', agendamento.veiculo.id);
+      }
+
+      setCheckin((prev) => (prev ? { ...prev, ...payload } : null));
     } catch (err) {
       console.error('Erro no autosave:', err);
     } finally {
@@ -342,37 +371,50 @@ export const FormularioCheckin: React.FC = () => {
   };
 
   // Upload de Foto Geral de Vistoria
-  const handleUploadFotoGeral = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!checkin || !tenant || !user || !e.target.files || e.target.files.length === 0) return;
-    const files = Array.from(e.target.files);
+  const handleAddFotoGeral = async (file: File) => {
+    if (!checkin || !tenant || !user) return;
     setUploadingFotoGeral(true);
+    setUploadProgressText('Enviando imagem...');
     try {
-      for (let idx = 0; idx < files.length; idx++) {
-        const file = files[idx];
-        setUploadProgressText(`Processando foto ${idx + 1} de ${files.length}...`);
+      const { path, capturadaEm } = await uploadEvidenciaFoto(tenant.id, checkin.id, file, false, agendamento?.veiculo?.placa);
 
-        const { path, capturadaEm } = await uploadEvidenciaFoto(tenant.id, checkin.id, file, false, agendamento?.veiculo?.placa);
-        const { data, error } = await supabase
-          .from('checkin_fotos')
-          .insert({
-            tenant_id: tenant.id,
-            checkin_id: checkin.id,
-            path: path,
-            descricao: 'Foto geral de entrada',
-            enviado_por: user.id,
-            capturada_em: capturadaEm,
-          })
-          .select('*')
-          .single();
+      const { data, error } = await supabase
+        .from('checkin_fotos')
+        .insert({
+          tenant_id: tenant.id,
+          checkin_id: checkin.id,
+          avaria_id: null,
+          path: path,
+          descricao: 'Foto geral de entrada',
+          enviado_por: user.id,
+          capturada_em: capturadaEm,
+        })
+        .select('*')
+        .single();
 
-        if (error) throw error;
-        setFotos((prev) => [...prev, data]);
-      }
+      if (error) throw error;
+      setFotos((prev) => [...prev, data]);
     } catch (err: any) {
-      setError('Erro ao enviar fotos: ' + err.message);
+      console.error('Erro ao subir foto geral:', err);
+      setError('Erro ao enviar foto: ' + err.message);
     } finally {
       setUploadingFotoGeral(false);
       setUploadProgressText('');
+    }
+  };
+
+  // Handler para seleção e upload de múltiplas fotos gerais no input
+  const handleUploadFotoGeral = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgressText(`Enviando foto ${i + 1} de ${files.length}...`);
+        await handleAddFotoGeral(files[i]);
+      }
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -385,6 +427,30 @@ export const FormularioCheckin: React.FC = () => {
 
     try {
       setSavingStep(true);
+
+      const dadosAtualizados = {
+        km: km ? parseInt(km, 10) : null,
+        nivel_combustivel: nivelCombustivel,
+        luzes_painel: luzesPainel,
+        estepe: estepe,
+        iluminacao: iluminacao,
+        sujidade: sujidade,
+        fluidos: fluidos,
+        observacoes: observacoes.trim() || null,
+      };
+
+      await supabase
+        .from('checkins')
+        .update({
+          ...dadosAtualizados,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', checkin.id);
+
+      if (agendamento?.veiculo?.id && veiculoCor.trim()) {
+        await supabase.from('veiculos').update({ cor: veiculoCor.trim() }).eq('id', agendamento.veiculo.id);
+      }
+
       // 1. Upload do PNG da Assinatura
       const { path: assinaturaPath } = await uploadEvidenciaFoto(tenant.id, checkin.id, signatureBlob, true);
 
@@ -414,11 +480,37 @@ export const FormularioCheckin: React.FC = () => {
     try {
       setSavingStep(true);
       setGerandoPdfManual(true);
-      setPdfProgressManual('Destravando vistoria no sistema...');
+      setPdfProgressManual('Salvando dados da vistoria e preparando documento...');
 
       const nomeSignatario = assinaturaNome.trim() || agendamento?.cliente?.nome || 'Assinatura Manual';
 
-      // 1. Finaliza check-in no banco sem exigir upload de assinatura digital
+      const dadosAtualizados = {
+        km: km ? parseInt(km, 10) : null,
+        nivel_combustivel: nivelCombustivel,
+        luzes_painel: luzesPainel,
+        estepe: estepe,
+        iluminacao: iluminacao,
+        sujidade: sujidade,
+        fluidos: fluidos,
+        observacoes: observacoes.trim() || null,
+      };
+
+      // 1. Salva todos os dados preenchidos nas abas no banco
+      await supabase
+        .from('checkins')
+        .update({
+          ...dadosAtualizados,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', checkin.id);
+
+      if (agendamento?.veiculo?.id && veiculoCor.trim()) {
+        await supabase.from('veiculos').update({ cor: veiculoCor.trim() }).eq('id', agendamento.veiculo.id);
+      }
+
+      setCheckin((prev) => (prev ? { ...prev, ...dadosAtualizados } : null));
+
+      // 2. Finaliza check-in no banco sem exigir upload de assinatura digital
       const { error: rpcErr } = await supabase.rpc('finalizar_checkin', {
         p_checkin: checkin.id,
         p_assinatura_path: 'manual',
@@ -444,7 +536,7 @@ export const FormularioCheckin: React.FC = () => {
           .eq('id', checkin.id);
       }
 
-      // 2. Dispara geração de PDF da vistoria com campo de assinatura manual
+      // 3. Dispara geração de PDF da vistoria com campo de assinatura manual e dados completos
       setPdfProgressManual('Gerando PDF para assinatura manual...');
       const logoUrl = tenant.logo_path
         ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
@@ -454,6 +546,7 @@ export const FormularioCheckin: React.FC = () => {
         {
           checkin: {
             ...checkin,
+            ...dadosAtualizados,
             finalizado: true,
             assinatura_nome: nomeSignatario,
             assinatura_path: null,
@@ -465,6 +558,7 @@ export const FormularioCheckin: React.FC = () => {
           clienteTelefone: agendamento.cliente?.telefone || '',
           veiculoModelo: agendamento.veiculo?.modelo || 'Veículo',
           veiculoPlaca: agendamento.veiculo?.placa || '',
+          veiculoCor: veiculoCor.trim() || agendamento.veiculo?.cor || null,
           oficinaNome: tenant.nome || 'Oficina',
           oficinaTelefone: tenant.telefone || '',
           oficinaCidadeUF: tenant.cidade && tenant.uf ? `${tenant.cidade}/${tenant.uf}` : undefined,
@@ -472,7 +566,6 @@ export const FormularioCheckin: React.FC = () => {
           oficinaDocumento: tenant.documento,
           oficinaDocumentoTipo: tenant.documento_tipo,
           oficinaRazaoSocial: tenant.razao_social,
-          svgElements: {},
           planoCodigo: tenant.plano,
           pdfCorPrimaria: tenant.pdf_cor_primaria,
           pdfCorFundoCabecalho: tenant.pdf_cor_fundo_cabecalho,
@@ -614,22 +707,46 @@ export const FormularioCheckin: React.FC = () => {
             <div>
               <span className="text-[11px] text-vapor-400 uppercase font-mono">Veículo & Placa</span>
               <p className="font-sans text-[15px] font-bold text-amber-400">{agendamento.veiculo?.modelo}</p>
-              <p className="font-mono text-[13px] text-vapor-200">Placa: {agendamento.veiculo?.placa?.toUpperCase()}</p>
+              <p className="font-mono text-[13px] text-vapor-200">
+                Placa: {agendamento.veiculo?.placa?.toUpperCase()}{veiculoCor.trim() ? ` • Cor: ${veiculoCor.trim()}` : ''}
+              </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="font-sans text-[14px] text-vapor-200 font-semibold">
-              Quilometragem Atual (KM):
-            </label>
-            <CampoNumerico
-              integerOnly
-              suffix="km"
-              value={km}
-              onChange={(val) => setKm(val ? String(val) : '')}
-              placeholder="Ex: 45200"
-              wrapperClassName="min-h-[56px]"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="font-sans text-[14px] text-vapor-200 font-semibold">
+                Quilometragem Atual (KM):
+              </label>
+              <CampoNumerico
+                integerOnly
+                suffix="km"
+                value={km}
+                onChange={(val) => setKm(val ? String(val) : '')}
+                onBlur={() => saveProgress()}
+                placeholder="Ex: 45200"
+                wrapperClassName="min-h-[56px]"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="font-sans text-[14px] text-vapor-200 font-semibold">
+                Cor do Veículo:
+              </label>
+              <input
+                type="text"
+                value={veiculoCor}
+                onChange={(e) => setVeiculoCor(e.target.value)}
+                onBlur={() => {
+                  saveProgress();
+                  if (agendamento?.veiculo?.id && veiculoCor.trim()) {
+                    supabase.from('veiculos').update({ cor: veiculoCor.trim() }).eq('id', agendamento.veiculo.id);
+                  }
+                }}
+                placeholder="Ex: Preto Ninja, Prata, Branco..."
+                className="bg-graphite-900 border border-graphite-700 rounded-lg px-4 py-3 text-vapor-100 font-sans text-[15px] focus:border-amber-500 focus:outline-none min-h-[56px]"
+              />
+            </div>
           </div>
         </Card>
       )}
@@ -914,6 +1031,7 @@ export const FormularioCheckin: React.FC = () => {
             <textarea
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
+              onBlur={() => saveProgress()}
               placeholder="Ex: Cliente relatou barulho na porta do motorista..."
               rows={4}
               className="appearance-none bg-graphite-700 border border-graphite-600 rounded-lg p-3 text-vapor-100 placeholder-vapor-600 font-sans text-[14px] outline-none focus:border-amber-500 min-h-[100px]"

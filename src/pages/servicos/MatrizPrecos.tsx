@@ -49,20 +49,22 @@ export const MatrizPrecos: React.FC = () => {
     setSuccessMsg(null);
 
     try {
-      // 1. Busca categorias ativas
+      // 1. Busca categorias ativas do tenant
       const { data: cats, error: cErr } = await supabase
         .from('categorias_veiculo')
         .select('*')
+        .eq('tenant_id', tenant.id)
         .eq('ativo', true)
         .order('ordem', { ascending: true });
 
       if (cErr) throw cErr;
       setCategories(cats as CategoriaVeiculo[]);
 
-      // 2. Busca serviços ativos
+      // 2. Busca serviços ativos do tenant
       const { data: servs, error: sErr } = await supabase
         .from('servicos')
         .select('*')
+        .eq('tenant_id', tenant.id)
         .eq('ativo', true)
         .order('ordem', { ascending: true });
 

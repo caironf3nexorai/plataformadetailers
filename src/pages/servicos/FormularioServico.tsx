@@ -95,10 +95,11 @@ export const FormularioServico: React.FC = () => {
         setGrupoFotos(mapping);
       }
 
-      // 2. Busca categorias de veículo ativas
+      // 2. Busca categorias de veículo ativas do tenant
       const { data: cats, error: cErr } = await supabase
         .from('categorias_veiculo')
         .select('*')
+        .eq('tenant_id', tenant.id)
         .eq('ativo', true)
         .order('ordem', { ascending: true });
 

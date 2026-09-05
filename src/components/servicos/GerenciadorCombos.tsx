@@ -92,10 +92,11 @@ export const GerenciadorCombos: React.FC = () => {
 
       setServicosDisponiveis(servsData || []);
 
-      // 3. Fetch categories
+      // 3. Fetch categories do tenant
       const { data: catData } = await supabase
         .from('categorias_veiculo')
         .select('*')
+        .eq('tenant_id', tenant.id)
         .order('ordem');
 
       setCategorias(catData || []);

@@ -227,6 +227,7 @@ export const OrcamentoPublico: React.FC = () => {
         clienteTelefone: data.cliente_telefone,
         veiculoModelo: data.veiculo?.modelo,
         veiculoPlaca: data.veiculo?.placa,
+        veiculoCor: data.veiculo?.cor || null,
         oficinaNome: data.oficina?.nome || 'Oficina',
         oficinaRazaoSocial: data.oficina?.razao_social,
         oficinaDocumento: data.oficina?.documento,
@@ -439,7 +440,7 @@ export const OrcamentoPublico: React.FC = () => {
           <p className="font-sans text-[15px] text-vapor-300">
             Preparamos três opções exclusivas para o seu{' '}
             <strong className="text-vapor-100">
-              {data.veiculo ? `${data.veiculo.modelo || 'veículo'} (${data.veiculo.placa})` : 'veículo'}
+              {data.veiculo ? `${data.veiculo.modelo || 'veículo'} (${data.veiculo.placa})${data.veiculo.cor ? ` • Cor: ${data.veiculo.cor}` : ''}` : 'veículo'}
             </strong>.
           </p>
 

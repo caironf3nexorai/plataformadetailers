@@ -22,6 +22,7 @@ import {
   Save,
   Package,
   Calendar,
+  Palette,
 } from 'lucide-react';
 
 import { formatarData } from '../../utils/datas';
@@ -238,6 +239,16 @@ export const DetalheVeiculo: React.FC = () => {
                 {veiculo.categoria.nome}
               </Badge>
             )}
+            {veiculo.cor ? (
+              <span className="font-mono text-[13px] px-2.5 py-1 bg-graphite-900 border border-graphite-700 rounded text-vapor-200 font-semibold flex items-center gap-1.5">
+                <Palette size={14} className="text-amber-400" />
+                Cor: {veiculo.cor}
+              </span>
+            ) : (
+              <span className="font-mono text-[12px] px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400 font-semibold flex items-center gap-1.5">
+                ⚠️ Sem cor informada
+              </span>
+            )}
           </div>
         </div>
 
@@ -326,10 +337,13 @@ export const DetalheVeiculo: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-sans text-[13px] text-vapor-400 font-medium">Cor</label>
+            <label className="font-sans text-[13px] text-vapor-400 font-medium flex items-center gap-1.5">
+              <Palette size={14} className="text-amber-400" />
+              Cor do Veículo
+            </label>
             <Input
               type="text"
-              placeholder="Ex: Preto Ninja"
+              placeholder="Ex: Preto Ninja, Branco..."
               value={cor}
               onChange={(e) => setCor(e.target.value)}
               disabled={isOperador || savingVeiculo}

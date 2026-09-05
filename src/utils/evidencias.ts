@@ -270,7 +270,8 @@ export async function getEvidenciaSignedUrl(
   path: string,
   expiresInSeconds = 3600
 ): Promise<string> {
-  if (!path) return '';
+  if (!path || path === 'manual' || path === 'null' || path === 'undefined') return '';
+  if (path.startsWith('data:')) return path;
 
   try {
     const { data, error } = await supabase.storage

@@ -1272,7 +1272,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                   variant="secondary"
                   onClick={() => {
                     onClose();
-                    if (checkinInfo?.id) {
+                    if (checkinInfo?.id && checkinInfo.finalizado && !agendamento?.vistoria_dispensada) {
                       navigate(`/checkin/${checkinInfo.id}/ver`);
                     } else if (execucaoInfo?.id) {
                       navigate(`/execucao/${execucaoInfo.id}`);

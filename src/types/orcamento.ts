@@ -92,6 +92,7 @@ export interface Orcamento {
     placa: string;
     modelo?: string;
     marca?: string;
+    cor?: string;
   };
   categoria?: {
     id: string;
@@ -176,6 +177,7 @@ export interface OrcamentoPublicoData {
     placa: string;
     modelo?: string | null;
     marca?: string | null;
+    cor?: string | null;
   } | null;
   agendamento?: {
     id: string;

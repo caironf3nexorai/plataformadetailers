@@ -14,6 +14,7 @@ export interface DadosCabecalhoPDF {
   dataEmissao?: string;
   statusBadge?: string;
   numeroOS?: number | null;
+  validadeTexto?: string;
   // Personalização por Plano
   planoCodigo?: 'free' | 'pro' | 'studio' | string;
   pdfCorPrimaria?: string | null;
@@ -160,8 +161,13 @@ export function cabecalhoDocumento(
     doc.text(dados.statusBadge.toUpperCase(), pageWidth - 15, 16, { align: 'right' });
   }
 
-  // Indicador discreto de Plano Monocromático no topo se for Free
-  if (isFree) {
+  // Indicador de Validade ou Plano Free no topo direito
+  if (dados.validadeTexto) {
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(corPrimariaRgb[0], corPrimariaRgb[1], corPrimariaRgb[2]);
+    doc.text(dados.validadeTexto.toUpperCase(), pageWidth - 15, 23, { align: 'right' });
+  } else if (isFree) {
     doc.setFontSize(7);
     doc.setTextColor(113, 113, 122);
     doc.setFont('helvetica', 'normal');

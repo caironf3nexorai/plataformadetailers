@@ -266,18 +266,18 @@ export const VisualizarAtendimento: React.FC = () => {
         let fotosSaida: any[] = [];
 
         // 2. Buscar Check-in (Vistoria)
-        let chkId = checkinDirectData?.id;
+        let chkId = (checkinDirectData?.finalizado && !currentAgend?.vistoria_dispensada) ? checkinDirectData.id : null;
         if (!chkId && agendId) {
           const { data: checkinData, error: checkinErr } = await supabase
             .from('checkins')
-            .select('id, created_at, km, nivel_combustivel')
+            .select('id, created_at, km, nivel_combustivel, finalizado')
             .eq('agendamento_id', agendId)
             .maybeSingle();
 
           if (checkinErr) {
             console.error('[VisualizarAtendimento] Erro ao buscar check-in:', checkinErr);
           }
-          if (checkinData) {
+          if (checkinData?.finalizado && !currentAgend?.vistoria_dispensada) {
             chkId = checkinData.id;
           }
         }
@@ -286,10 +286,10 @@ export const VisualizarAtendimento: React.FC = () => {
         if (!chkId && paramId) {
           const { data: chkById } = await supabase
             .from('checkins')
-            .select('id')
+            .select('id, finalizado')
             .eq('id', paramId)
             .maybeSingle();
-          if (chkById) {
+          if (chkById?.finalizado) {
             chkId = chkById.id;
           }
         }

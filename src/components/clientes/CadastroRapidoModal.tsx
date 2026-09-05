@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import type { CategoriaVeiculo } from '../../types/clientes';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -25,6 +26,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
   iniciarComOrcamento = false,
 }) => {
   const navigate = useNavigate();
+  const { tenant } = useAuth();
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [criarOrcamentoAgora, setCriarOrcamentoAgora] = useState(iniciarComOrcamento);
@@ -35,6 +37,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
   const [categoriaId, setCategoriaId] = useState<string>('');
   const [marca, setMarca] = useState('');
   const [modelo, setModelo] = useState('');
+  const [cor, setCor] = useState('');
 
   const [categorias, setCategorias] = useState<CategoriaVeiculo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,26 +56,41 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
     setPlaca('');
     setMarca('');
     setModelo('');
+    setCor('');
     setErrorMsg(null);
     setExistingVehicle(null);
     setCriarOrcamentoAgora(iniciarComOrcamento);
 
-    // Carrega categorias de veículo ativas
+    // Carrega categorias de veículo ativas do tenant logado (sem repetições)
     const fetchCategorias = async () => {
-      const { data } = await supabase
+      let query = supabase
         .from('categorias_veiculo')
         .select('*')
-        .eq('ativo', true)
-        .order('ordem', { ascending: true });
+        .eq('ativo', true);
+
+      if (tenant?.id) {
+        query = query.eq('tenant_id', tenant.id);
+      }
+
+      const { data } = await query.order('ordem', { ascending: true });
 
       if (data && data.length > 0) {
-        setCategorias(data as CategoriaVeiculo[]);
-        setCategoriaId(data[0].id);
+        // Desduplicação defensiva por nome normalizado
+        const mapaUnico = new Map<string, CategoriaVeiculo>();
+        for (const cat of data as CategoriaVeiculo[]) {
+          const chave = cat.nome.trim().toLowerCase();
+          if (!mapaUnico.has(chave)) {
+            mapaUnico.set(chave, cat);
+          }
+        }
+        const categoriasUnicas = Array.from(mapaUnico.values());
+        setCategorias(categoriasUnicas);
+        setCategoriaId(categoriasUnicas[0]?.id || data[0].id);
       }
     };
 
     fetchCategorias();
-  }, [isOpen]);
+  }, [isOpen, tenant?.id]);
 
   // Checa placa duplicada
   useEffect(() => {
@@ -133,6 +151,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         p_categoria: incluirVeiculo ? categoriaId : null,
         p_marca: incluirVeiculo && marca.trim() ? marca.trim() : null,
         p_modelo: incluirVeiculo && modelo.trim() ? modelo.trim() : null,
+        p_cor: incluirVeiculo && cor.trim() ? cor.trim() : null,
       });
 
       if (error) {
@@ -143,6 +162,10 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         const result = Array.isArray(data) ? data[0] : data;
         const cId = result?.out_cliente_id || result?.cliente_id;
         const vId = result?.out_veiculo_id || result?.veiculo_id;
+
+        if (incluirVeiculo && cor.trim() && vId) {
+          await supabase.from('veiculos').update({ cor: cor.trim() }).eq('id', vId);
+        }
 
         onSuccess(cId, vId);
 
@@ -284,8 +307,8 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
               </div>
             </div>
 
-            {/* Marca e Modelo */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* Marca, Modelo e Cor */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="flex flex-col gap-1">
                 <label className="font-sans text-[13px] text-vapor-400 font-medium">Marca (Opcional)</label>
                 <Input
@@ -303,6 +326,16 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
                   placeholder="Ex: Civic"
                   value={modelo}
                   onChange={(e) => setModelo(e.target.value)}
+                  className="min-h-[44px]"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-sans text-[13px] text-vapor-400 font-medium">Cor (Opcional)</label>
+                <Input
+                  type="text"
+                  placeholder="Ex: Preto"
+                  value={cor}
+                  onChange={(e) => setCor(e.target.value)}
                   className="min-h-[44px]"
                 />
               </div>

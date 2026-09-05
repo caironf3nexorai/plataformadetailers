@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ScrollableTabs } from '../components/ui/ScrollableTabs';
+import { ModalConfirmacao } from '../components/ui/ModalConfirmacao';
 import {
   FileText,
   Plus,
@@ -19,7 +20,8 @@ import {
   TrendingUp,
   AlertCircle,
   ChevronRight,
-  Calendar
+  Calendar,
+  Trash2
 } from 'lucide-react';
 import type { Orcamento } from '../types/orcamento';
 import type { Cliente, Veiculo, CategoriaVeiculo } from '../types/clientes';
@@ -30,7 +32,7 @@ import { formatarCodigoProposta, formatarMoeda } from '../utils/formatters';
 export const Orcamentos: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
 
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -91,11 +93,44 @@ export const Orcamentos: React.FC = () => {
     }
   };
 
+  // Exclusão de Orçamento
+  const [orcamentoParaExcluir, setOrcamentoParaExcluir] = useState<Orcamento | null>(null);
+  const [showConfirmExcluir, setShowConfirmExcluir] = useState<boolean>(false);
+  const [excluindoOrcamento, setExcluindoOrcamento] = useState<boolean>(false);
+
+  const handleExcluirOrcamento = async () => {
+    if (!orcamentoParaExcluir) return;
+    setExcluindoOrcamento(true);
+    try {
+      const { error } = await supabase.rpc('excluir_orcamento', {
+        p_orcamento_id: orcamentoParaExcluir.id,
+      });
+
+      if (error) {
+        // Fallback para delete direto se RPC não estiver aplicada ainda
+        const { error: delErr } = await supabase
+          .from('orcamentos')
+          .delete()
+          .eq('id', orcamentoParaExcluir.id);
+        if (delErr) throw delErr;
+      }
+
+      showSuccess(`Orçamento ${formatarCodigoProposta(orcamentoParaExcluir)} excluído com sucesso!`);
+      setShowConfirmExcluir(false);
+      setOrcamentoParaExcluir(null);
+      await fetchOrcamentos();
+    } catch (err: any) {
+      showError(err.message || 'Erro ao excluir orçamento.', err);
+    } finally {
+      setExcluindoOrcamento(false);
+    }
+  };
+
   const fetchDadosFormulario = async () => {
     if (!tenant) return;
     try {
       const [resClientes, resCategorias] = await Promise.all([
-        supabase.from('clientes').select('*').eq('tenant_id', tenant.id).order('nome'),
+        supabase.from('clientes').select('*').eq('tenant_id', tenant.id).eq('ativo', true).order('nome'),
         supabase.from('categorias_veiculo').select('*').eq('tenant_id', tenant.id).order('nome'),
       ]);
 
@@ -456,7 +491,7 @@ export const Orcamentos: React.FC = () => {
                     <div className="flex items-center gap-3 text-[13px] text-vapor-400 font-sans flex-wrap">
                       {orc.veiculo ? (
                         <span className="font-mono font-medium text-vapor-300">
-                          {orc.veiculo.placa} ({orc.veiculo.modelo || 'Sem modelo'})
+                          {orc.veiculo.placa} ({orc.veiculo.modelo || 'Sem modelo'}){orc.veiculo.cor ? ` • ${orc.veiculo.cor}` : ''}
                         </span>
                       ) : (
                         <span>Sem veículo associado</span>
@@ -483,8 +518,22 @@ export const Orcamentos: React.FC = () => {
                     </span>
                   </div>
 
-                  <ChevronRight size={18} className="text-vapor-500 group-hover:text-amber-400 transition-colors" />
-                </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOrcamentoParaExcluir(orc);
+                        setShowConfirmExcluir(true);
+                      }}
+                      className="p-1.5 text-vapor-500 hover:text-flare-400 hover:bg-flare-400/10 rounded-lg transition"
+                      title="Excluir Orçamento"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+
+                    <ChevronRight size={18} className="text-vapor-500 group-hover:text-amber-400 transition-colors" />
+                  </div>
               </Card>
             );
           })}
@@ -564,7 +613,7 @@ export const Orcamentos: React.FC = () => {
                   </option>
                   {veiculos.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.placa} - {v.modelo || 'Sem modelo'}
+                      {v.placa} - {v.modelo || 'Sem modelo'}{v.cor ? ` (${v.cor})` : ''}
                     </option>
                   ))}
                 </select>
@@ -758,6 +807,22 @@ export const Orcamentos: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ModalConfirmacao
+        isOpen={showConfirmExcluir}
+        onClose={() => {
+          setShowConfirmExcluir(false);
+          setOrcamentoParaExcluir(null);
+        }}
+        onConfirm={handleExcluirOrcamento}
+        title="Excluir Orçamento"
+        mensagem={`Deseja realmente excluir o orçamento ${orcamentoParaExcluir ? formatarCodigoProposta(orcamentoParaExcluir) : ''}? Esta ação apagará a proposta comercial e seus itens.`}
+        textoConfirmar="Excluir"
+        textoCancelar="Cancelar"
+        variant="danger"
+        loading={excluindoOrcamento}
+      />
     </div>
   );
 };

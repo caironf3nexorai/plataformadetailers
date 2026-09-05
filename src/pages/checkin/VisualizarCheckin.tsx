@@ -8,6 +8,9 @@ import {
   formatarNivelCombustivel,
   formatarNomeAvaria,
   formatarNomeVista,
+  formatarIluminacao,
+  formatarFluido,
+  formatarSujidade,
 } from '../../utils/checkin';
 import { getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
 import { gerarPDFCheckin } from '../../utils/pdfCheckin';
@@ -24,10 +27,12 @@ import {
   User,
   AlertTriangle,
   Camera,
-  Play,
   Eye,
   X,
+  Pencil,
+  Play,
 } from 'lucide-react';
+import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
 
 export const VisualizarCheckin: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +54,7 @@ export const VisualizarCheckin: React.FC = () => {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState<string>('');
   const [destravando, setDestravando] = useState(false);
+  const [showModalEditarVeiculo, setShowModalEditarVeiculo] = useState(false);
 
   const svgRefs = useRef<{ [key in VistaDiagrama]?: SVGSVGElement | null }>({});
 
@@ -164,6 +170,7 @@ export const VisualizarCheckin: React.FC = () => {
           id,
           inicio,
           status,
+          vistoria_dispensada,
           cliente:clientes(id, nome, telefone),
           veiculo:veiculos(id, modelo, placa, marca, cor),
           servico:servicos(id, nome)
@@ -202,13 +209,19 @@ export const VisualizarCheckin: React.FC = () => {
       setSignedPhotoUrls(photoMap);
 
       // Signed URL ou Base64 da Assinatura
-      if (chkData.assinatura_path) {
+      if (
+        chkData.assinatura_path &&
+        chkData.assinatura_path !== 'manual' &&
+        chkData.aceite_tipo !== 'manual'
+      ) {
         if (chkData.assinatura_path.startsWith('data:')) {
           setAssinaturaSignedUrl(chkData.assinatura_path);
         } else {
           const assUrl = await getEvidenciaSignedUrl(chkData.assinatura_path);
           setAssinaturaSignedUrl(assUrl);
         }
+      } else {
+        setAssinaturaSignedUrl(null);
       }
     } catch (err: any) {
       console.error('[Visualizar Checkin Error]:', err);
@@ -236,6 +249,7 @@ export const VisualizarCheckin: React.FC = () => {
           clienteTelefone: agendamento.cliente?.telefone || '',
           veiculoModelo: agendamento.veiculo?.modelo || 'Veículo',
           veiculoPlaca: agendamento.veiculo?.placa || '',
+          veiculoCor: agendamento.veiculo?.cor || null,
           oficinaNome: tenant.nome || 'Oficina',
           oficinaTelefone: tenant.telefone || '',
           oficinaCidadeUF: tenant.cidade && tenant.uf ? `${tenant.cidade}/${tenant.uf}` : undefined,
@@ -294,6 +308,39 @@ export const VisualizarCheckin: React.FC = () => {
     }
   };
 
+  // Se a vistoria não foi finalizada ou foi dispensada, exibe aviso claro em vez de vistoria em branco
+  if (checkin && (!checkin.finalizado || agendamento?.vistoria_dispensada)) {
+    return (
+      <div className="p-8 max-w-lg mx-auto bg-graphite-900 border border-amber-500/30 rounded-2xl text-center flex flex-col items-center gap-4 my-12 shadow-2xl animate-in fade-in duration-200">
+        <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400 border border-amber-500/20">
+          <AlertTriangle size={36} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <h3 className="font-display text-[20px] text-vapor-100 uppercase tracking-wide">
+            Vistoria Não Realizada
+          </h3>
+          <p className="font-sans text-[14px] text-vapor-300 leading-relaxed">
+            Esse veículo não realizou vistoria de entrada. Este atendimento foi iniciado diretamente sem checklist ou a vistoria foi dispensada no momento da entrada.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
+          <Button variant="secondary" onClick={handleVoltar}>
+            <ArrowLeft size={16} />
+            Voltar
+          </Button>
+          {agendamento?.id && (
+            <Button
+              variant="primary"
+              onClick={() => navigate(`/atendimentos/${agendamento.id}`)}
+            >
+              Ver Atendimento
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto pb-12">
       {/* Topo e Ações */}
@@ -327,21 +374,23 @@ export const VisualizarCheckin: React.FC = () => {
 
         {/* 3 Ações na Ordem Estrita de Uso */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          {/* 1. Iniciar serviço agora — ação principal */}
-          <Button
-            type="button"
-            variant="primary"
-            onClick={handleIniciarServicoAgora}
-            disabled={startingExec}
-            className="min-h-[56px] px-6 text-[15px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
-          >
-            {startingExec ? (
-              <div className="w-5 h-5 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Play size={20} className="fill-current" />
-            )}
-            <span>Iniciar serviço agora</span>
-          </Button>
+          {/* 1. Iniciar serviço agora — ação principal (apenas se não concluído/cancelado) */}
+          {agendamento.status !== 'concluido' && agendamento.status !== 'cancelado' && (
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleIniciarServicoAgora}
+              disabled={startingExec}
+              className="min-h-[56px] px-6 text-[15px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+            >
+              {startingExec ? (
+                <div className="w-5 h-5 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Play size={20} className="fill-current" />
+              )}
+              <span>Iniciar serviço agora</span>
+            </Button>
+          )}
 
           {/* 2. Enviar/Baixar PDF ao cliente — secundária */}
           <Button
@@ -397,20 +446,127 @@ export const VisualizarCheckin: React.FC = () => {
             <div>
               <span className="font-mono text-[11px] text-vapor-400 uppercase">Veículo & Placa</span>
               <p className="font-sans text-[15px] font-bold text-amber-400">{agendamento.veiculo?.modelo}</p>
-              <p className="font-mono text-[13px] text-vapor-200">Placa: {agendamento.veiculo?.placa?.toUpperCase()}</p>
+              <p className="font-mono text-[13px] text-vapor-200">
+                Placa: {agendamento.veiculo?.placa?.toUpperCase()} • Cor: {agendamento.veiculo?.cor || 'Não informada'}
+              </p>
+              {agendamento.veiculo && (
+                <button
+                  type="button"
+                  onClick={() => setShowModalEditarVeiculo(true)}
+                  className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-sans font-medium px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors mt-1.5"
+                  title="Editar dados ou cor do veículo"
+                >
+                  <Pencil size={11} />
+                  {agendamento.veiculo.cor ? 'Editar Veículo' : 'Definir Cor'}
+                </button>
+              )}
             </div>
           </div>
 
           <div className="flex items-start gap-3 p-3 bg-graphite-900 rounded-lg border border-graphite-700">
             <Fuel size={20} className="text-amber-500 shrink-0 mt-0.5" />
             <div>
-              <span className="font-mono text-[11px] text-vapor-400 uppercase">Vituais de Entrada</span>
+              <span className="font-mono text-[11px] text-vapor-400 uppercase">Status de Entrada</span>
               <p className="font-sans text-[14px] text-vapor-100 font-bold">
                 KM: {checkin.km ? checkin.km.toLocaleString('pt-BR') : 'Não informado'}
               </p>
               <p className="font-mono text-[12px] text-amber-400">
                 Combustível: {formatarNivelCombustivel(checkin.nivel_combustivel)}
               </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Detalhamento dos Itens Inspecionados */}
+      <Card className="p-6 bg-graphite-800 border-graphite-700 flex flex-col gap-4">
+        <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide border-b border-graphite-700 pb-2">
+          Itens Inspecionados na Entrada
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Coluna 1: Iluminação & Fluidos */}
+          <div className="flex flex-col gap-3">
+            <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 flex flex-col gap-2">
+              <span className="font-mono text-[12px] text-amber-400 font-bold uppercase">Iluminação</span>
+              {checkin.iluminacao && Object.keys(checkin.iluminacao).length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
+                  {Object.entries(checkin.iluminacao).map(([k, v]) => (
+                    <div key={k} className="flex justify-between border-b border-graphite-800 pb-1">
+                      <span className="text-vapor-400">{k.replace('_', ' ').toUpperCase()}:</span>
+                      <span className={`font-bold ${v === 'queimado' ? 'text-flare-400' : 'text-vapor-200'}`}>
+                        {formatarIluminacao(v)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[12px] text-vapor-500 italic">Sem itens testados</span>
+              )}
+            </div>
+
+            <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 flex flex-col gap-2">
+              <span className="font-mono text-[12px] text-amber-400 font-bold uppercase">Fluidos e Níveis</span>
+              {checkin.fluidos && Object.keys(checkin.fluidos).length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
+                  {Object.entries(checkin.fluidos).map(([k, v]) => (
+                    <div key={k} className="flex justify-between border-b border-graphite-800 pb-1">
+                      <span className="text-vapor-400">{k.replace('_', ' ').toUpperCase()}:</span>
+                      <span className={`font-bold ${v === 'baixo' || v === 'ruim' ? 'text-flare-400' : 'text-vapor-200'}`}>
+                        {formatarFluido(v)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[12px] text-vapor-500 italic">Sem fluidos verificados</span>
+              )}
+            </div>
+          </div>
+
+          {/* Coluna 2: Sujidade & Painel / Estepe */}
+          <div className="flex flex-col gap-3">
+            <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 flex flex-col gap-2">
+              <span className="font-mono text-[12px] text-amber-400 font-bold uppercase">Níveis de Sujidade</span>
+              {checkin.sujidade && Object.keys(checkin.sujidade).length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 text-[12px]">
+                  {Object.entries(checkin.sujidade).map(([k, v]) => (
+                    <div key={k} className="flex justify-between border-b border-graphite-800 pb-1">
+                      <span className="text-vapor-400">{k.replace('_', ' ').toUpperCase()}:</span>
+                      <span className={`font-bold ${v === 'sujo' || v === 'extremo' ? 'text-amber-400' : 'text-vapor-200'}`}>
+                        {formatarSujidade(v)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[12px] text-vapor-500 italic">Não informado</span>
+              )}
+            </div>
+
+            <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 flex flex-col gap-2">
+              <span className="font-mono text-[12px] text-amber-400 font-bold uppercase">Painel e Estepe</span>
+              <div className="flex flex-col gap-1.5 text-[12px]">
+                <div className="flex justify-between">
+                  <span className="text-vapor-400">Estepe:</span>
+                  <span className="font-bold text-vapor-200">
+                    {checkin.estepe === true ? 'Sim (Presente)' : checkin.estepe === false ? 'Não / Ausente' : 'Não verificado'}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-vapor-400">Luzes do Painel na Entrada:</span>
+                  <span className={`font-semibold ${checkin.luzes_painel && checkin.luzes_painel.length > 0 ? 'text-flare-400' : 'text-vapor-400'}`}>
+                    {checkin.luzes_painel && checkin.luzes_painel.length > 0
+                      ? checkin.luzes_painel.join(', ')
+                      : 'Nenhuma luz de advertência acesa'}
+                  </span>
+                </div>
+                {checkin.observacoes && (
+                  <div className="pt-1 text-vapor-300 italic">
+                    <span className="font-bold not-italic text-vapor-400">Obs: </span>
+                    {checkin.observacoes}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -643,6 +799,20 @@ export const VisualizarCheckin: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Modal Editar Veículo e Cor */}
+      {agendamento?.veiculo && (
+        <ModalEditarVeiculo
+          isOpen={showModalEditarVeiculo}
+          onClose={() => setShowModalEditarVeiculo(false)}
+          veiculo={agendamento.veiculo as any}
+          onSuccess={(veiculoAtualizado) => {
+            setAgendamento((prev: any) =>
+              prev ? { ...prev, veiculo: { ...prev.veiculo, ...veiculoAtualizado } } : null
+            );
+            fetchCheckinCompleto();
+          }}
+        />
       )}
     </div>
   );

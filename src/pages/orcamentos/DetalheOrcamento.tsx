@@ -36,7 +36,11 @@ import {
   PlusCircle,
   Download,
   RotateCcw,
+  Pencil,
+  UserCheck,
 } from 'lucide-react';
+import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
+import { ModalAlterarClienteOrcamento } from '../../components/orcamentos/ModalAlterarClienteOrcamento';
 import type { Orcamento, TipoNivelOrcamento } from '../../types/orcamento';
 import type { Servico } from '../../types/servicos';
 import type { TermoGarantia } from '../../types/termos';
@@ -75,6 +79,41 @@ export const DetalheOrcamento: React.FC = () => {
   const [descontoCupom, setDescontoCupom] = useState<string>('');
   const [descontoMotivo, setDescontoMotivo] = useState<string>('');
   const [applyingDesconto, setApplyingDesconto] = useState<boolean>(false);
+
+  // Modal de Edição de Veículo / Cor
+  const [showModalEditarVeiculo, setShowModalEditarVeiculo] = useState<boolean>(false);
+
+  // Modal de Exclusão de Orçamento
+  const [showConfirmExcluir, setShowConfirmExcluir] = useState<boolean>(false);
+  const [excluindoOrcamento, setExcluindoOrcamento] = useState<boolean>(false);
+
+  // Modal de Troca de Cliente / Veículo
+  const [showModalTrocarCliente, setShowModalTrocarCliente] = useState<boolean>(false);
+
+  const handleExcluirOrcamento = async () => {
+    if (!orcamento) return;
+    setExcluindoOrcamento(true);
+    try {
+      const { error } = await supabase.rpc('excluir_orcamento', {
+        p_orcamento_id: orcamento.id,
+      });
+
+      if (error) {
+        const { error: delErr } = await supabase
+          .from('orcamentos')
+          .delete()
+          .eq('id', orcamento.id);
+        if (delErr) throw delErr;
+      }
+
+      showSuccess(`Orçamento ${formatarCodigoProposta(orcamento)} excluído com sucesso!`);
+      navigate('/orcamentos');
+    } catch (err: any) {
+      showError(err.message || 'Erro ao excluir orçamento.', err);
+    } finally {
+      setExcluindoOrcamento(false);
+    }
+  };
 
   // Ref para controlar hidratação inicial e evitar autosave no boot
   const isLoadedRef = useRef<boolean>(false);
@@ -186,7 +225,7 @@ export const DetalheOrcamento: React.FC = () => {
         .select(`
           *,
           cliente:clientes(id, nome, telefone),
-          veiculo:veiculos(id, placa, modelo, marca),
+          veiculo:veiculos(id, placa, modelo, marca, cor),
           categoria:categorias_veiculo(id, nome),
           niveis:orcamento_niveis(
             *,
@@ -1128,6 +1167,11 @@ export const DetalheOrcamento: React.FC = () => {
 
       const termoEscolhido = termosDisponiveis.find((t) => t.id === termoGarantiaSelecionado);
 
+      const diasVal = validadeDiasOrcamento || orcamento.validade_dias || 7;
+      const baseDt = orcamento.enviado_em ? new Date(orcamento.enviado_em) : new Date(orcamento.created_at || Date.now());
+      baseDt.setDate(baseDt.getDate() + diasVal);
+      const dataValidadeLimiteStr = baseDt.toISOString().split('T')[0];
+
       await gerarPDFOrcamento(
         {
           id: orcamento.id,
@@ -1136,12 +1180,14 @@ export const DetalheOrcamento: React.FC = () => {
           status: orcamento.status,
           nivel_aprovado: orcamento.nivel_aprovado,
           enviado_em: orcamento.enviado_em,
-          validade_dias: validadeDiasOrcamento || orcamento.validade_dias,
+          validade_dias: diasVal,
+          data_validade_limite: dataValidadeLimiteStr,
           observacoes: observacoes || orcamento.observacoes,
           clienteNome: orcamento.cliente?.nome || 'Cliente',
           clienteTelefone: orcamento.cliente?.telefone,
           veiculoModelo: orcamento.veiculo?.modelo,
           veiculoPlaca: orcamento.veiculo?.placa,
+          veiculoCor: orcamento.veiculo?.cor || null,
           categoriaNome: orcamento.categoria?.nome,
           oficinaNome: tenant.nome || 'Oficina',
           oficinaRazaoSocial: tenant.razao_social,
@@ -1248,17 +1294,56 @@ export const DetalheOrcamento: React.FC = () => {
                 )}
               </div>
             </div>
-            <h1 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
-              {orcamento.cliente?.nome || 'Cliente não informado'}
-            </h1>
-            <span className="font-mono text-[13px] text-vapor-400">
-              {orcamento.veiculo ? `${orcamento.veiculo.placa} (${orcamento.veiculo.modelo || 'Sem modelo'})` : 'Sem veículo'} • {orcamento.categoria?.nome}
-            </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
+                {orcamento.cliente?.nome || 'Cliente não informado'}
+              </h1>
+              {!isAprovado && (
+                <button
+                  type="button"
+                  onClick={() => setShowModalTrocarCliente(true)}
+                  className="inline-flex items-center gap-1.5 text-[11px] text-cyan-400 hover:text-cyan-300 font-sans font-bold px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors"
+                  title="Alterar cliente e veículo deste orçamento"
+                >
+                  <UserCheck size={12} />
+                  <span>Alterar Cliente / Veículo</span>
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[13px] text-vapor-400">
+                {orcamento.veiculo ? `${orcamento.veiculo.placa} (${orcamento.veiculo.modelo || 'Sem modelo'})${orcamento.veiculo.cor ? ` • Cor: ${orcamento.veiculo.cor}` : ''}` : 'Sem veículo'} • {orcamento.categoria?.nome}
+              </span>
+              {orcamento.veiculo && (
+                <button
+                  type="button"
+                  onClick={() => setShowModalEditarVeiculo(true)}
+                  className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-sans font-medium px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors"
+                  title="Editar dados e cor do veículo"
+                >
+                  <Pencil size={11} />
+                  {orcamento.veiculo.cor ? 'Editar Veículo' : 'Informar Cor'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
         {/* BOTOES DE ACAO DO TOPO */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* EXCLUIR ORÇAMENTO */}
+          {canManageDiscount && (
+            <Button
+              tone="rose"
+              size="sm"
+              onClick={() => setShowConfirmExcluir(true)}
+              className="flex items-center gap-1.5 min-h-[44px]"
+              title="Excluir este orçamento definitivamente"
+            >
+              <Trash2 size={16} />
+              <span>Excluir</span>
+            </Button>
+          )}
           {canManageDiscount && (
             <Button
               tone={Number(orcamento.desconto_valor) > 0 ? 'amber' : 'graphite'}
@@ -2744,6 +2829,47 @@ export const DetalheOrcamento: React.FC = () => {
         textoCancelar="Cancelar"
         variant="info"
         loading={aceitandoManual}
+      />
+
+      {/* Modal Editar Veículo e Cor */}
+      {orcamento.veiculo && (
+        <ModalEditarVeiculo
+          isOpen={showModalEditarVeiculo}
+          onClose={() => setShowModalEditarVeiculo(false)}
+          veiculo={orcamento.veiculo as any}
+          onSuccess={(veiculoAtualizado) => {
+            setOrcamento((prev) =>
+              prev ? { ...prev, veiculo: { ...prev.veiculo, ...veiculoAtualizado } } : null
+            );
+            fetchOrcamentoEDados();
+          }}
+        />
+      )}
+
+      {/* Modal Alterar Cliente / Veículo do Orçamento */}
+      <ModalAlterarClienteOrcamento
+        isOpen={showModalTrocarCliente}
+        onClose={() => setShowModalTrocarCliente(false)}
+        orcamentoId={orcamento.id}
+        clienteAtualId={orcamento.cliente_id}
+        veiculoAtualId={orcamento.veiculo_id}
+        categoriaAtualId={orcamento.categoria_id}
+        onSuccess={() => {
+          fetchOrcamentoEDados();
+        }}
+      />
+
+      {/* Modal Confirmar Exclusão de Orçamento */}
+      <ModalConfirmacao
+        isOpen={showConfirmExcluir}
+        onClose={() => setShowConfirmExcluir(false)}
+        onConfirm={handleExcluirOrcamento}
+        titulo="Excluir Orçamento"
+        mensagem={`Deseja realmente excluir permanentemente o orçamento ${formatarCodigoProposta(orcamento)}? Esta ação não pode ser desfeita.`}
+        textoConfirmar="Excluir Definitivamente"
+        textoCancelar="Cancelar"
+        variant="danger"
+        loading={excluindoOrcamento}
       />
     </div>
   );

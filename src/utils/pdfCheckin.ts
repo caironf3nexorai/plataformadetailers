@@ -20,6 +20,7 @@ interface PDFCheckinData {
   clienteTelefone: string;
   veiculoModelo: string;
   veiculoPlaca: string;
+  veiculoCor?: string | null;
   oficinaNome: string;
   oficinaTelefone: string;
   oficinaCidadeUF?: string;
@@ -42,46 +43,205 @@ interface PDFCheckinData {
 }
 
 /**
- * Converte um elemento SVGSVGElement em PNG Base64 através de HTML5 Canvas.
+ * Converte uma string SVG autocontida (com xmlns e estilos inline) em PNG Base64 através do HTML5 Canvas.
+ * Utiliza Data URI em Base64 para evitar bloqueio de Canvas Tainted (SecurityError) no WebKit/Safari/Chrome.
  */
-async function svgToPngBase64(svgElement: SVGSVGElement): Promise<string> {
+async function svgStringToPngBase64(svgString: string, width = 800, height = 320): Promise<string> {
   return new Promise((resolve) => {
     try {
-      const xml = new XMLSerializer().serializeToString(svgElement);
-      const svgBlob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(svgBlob);
       const img = new Image();
+      const encodedSvg = 'data:image/svg+xml;base64,' + window.btoa(unescape(encodeURIComponent(svgString)));
 
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width || 600;
-        canvas.height = img.height || 400;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          URL.revokeObjectURL(url);
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve('');
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/png'));
+        } catch (canvasErr) {
+          console.error('[Canvas toDataURL Error]:', canvasErr);
           resolve('');
-          return;
         }
-
-        ctx.fillStyle = '#18181b'; // Fundo escuro (graphite-900) para contraste
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-
-        URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL('image/png'));
       };
 
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve('');
+      img.onerror = (err) => {
+        console.warn('[SVG data URI error, tentando blob fallback]:', err);
+        try {
+          const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+          const url = URL.createObjectURL(svgBlob);
+          const fallbackImg = new Image();
+          fallbackImg.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(fallbackImg, 0, 0, width, height);
+                URL.revokeObjectURL(url);
+                resolve(canvas.toDataURL('image/png'));
+                return;
+              }
+              URL.revokeObjectURL(url);
+              resolve('');
+            } catch {
+              URL.revokeObjectURL(url);
+              resolve('');
+            }
+          };
+          fallbackImg.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve('');
+          };
+          fallbackImg.src = url;
+        } catch {
+          resolve('');
+        }
       };
 
-      img.src = url;
+      img.src = encodedSvg;
     } catch (err) {
-      console.error('[SVG to PNG error]:', err);
+      console.error('[SVG string to PNG exception]:', err);
       resolve('');
     }
   });
+}
+
+/**
+ * Gera uma string SVG pura, padronizada e autocontida para cada vista do veículo,
+ * embutindo as marcações de avaria e seus respectivos números sequenciais para o PDF.
+ */
+function gerarSvgSilhuetaStandalone(
+  vista: VistaDiagrama,
+  avariasNaVista: CheckinAvaria[],
+  todasAvarias: CheckinAvaria[]
+): string {
+  let pathContent = '';
+
+  switch (vista) {
+    case 'lateral_esquerda':
+    case 'lateral_direita':
+      pathContent = `
+        <g stroke="#cbd5e1" stroke-width="2.2" fill="none">
+          <!-- Teto, capô e porta-malas -->
+          <path d="M 20,80 C 60,35 120,30 180,30 C 240,30 280,50 310,65 L 375,70 C 390,75 395,90 390,105 L 385,125 L 15,125 L 12,95 Z" stroke="#e2e8f0" stroke-width="2.5" />
+          <!-- Vidros -->
+          <path d="M 80,70 L 120,38 L 185,38 L 185,70 Z" fill="#27272a" stroke="#64748b" stroke-width="1.5" opacity="0.8" />
+          <path d="M 190,38 L 245,38 L 280,70 L 190,70 Z" fill="#27272a" stroke="#64748b" stroke-width="1.5" opacity="0.8" />
+          <!-- Rodas -->
+          <circle cx="75" cy="125" r="22" fill="#09090b" stroke="#94a3b8" stroke-width="3" />
+          <circle cx="75" cy="125" r="11" fill="#18181b" stroke="#cbd5e1" stroke-width="2" />
+          <circle cx="315" cy="125" r="22" fill="#09090b" stroke="#94a3b8" stroke-width="3" />
+          <circle cx="315" cy="125" r="11" fill="#18181b" stroke="#cbd5e1" stroke-width="2" />
+          <!-- Divisão de portas e maçanetas -->
+          <line x1="185" y1="38" x2="185" y2="125" stroke="#64748b" stroke-width="1.5" />
+          <rect x="150" y="78" width="16" height="4" rx="1" fill="#cbd5e1" />
+          <rect x="220" y="78" width="16" height="4" rx="1" fill="#cbd5e1" />
+        </g>
+      `;
+      break;
+
+    case 'frente':
+      pathContent = `
+        <g stroke="#cbd5e1" stroke-width="2.2" fill="none">
+          <!-- Carroceria -->
+          <path d="M 40,110 C 50,55 70,35 100,35 C 130,35 270,35 300,35 C 330,35 350,55 360,110 L 365,130 L 35,130 Z" stroke="#e2e8f0" stroke-width="2.5" />
+          <!-- Parabrisa -->
+          <path d="M 65,55 C 95,42 305,42 335,55 L 345,85 L 55,85 Z" fill="#27272a" stroke="#64748b" stroke-width="1.5" opacity="0.8" />
+          <!-- Faróis -->
+          <rect x="45" y="92" width="45" height="20" rx="4" fill="#fef08a" opacity="0.9" stroke="#eab308" stroke-width="2" />
+          <rect x="310" y="92" width="45" height="20" rx="4" fill="#fef08a" opacity="0.9" stroke="#eab308" stroke-width="2" />
+          <!-- Grade frontal -->
+          <rect x="105" y="95" width="190" height="28" rx="3" fill="#09090b" stroke="#64748b" stroke-width="1.5" />
+        </g>
+      `;
+      break;
+
+    case 'traseira':
+      pathContent = `
+        <g stroke="#cbd5e1" stroke-width="2.2" fill="none">
+          <!-- Carroceria -->
+          <path d="M 40,110 C 50,55 70,35 100,35 C 130,35 270,35 300,35 C 330,35 350,55 360,110 L 365,130 L 35,130 Z" stroke="#e2e8f0" stroke-width="2.5" />
+          <!-- Vidro traseiro -->
+          <path d="M 65,55 C 95,42 305,42 335,55 L 345,85 L 55,85 Z" fill="#27272a" stroke="#64748b" stroke-width="1.5" opacity="0.8" />
+          <!-- Lanternas traseiras -->
+          <rect x="45" y="92" width="45" height="20" rx="4" fill="#f87171" opacity="0.9" stroke="#dc2626" stroke-width="2" />
+          <rect x="310" y="92" width="45" height="20" rx="4" fill="#f87171" opacity="0.9" stroke="#dc2626" stroke-width="2" />
+          <!-- Placa -->
+          <rect x="140" y="100" width="120" height="20" rx="2" fill="#ffffff" stroke="#000000" stroke-width="1.5" />
+        </g>
+      `;
+      break;
+
+    case 'superior':
+      pathContent = `
+        <g stroke="#cbd5e1" stroke-width="2.2" fill="none">
+          <!-- Contorno superior -->
+          <path d="M 40,20 C 80,12 320,12 360,20 C 380,40 380,120 360,140 C 320,148 80,148 40,140 C 20,120 20,40 40,20 Z" stroke="#e2e8f0" stroke-width="2.5" />
+          <!-- Vidro dianteiro e traseiro -->
+          <path d="M 70,30 C 120,25 280,25 330,30 L 320,55 C 260,50 140,50 80,55 Z" fill="#27272a" stroke="#64748b" stroke-width="1.5" opacity="0.8" />
+          <path d="M 70,130 C 120,135 280,135 330,130 L 320,105 C 260,110 140,110 80,105 Z" fill="#27272a" stroke="#64748b" stroke-width="1.5" opacity="0.8" />
+          <!-- Teto / Solar -->
+          <rect x="80" y="55" width="240" height="50" fill="#09090b" stroke="#64748b" stroke-width="1.5" />
+        </g>
+      `;
+      break;
+  }
+
+  // Desenhar cada avaria presente nesta vista com seu símbolo e número correspondente à lista
+  const avariasMarkup = avariasNaVista
+    .map((av) => {
+      const cx = (av.pos_x * 400) / 100;
+      const cy = (av.pos_y * 160) / 100;
+      const globalIdx = todasAvarias.findIndex((a) => a.id === av.id) + 1;
+
+      let icone = '';
+      if (av.tipo === 'risco') {
+        icone = `<circle cx="${cx}" cy="${cy}" r="8" fill="none" stroke="#f97316" stroke-width="3" />`;
+      } else if (av.tipo === 'amassado') {
+        icone = `<circle cx="${cx}" cy="${cy}" r="8" fill="#ea580c" stroke="#ffffff" stroke-width="2" />`;
+      } else if (av.tipo === 'avariado') {
+        icone = `
+          <line x1="${cx - 7}" y1="${cy - 7}" x2="${cx + 7}" y2="${cy + 7}" stroke="#ef4444" stroke-width="3.5" />
+          <line x1="${cx + 7}" y1="${cy - 7}" x2="${cx - 7}" y2="${cy + 7}" stroke="#ef4444" stroke-width="3.5" />
+        `;
+      } else if (av.tipo === 'faltante') {
+        icone = `<polygon points="${cx},${cy - 8} ${cx - 8},${cy + 7} ${cx + 8},${cy + 7}" fill="#dc2626" stroke="#ffffff" stroke-width="2" />`;
+      }
+
+      // Badge numérico para rastreamento visual direto com o item da lista
+      const badgeMarkup = globalIdx > 0
+        ? `
+          <circle cx="${cx + 9}" cy="${cy - 9}" r="6.5" fill="#f59e0b" stroke="#18181b" stroke-width="1.2" />
+          <text x="${cx + 9}" y="${cy - 6.5}" font-family="Helvetica, Arial, sans-serif" font-size="7.5" font-weight="bold" fill="#000000" text-anchor="middle" dominant-baseline="middle">${globalIdx}</text>
+        `
+        : '';
+
+      return `
+        <g>
+          <!-- Halo de destaque -->
+          <circle cx="${cx}" cy="${cy}" r="13" fill="#f59e0b" fill-opacity="0.25" stroke="#f59e0b" stroke-width="1" />
+          ${icone}
+          ${badgeMarkup}
+        </g>
+      `;
+    })
+    .join('\n');
+
+  return `
+    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="320" viewBox="0 0 400 160">
+      <rect width="400" height="160" rx="8" fill="#18181b" stroke="#3f3f46" stroke-width="2" />
+      ${pathContent}
+      ${avariasMarkup}
+    </svg>
+  `.trim();
 }
 
 /**
@@ -144,6 +304,7 @@ export async function gerarPDFCheckin(
     clienteTelefone,
     veiculoModelo,
     veiculoPlaca,
+    veiculoCor,
     oficinaNome,
     oficinaTelefone,
     oficinaCidadeUF,
@@ -151,7 +312,6 @@ export async function gerarPDFCheckin(
     oficinaDocumento,
     oficinaDocumentoTipo,
     oficinaRazaoSocial,
-    svgElements,
     numeroOS,
   } = data;
 
@@ -240,7 +400,8 @@ export async function gerarPDFCheckin(
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.text(`Cliente: ${clienteNome} (${clienteTelefone || '—'})`, pageMargin + 5, y + 12);
-  doc.text(`Veículo: ${veiculoModelo} | Placa: ${veiculoPlaca.toUpperCase()}`, pageMargin + 5, y + 17);
+  const corFormatada = ` | Cor: ${veiculoCor?.trim() || 'Não informada'}`;
+  doc.text(`Veículo: ${veiculoModelo} | Placa: ${veiculoPlaca.toUpperCase()}${corFormatada}`, pageMargin + 5, y + 17);
 
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   doc.text(`KM: ${checkin.km ? checkin.km.toLocaleString('pt-BR') : '—'}`, rightMarginX - 5, y + 12, { align: 'right' });
@@ -248,7 +409,7 @@ export async function gerarPDFCheckin(
 
   y += 28;
 
-  // Helper de formatar rótulos para o PDF
+  // Helper de formatar rótulos para o PDF com mapeamento completo de todas as abas
   const formatarLabelItem = (key: string): string => {
     const map: Record<string, string> = {
       farol_baixo: 'Farol baixo',
@@ -258,15 +419,23 @@ export async function gerarPDFCheckin(
       pisca_traseiro: 'Pisca traseiro',
       lanterna_freio: 'Lanterna freio',
       luz_re: 'Luz de ré',
-      luz_placa: 'Luz de placa',
+      neblina: 'Farol neblina',
+      placa: 'Luz de placa',
       luz_cabine: 'Luz de cabine',
+      motor: 'Cofre do motor',
+      chassi: 'Chassi / Rodas',
+      carroceria: 'Carroceria / Lataria',
+      bancos: 'Bancos / Estofados',
+      carpete: 'Carpete / Tapetes',
+      painel: 'Painel / Console',
+      interior_geral: 'Interior geral',
       oleo_motor: 'Óleo motor',
       fluido_freio: 'Fluido freio',
+      freio: 'Fluido de freio',
       arrefecimento: 'Arrefecimento',
+      direcao: 'Direção hidráulica',
       direcao_hidraulica: 'Direção hidráulica',
       parabrisa: 'Água parabrisa',
-      painel: 'Painel',
-      bancos: 'Bancos',
       tapetes: 'Tapetes',
       portamalas: 'Porta-malas',
       teto: 'Teto',
@@ -281,10 +450,13 @@ export async function gerarPDFCheckin(
     if (val === 'ok') return 'OK';
     if (val === 'queimado') return 'QUEIMADO';
     if (val === 'baixo') return 'BAIXO';
+    if (val === 'medio') return 'MÉDIO';
+    if (val === 'alto') return 'ALTO';
     if (val === 'ruim') return 'RUIM';
     if (val === 'limpo') return 'LIMPO';
     if (val === 'sujo') return 'SUJO';
     if (val === 'extremo') return 'EXTREMO';
+    if (val === 'avariado') return 'AVARIADO';
     return val.toUpperCase();
   };
 
@@ -307,11 +479,23 @@ export async function gerarPDFCheckin(
   const col1X = pageMargin + 4;
   const col2X = pageMargin + usableWidth / 2 + 3;
 
-  // Quebra dinâmica das Luzes do Painel e Observações
+  // Formatação humanizada das Luzes do Painel
+  const mapLuzesPainel: Record<string, string> = {
+    injecao: 'Injeção eletrônica',
+    bateria: 'Bateria / Alternador',
+    oleo: 'Pressão do óleo',
+    abs: 'ABS',
+    airbag: 'Airbag',
+    temperatura: 'Temperatura motor',
+    freio: 'Freio / Fluido',
+    tpms: 'Pressão pneus (TPMS)',
+    motor: 'Check engine',
+  };
+
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
   const luzesTextoCompleto = checkin.luzes_painel && checkin.luzes_painel.length > 0
-    ? checkin.luzes_painel.join(', ')
+    ? checkin.luzes_painel.map((l) => mapLuzesPainel[l] || l.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())).join(', ')
     : 'Nenhuma luz de advertência acesa';
   const luzesLines: string[] = doc.splitTextToSize(luzesTextoCompleto, colW - 4);
 
@@ -345,16 +529,16 @@ export async function gerarPDFCheckin(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   if (ilumEntries.length === 0) {
-    doc.setTextColor(180, 180, 180);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.text('Sem itens testados', col1X, curY1);
     curY1 += 4;
   } else {
     ilumEntries.forEach((it) => {
-      doc.setTextColor(220, 220, 220);
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
       doc.text(`${it.label}: `, col1X, curY1);
       const lWidth = doc.getTextWidth(`${it.label}: `);
       if (it.raw === 'queimado') doc.setTextColor(248, 113, 113);
-      else doc.setTextColor(255, 255, 255);
+      else doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
       doc.setFont('helvetica', 'bold');
       doc.text(it.val, col1X + lWidth, curY1);
       doc.setFont('helvetica', 'normal');
@@ -363,7 +547,7 @@ export async function gerarPDFCheckin(
   }
 
   curY1 += 2;
-  doc.setTextColor(251, 191, 36);
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('FLUIDOS E NÍVEIS', col1X, curY1);
@@ -372,16 +556,16 @@ export async function gerarPDFCheckin(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   if (fluidoEntries.length === 0) {
-    doc.setTextColor(180, 180, 180);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.text('Sem fluidos verificados', col1X, curY1);
     curY1 += 4;
   } else {
     fluidoEntries.forEach((it) => {
-      doc.setTextColor(220, 220, 220);
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
       doc.text(`${it.label}: `, col1X, curY1);
       const lWidth = doc.getTextWidth(`${it.label}: `);
       if (it.raw === 'baixo' || it.raw === 'ruim') doc.setTextColor(248, 113, 113);
-      else doc.setTextColor(255, 255, 255);
+      else doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
       doc.setFont('helvetica', 'bold');
       doc.text(it.val, col1X + lWidth, curY1);
       doc.setFont('helvetica', 'normal');
@@ -390,7 +574,7 @@ export async function gerarPDFCheckin(
   }
 
   // --- COLUNA 2: SUJIDADE & PAINEL/ESTEPE ---
-  doc.setTextColor(251, 191, 36);
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('NÍVEIS DE SUJIDADE', col2X, curY2);
@@ -399,16 +583,16 @@ export async function gerarPDFCheckin(
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   if (sujEntries.length === 0) {
-    doc.setTextColor(180, 180, 180);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.text('Não informado', col2X, curY2);
     curY2 += 4;
   } else {
     sujEntries.forEach((it) => {
-      doc.setTextColor(220, 220, 220);
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
       doc.text(`${it.label}: `, col2X, curY2);
       const lWidth = doc.getTextWidth(`${it.label}: `);
       if (it.raw === 'sujo' || it.raw === 'extremo') doc.setTextColor(251, 191, 36);
-      else doc.setTextColor(255, 255, 255);
+      else doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
       doc.setFont('helvetica', 'bold');
       doc.text(it.val, col2X + lWidth, curY2);
       doc.setFont('helvetica', 'normal');
@@ -417,7 +601,7 @@ export async function gerarPDFCheckin(
   }
 
   curY2 += 2;
-  doc.setTextColor(251, 191, 36);
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.text('PAINEL & ESTEPE', col2X, curY2);
@@ -425,16 +609,16 @@ export async function gerarPDFCheckin(
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(220, 220, 220);
+  doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   doc.text('Estepe: ', col2X, curY2);
-  doc.setTextColor(255, 255, 255);
+  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
   doc.setFont('helvetica', 'bold');
   doc.text(estepeTxt, col2X + doc.getTextWidth('Estepe: '), curY2);
   doc.setFont('helvetica', 'normal');
   curY2 += 4;
 
   // Rótulo explícito para condição de entrada
-  doc.setTextColor(220, 220, 220);
+  doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   doc.text('Luzes acesas no painel na entrada:', col2X, curY2);
   curY2 += 4;
 
@@ -442,7 +626,7 @@ export async function gerarPDFCheckin(
   if (checkin.luzes_painel && checkin.luzes_painel.length > 0) {
     doc.setTextColor(248, 113, 113); // Vermelho/flare
   } else {
-    doc.setTextColor(180, 180, 180); // Neutro
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]); // Neutro
   }
 
   luzesLines.forEach((line) => {
@@ -452,7 +636,7 @@ export async function gerarPDFCheckin(
 
   if (obsLines.length > 0) {
     curY2 += 1;
-    doc.setTextColor(220, 220, 220);
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.setFont('helvetica', 'italic');
     obsLines.forEach((line) => {
       doc.text(line, col2X, curY2);
@@ -475,7 +659,7 @@ export async function gerarPDFCheckin(
     avarias.some((a) => a.vista === vItem.key)
   );
 
-  if (vistasComAvarias.length > 0 && svgElements) {
+  if (vistasComAvarias.length > 0) {
     onProgress?.('Renderizando diagramas das vistas com avarias...');
 
     if (y + 55 > 270) {
@@ -494,7 +678,6 @@ export async function gerarPDFCheckin(
 
     for (let i = 0; i < vistasComAvarias.length; i++) {
       const item = vistasComAvarias[i];
-      const svgEl = svgElements[item.key];
       const col = i % 2; // 0 ou 1
       const diagX = pageMargin + col * (diagW + 6);
 
@@ -508,11 +691,11 @@ export async function gerarPDFCheckin(
         y = 15;
       }
 
-      if (svgEl) {
-        const pngBase64 = await svgToPngBase64(svgEl);
-        if (pngBase64) {
-          doc.addImage(pngBase64, 'PNG', diagX, y, diagW, diagH);
-        }
+      const avariasDaVista = avarias.filter((a) => a.vista === item.key);
+      const svgString = gerarSvgSilhuetaStandalone(item.key, avariasDaVista, avarias);
+      const pngBase64 = await svgStringToPngBase64(svgString, 800, 320);
+      if (pngBase64) {
+        doc.addImage(pngBase64, 'PNG', diagX, y, diagW, diagH);
       }
 
       // Título da vista centralizado abaixo da imagem

@@ -334,7 +334,7 @@ export const Hoje: React.FC = () => {
   const handleConfirmarOnline = async (agendamentoId: string) => {
     try {
       const { error } = await supabase.rpc('confirmar_agendamento_online', {
-        p_agendamento_id: agendamentoId
+        p_agendamento: agendamentoId
       });
       if (error) throw error;
       await fetchHojeData();
@@ -346,7 +346,7 @@ export const Hoje: React.FC = () => {
   const handleRecusarOnline = async (agendamentoId: string) => {
     try {
       const { error } = await supabase.rpc('recusar_agendamento_online', {
-        p_agendamento_id: agendamentoId,
+        p_agendamento: agendamentoId,
         p_motivo: 'Recusado pelo estabelecimento'
       });
       if (error) throw error;
@@ -359,7 +359,7 @@ export const Hoje: React.FC = () => {
   const handleRegistrarSinalPago = async (agendamentoId: string) => {
     try {
       const { error } = await supabase.rpc('registrar_sinal_pago', {
-        p_agendamento_id: agendamentoId
+        p_agendamento: agendamentoId
       });
       if (error) throw error;
       await fetchHojeData();

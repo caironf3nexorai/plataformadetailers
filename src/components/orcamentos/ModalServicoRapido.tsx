@@ -61,6 +61,7 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
         const { data, error } = await supabase
           .from('categorias_veiculo')
           .select('*')
+          .eq('tenant_id', tenant.id)
           .eq('ativo', true)
           .order('ordem', { ascending: true });
 
