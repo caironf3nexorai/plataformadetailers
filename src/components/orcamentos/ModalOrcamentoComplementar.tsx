@@ -60,15 +60,33 @@ export const ModalOrcamentoComplementar: React.FC<ModalOrcamentoComplementarProp
     const carregarServicos = async () => {
       setLoadingServicos(true);
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('servicos')
-          .select('id, nome, grupo, preco_base, duracao_minutos')
+          .select('id, nome, grupo, servico_precos(preco_base, duracao_minutos, categoria_id)')
           .eq('tenant_id', tenant.id)
           .eq('ativo', true)
-          .order('nome');
+          .order('grupo', { ascending: true })
+          .order('nome', { ascending: true });
+
+        if (error) {
+          console.error('[ModalOrcamentoComplementar] Erro na query:', error);
+        }
 
         if (data) {
-          setServicos(data as ServicoOpcao[]);
+          const formatados: ServicoOpcao[] = data.map((s: any) => {
+            const spComPreco = s.servico_precos?.find(
+              (p: any) => p.preco_base !== null && p.preco_base !== undefined && Number(p.preco_base) > 0
+            ) || s.servico_precos?.[0];
+
+            return {
+              id: s.id,
+              nome: s.nome,
+              grupo: s.grupo || 'Geral',
+              preco_base: spComPreco?.preco_base ? Number(spComPreco.preco_base) : undefined,
+              duracao_minutos: spComPreco?.duracao_minutos ? Number(spComPreco.duracao_minutos) : 30,
+            };
+          });
+          setServicos(formatados);
         }
       } catch (err) {
         console.error('[ModalOrcamentoComplementar] Erro ao carregar serviços:', err);
@@ -108,24 +126,57 @@ export const ModalOrcamentoComplementar: React.FC<ModalOrcamentoComplementarProp
 
     setSaving(true);
     try {
-      // 1. Inserir em agendamento_itens
+      // 1. Obter ou criar servico_id caso tenha sido digitado manualmente
+      let finalServicoId = servicoId;
+      if (!finalServicoId) {
+        const { data: novoServico, error: novoServicoErr } = await supabase
+          .from('servicos')
+          .insert({
+            tenant_id: tenant.id,
+            nome: nomeFinal,
+            grupo: 'Complementar',
+            modo_ocupacao: 'slot',
+            ativo: true,
+          })
+          .select('id')
+          .single();
+
+        if (novoServicoErr) {
+          const { data: existente } = await supabase
+            .from('servicos')
+            .select('id')
+            .eq('tenant_id', tenant.id)
+            .eq('nome', nomeFinal)
+            .single();
+          finalServicoId = existente?.id;
+        } else {
+          finalServicoId = novoServico.id;
+        }
+      }
+
+      if (!finalServicoId) {
+        throw new Error('Não foi possível identificar ou registrar o serviço.');
+      }
+
+      // 2. Inserir em agendamento_itens com as colunas reais do banco
       const { data: itemData, error: itemErr } = await supabase
         .from('agendamento_itens')
         .insert({
           tenant_id: tenant.id,
           agendamento_id: agendamentoId,
-          servico_id: servicoId || null,
-          servico_nome: nomeFinal,
-          preco_praticado: valorNumerico,
+          servico_id: finalServicoId,
           duracao_minutos: duracaoNum,
-          quantidade: 1,
+          preco_estimado: valorNumerico,
+          modo_ocupacao: 'slot',
+          dias_ocupados: 1,
+          ordem: 99,
         })
         .select('id')
         .single();
 
       if (itemErr) throw itemErr;
 
-      // 2. Se houver execução ativa, cria item no checklist de execução
+      // 3. Se houver execução ativa, cria item no checklist de execução
       if (execucaoId) {
         await supabase.from('execucao_itens').insert({
           tenant_id: tenant.id,
@@ -135,25 +186,28 @@ export const ModalOrcamentoComplementar: React.FC<ModalOrcamentoComplementarProp
           descricao: motivo ? `[COMPLEMENTAR] ${nomeFinal} - ${motivo}` : `[COMPLEMENTAR] ${nomeFinal}`,
           concluido: false,
           obrigatorio: false,
-          origem: 'avulso',
           ordem: 99,
         });
+
+        // E registrar na execucao_valores para que na finalização o valor seja considerado
+        if (itemData?.id) {
+          await supabase.from('execucao_valores').upsert({
+            tenant_id: tenant.id,
+            execucao_id: execucaoId,
+            agendamento_item_id: itemData.id,
+            valor_estimado: valorNumerico,
+            valor_final: valorNumerico,
+            motivo: motivo ? `Complementar: ${motivo}` : 'Serviço complementar aprovado',
+          });
+        }
       }
 
-      // 3. Atualiza valor total do agendamento
-      const { data: todosItens } = await supabase
-        .from('agendamento_itens')
-        .select('preco_praticado')
-        .eq('agendamento_id', agendamentoId);
-
-      const novoTotal = (todosItens || []).reduce((acc, it) => acc + Number(it.preco_praticado || 0), 0);
-      await supabase
-        .from('agendamentos')
-        .update({
-          preco_total: novoTotal,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', agendamentoId);
+      // 4. Recalcular totais do agendamento (trigger recalcula automaticamente, e chamamos a RPC para garantia)
+      try {
+        await supabase.rpc('recalcular_agendamento_totais', { p_agendamento_id: agendamentoId });
+      } catch (recErr) {
+        // Silently continue since trigger on agendamento_itens already executed
+      }
 
       showSuccess(`Serviço complementar "${nomeFinal}" adicionado e aprovado com sucesso!`);
       onSuccess();
@@ -221,10 +275,21 @@ export const ModalOrcamentoComplementar: React.FC<ModalOrcamentoComplementarProp
             className="w-full bg-graphite-900 border border-graphite-700 rounded-lg p-3 text-vapor-100 font-sans text-sm outline-none focus:border-amber-500 disabled:opacity-60"
           >
             <option value="">{loadingServicos ? 'Carregando serviços...' : 'Selecione um serviço existente...'}</option>
-            {servicos.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.nome} {s.preco_base ? `· ${formatarMoeda(s.preco_base)}` : ''}
-              </option>
+            {Object.entries(
+              servicos.reduce<Record<string, ServicoOpcao[]>>((acc, s) => {
+                const g = s.grupo || 'Geral';
+                if (!acc[g]) acc[g] = [];
+                acc[g].push(s);
+                return acc;
+              }, {})
+            ).map(([grupo, itens]) => (
+              <optgroup key={grupo} label={grupo}>
+                {itens.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nome} {s.preco_base ? `· ${formatarMoeda(s.preco_base)}` : ''}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>

@@ -10,6 +10,7 @@ export interface ItemSelecionado {
   combo_id?: string | null;
   servico: any;
   comboNome?: string;
+  preco?: number;
 }
 
 export interface SeletorServicosProps {
@@ -62,7 +63,9 @@ export const SeletorServicos: React.FC<SeletorServicosProps> = ({
       temDiaInteiro = true;
     }
 
-    if (item.combo_id) {
+    if (item.preco !== undefined && item.preco !== null) {
+      precoTotalSum += Number(item.preco);
+    } else if (item.combo_id) {
       if (!combosContabilizados.has(item.combo_id)) {
         combosContabilizados.add(item.combo_id);
         const comboObj = combos.find((c) => c.id === item.combo_id);

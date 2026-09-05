@@ -54,7 +54,7 @@ export const PaginaParceiro: React.FC = () => {
         </div>
 
         <button
-          onClick={() => navigate('/login')}
+          onClick={() => navigate('/entrar')}
           className="text-xs md:text-sm text-slate-300 hover:text-white font-medium transition"
         >
           Já tem uma conta? Entrar

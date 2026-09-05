@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/Card';
@@ -22,7 +22,9 @@ import {
   Download,
   Eye,
   X,
+  AlertCircle,
 } from 'lucide-react';
+import { Modal } from '../components/ui/Modal';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
 import { formatarDataHora } from '../utils/datas';
 import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
@@ -32,8 +34,11 @@ import { getEvidenciaSignedUrl, baixarFoto } from '../utils/evidencias';
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { tenant, membership } = useAuth();
   const podeVerCusto = membership?.role === 'dono' || membership?.role === 'gerente';
+
+  const [avisoNavegacao, setAvisoNavegacao] = useState<string | null>(() => (location.state as any)?.aviso || null);
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -52,6 +57,7 @@ export const VisualizarAtendimento: React.FC = () => {
   });
   const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; data?: string } | null>(null);
   const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
+  const [modalAvisoSemVistoriaOpen, setModalAvisoSemVistoriaOpen] = useState(false);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
     if (!agendamento || !tenant) return;
@@ -61,22 +67,45 @@ export const VisualizarAtendimento: React.FC = () => {
         ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
         : undefined;
 
+      // 1. Tempo real trabalhado na execução (se concluído)
+      const tempoRealTrabalhadoMinutos = execucao?.tempo_efetivo_minutos && execucao.tempo_efetivo_minutos > 0
+        ? execucao.tempo_efetivo_minutos
+        : (segundosTrabalhados > 0 ? Math.round(segundosTrabalhados / 60) : undefined);
+
       const itensFormatados = (agendamento.agendamento_itens || []).map((it: any) => ({
         servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
         categoria_nome: it.categoria?.nome,
         preco: Number(it.preco_praticado ?? it.preco ?? it.servicos?.preco ?? 0),
-        duracao_minutos: it.duracao_minutos || it.servicos?.duracao_minutos,
+        duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && (agendamento.agendamento_itens || []).length <= 1)
+          ? tempoRealTrabalhadoMinutos
+          : (it.duracao_minutos || it.servicos?.duracao_minutos || agendamento.duracao_total || agendamento.duracao_minutos),
         quantidade: it.quantidade || 1,
       }));
+
+      const totalItens = itensFormatados.reduce((acc: number, it: any) => acc + (it.preco * (it.quantidade || 1)), 0);
+      const valorFinalTotal = Number(
+        execucao?.valor_total_final ?? 
+        agendamento.preco_estimado_total ?? 
+        agendamento.preco_total ?? 
+        totalItens
+      );
+
+      // Se há um serviço único ou item principal e o valor final faturado foi ajustado (ex: R$ 150),
+      // alinha o preço do item para bater com o total faturado no documento da OS
+      if (itensFormatados.length === 1 && valorFinalTotal > 0) {
+        itensFormatados[0].preco = valorFinalTotal;
+      }
 
       if (itensFormatados.length === 0 && agendamento.servico) {
         itensFormatados.push({
           servico_nome: agendamento.servico.nome || 'Serviço',
-          preco: Number(agendamento.preco_total || 0),
-          duracao_minutos: agendamento.duracao_minutos,
+          preco: valorFinalTotal,
+          duracao_minutos: tempoRealTrabalhadoMinutos || agendamento.duracao_minutos || agendamento.duracao_total,
           quantidade: 1,
         });
       }
+
+      const dataConclusao = execucao?.finalizado_em || (agendamento.status === 'concluido' ? agendamento.fim : undefined);
 
       await gerarPDFOS(
         {
@@ -85,7 +114,8 @@ export const VisualizarAtendimento: React.FC = () => {
           status: agendamento.status || (execucao?.finalizado_em ? 'concluido' : 'em_andamento'),
           inicio: agendamento.inicio,
           previsao_entrega: agendamento.fim,
-          concluido_em: execucao?.finalizado_em,
+          concluido_em: dataConclusao,
+          data_conclusao: dataConclusao,
           responsavel_nome: 'Oficina / Responsável',
           observacoes: agendamento.observacoes || execucao?.observacoes,
           clienteNome: agendamento.cliente?.nome || 'Cliente',
@@ -114,7 +144,7 @@ export const VisualizarAtendimento: React.FC = () => {
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
           itens: itensFormatados,
-          valor_total: Number(agendamento.preco_total || 0),
+          valor_total: valorFinalTotal,
           desconto: Number(agendamento.desconto_valor || 0),
           forma_pagamento: agendamento.forma_pagamento,
           assinaturaClienteNome: agendamento.cliente?.nome,
@@ -368,6 +398,14 @@ export const VisualizarAtendimento: React.FC = () => {
     );
   }
 
+  const handleVoltar = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/hoje');
+    }
+  };
+
   if (errorMsg || (!execucao && !agendamento)) {
     return (
       <div className="p-8 max-w-lg mx-auto text-center flex flex-col items-center gap-4">
@@ -376,7 +414,7 @@ export const VisualizarAtendimento: React.FC = () => {
         </div>
         <h2 className="text-xl font-bold text-vapor-100">Ops! Algo deu errado.</h2>
         <p className="text-sm text-vapor-400">{errorMsg || 'Atendimento não encontrado.'}</p>
-        <Button onClick={() => navigate(-1)} variant="secondary">
+        <Button onClick={handleVoltar} variant="secondary">
           Voltar
         </Button>
       </div>
@@ -446,9 +484,9 @@ export const VisualizarAtendimento: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={handleVoltar}
             className="p-2 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 border border-graphite-700 transition-colors"
-            title="Voltar"
+            title="Voltar para a página anterior"
           >
             <ArrowLeft size={20} />
           </button>
@@ -506,20 +544,44 @@ export const VisualizarAtendimento: React.FC = () => {
             <span className="hidden sm:inline">{gerandoPDFOS ? 'Gerando...' : 'PDF da OS'}</span>
           </Button>
 
-          {/* Botão para Vistoria de Entrada se existir */}
-          {checkinId && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => navigate(`/checkin/${checkinId}/ver`)}
-              className="flex items-center gap-1.5 text-[12px] bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 shrink-0"
-            >
-              <ClipboardCheck size={16} />
-              <span className="hidden sm:inline">Vistoria de Entrada</span>
-            </Button>
-          )}
+          {/* Botão para Vistoria de Entrada (com feedback claro se não realizada) */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              if (checkinId) {
+                navigate(`/checkin/${checkinId}/ver`);
+              } else {
+                setModalAvisoSemVistoriaOpen(true);
+              }
+            }}
+            className="flex items-center gap-1.5 text-[12px] bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 shrink-0"
+            title={checkinId ? 'Visualizar vistoria de entrada' : 'Aviso sobre vistoria de entrada'}
+          >
+            <ClipboardCheck size={16} />
+            <span className="hidden sm:inline">Vistoria de Entrada</span>
+          </Button>
         </div>
       </div>
+
+      {/* BANNER DE AVISO DE VISTORIA NÃO REALIZADA */}
+      {avisoNavegacao && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/40 rounded-xl flex items-center justify-between gap-3 text-amber-300 shadow-md animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="shrink-0 text-amber-400" size={20} />
+            <span className="text-[13px] font-sans text-vapor-200 font-medium">
+              {avisoNavegacao}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAvisoNavegacao(null)}
+            className="text-vapor-400 hover:text-vapor-200 p-1"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       {/* BLOCO 1: RESUMO DO VEÍCULO E CLIENTE */}
       <Card className="p-4 flex flex-col gap-4 bg-graphite-900 border-graphite-700">
@@ -751,7 +813,11 @@ export const VisualizarAtendimento: React.FC = () => {
               ))}
             </div>
           ) : (
-            <span className="text-[12px] font-sans text-vapor-400 italic">Nenhuma foto registrada na vistoria inicial.</span>
+            <span className="text-[12px] font-sans text-vapor-400 italic">
+              {checkinId
+                ? 'Nenhuma foto registrada na vistoria inicial.'
+                : 'Você não realizou vistoria de entrada neste serviço.'}
+            </span>
           )}
         </div>
 
@@ -1014,6 +1080,38 @@ export const VisualizarAtendimento: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Aviso Vistoria Não Realizada */}
+      {modalAvisoSemVistoriaOpen && (
+        <Modal
+          isOpen={modalAvisoSemVistoriaOpen}
+          onClose={() => setModalAvisoSemVistoriaOpen(false)}
+          title="Vistoria de Entrada Não Realizada"
+          maxWidth="sm"
+        >
+          <div className="flex flex-col gap-4 text-sm font-sans text-vapor-200 p-1">
+            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-3 text-amber-300">
+              <AlertCircle size={22} className="shrink-0 text-amber-400 mt-0.5" />
+              <div className="flex flex-col gap-1">
+                <span className="font-bold text-vapor-100">Nenhuma vistoria registrada</span>
+                <span className="text-xs text-vapor-300 leading-relaxed">
+                  Você não realizou vistoria de entrada neste serviço. Este atendimento foi iniciado diretamente sem checklist de entrada ou a vistoria foi dispensada no momento da entrada.
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setModalAvisoSemVistoriaOpen(false)}
+                className="w-full sm:w-auto"
+              >
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

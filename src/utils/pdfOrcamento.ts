@@ -679,10 +679,19 @@ export async function gerarPDFOrcamento(
   onProgress?.('Finalizando PDF do orçamento...');
   const nomeArquivo = `orcamento_${data.veiculoPlaca ? data.veiculoPlaca.toUpperCase() : 'proposta'}_${codProposta.replace('#', '')}.pdf`;
 
-  if (acao === 'print') {
-    doc.autoPrint();
-    const blobUrl = doc.output('bloburl');
-    window.open(blobUrl, '_blank');
+  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (acao === 'print' && !isMobile) {
+    try {
+      doc.autoPrint();
+      const blobUrl = doc.output('bloburl');
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        doc.save(nomeArquivo);
+      }
+    } catch {
+      doc.save(nomeArquivo);
+    }
   } else {
     doc.save(nomeArquivo);
   }

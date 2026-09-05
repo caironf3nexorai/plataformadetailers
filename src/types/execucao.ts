@@ -37,6 +37,7 @@ export interface Execucao {
   valor_total_final: number | null;
   valor_definido_por: string | null;
   valor_definido_em: string | null;
+  tempo_efetivo_minutos?: number | null;
   created_at: string;
   updated_at: string;
   itens?: ExecucaoItem[];

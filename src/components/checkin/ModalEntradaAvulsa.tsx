@@ -4,7 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { User, Car, Wrench, Plus, ChevronDown, Check } from 'lucide-react';
+import { User, Car, Wrench, Plus, ChevronDown, Check, RotateCcw } from 'lucide-react';
 import { SeletorServicos, type ItemSelecionado } from '../servicos/SeletorServicos';
 import { AlertaErro } from '../ui/AlertaErro';
 
@@ -43,23 +43,103 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
   const [showNovoVeiculo, setShowNovoVeiculo] = useState(false);
   const [novoVeiculoModelo, setNovoVeiculoModelo] = useState('');
   const [novoVeiculoPlaca, setNovoVeiculoPlaca] = useState('');
+  const [novoVeiculoCor, setNovoVeiculoCor] = useState('');
+  const [novoClienteData, setNovoClienteData] = useState<{ nome: string; telefone: string | null } | null>(null);
+  const [novoVeiculoData, setNovoVeiculoData] = useState<{ modelo: string; placa: string; cor: string | null; categoria_id: string | null } | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false);
+
+  const DRAFT_KEY = tenant ? `nuvemwash_draft_entrada_avulsa_${tenant.id}` : null;
+
+  const limparDraft = () => {
+    if (DRAFT_KEY) {
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch (e) {
+        console.warn('Erro ao limpar rascunho:', e);
+      }
+    }
+    setStep(1);
+    setSelectedCliente('');
+    setSelectedVeiculo('');
+    setSelectedCategoriaObj(categorias.length > 0 ? categorias[0] : null);
+    setSelectedItens([]);
+    setNovoClienteData(null);
+    setNovoVeiculoData(null);
+    setShowNovoCliente(false);
+    setShowNovoVeiculo(false);
+    setNovoClienteNome('');
+    setNovoClienteTelefone('');
+    setNovoVeiculoModelo('');
+    setNovoVeiculoPlaca('');
+    setNovoVeiculoCor('');
+    setRascunhoRestaurado(false);
+    setError(null);
+  };
 
   useEffect(() => {
     if (isOpen && tenant) {
-      setStep(1);
-      setSelectedCliente('');
-      setSelectedVeiculo('');
-      setSelectedCategoriaObj(null);
-      setSelectedItens([]);
+      fetchInicial();
+
+      // Tentar restaurar rascunho salvo do localStorage
+      let restaurou = false;
+      if (DRAFT_KEY) {
+        try {
+          const salvo = localStorage.getItem(DRAFT_KEY);
+          if (salvo) {
+            const parsed = JSON.parse(salvo);
+            if (parsed && (parsed.selectedCliente || parsed.step > 1)) {
+              setStep(parsed.step || 1);
+              setSelectedCliente(parsed.selectedCliente || '');
+              setSelectedVeiculo(parsed.selectedVeiculo || '');
+              setSelectedCategoriaObj(parsed.selectedCategoriaObj || null);
+              setSelectedItens(parsed.selectedItens || []);
+              setRascunhoRestaurado(true);
+              restaurou = true;
+            }
+          }
+        } catch (e) {
+          console.warn('Erro ao ler rascunho de entrada:', e);
+        }
+      }
+
+      if (!restaurou) {
+        setStep(1);
+        setSelectedCliente('');
+        setSelectedVeiculo('');
+        setSelectedCategoriaObj(null);
+        setSelectedItens([]);
+        setRascunhoRestaurado(false);
+      }
+
       setError(null);
       setShowNovoCliente(false);
       setShowNovoVeiculo(false);
-      fetchInicial();
     }
   }, [isOpen, tenant]);
+
+  // Salvar rascunho automaticamente conforme usuário avança
+  useEffect(() => {
+    if (isOpen && tenant && DRAFT_KEY && (selectedCliente || selectedVeiculo || selectedItens.length > 0)) {
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({
+            step,
+            selectedCliente,
+            selectedVeiculo,
+            selectedCategoriaObj,
+            selectedItens,
+          })
+        );
+      } catch (e) {
+        console.warn('Erro ao salvar rascunho de entrada:', e);
+      }
+    }
+  }, [step, selectedCliente, selectedVeiculo, selectedCategoriaObj, selectedItens, isOpen, tenant, DRAFT_KEY]);
+
 
   const fetchInicial = async () => {
     if (!tenant) return;
@@ -148,14 +228,33 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     setSelectedItens([]);
   };
 
-  // Toggle de Serviço
+  // Toggle de Serviço com Preço Base da Categoria
   const handleToggleServico = (serv: any) => {
     const exists = selectedItens.some((i) => i.servico_id === serv.id);
     if (exists) {
       setSelectedItens((prev) => prev.filter((i) => i.servico_id !== serv.id));
     } else {
-      setSelectedItens((prev) => [...prev, { servico_id: serv.id, combo_id: null, servico: serv }]);
+      const matchPreco = serv.servico_precos?.find(
+        (p: any) => p.categoria_id === selectedCategoriaObj?.id
+      );
+      const precoBase = matchPreco?.preco_base !== undefined && matchPreco?.preco_base !== null
+        ? Number(matchPreco.preco_base)
+        : Number(serv.preco_base || 0);
+
+      setSelectedItens((prev) => [
+        ...prev,
+        { servico_id: serv.id, combo_id: null, servico: serv, preco: precoBase },
+      ]);
     }
+  };
+
+  // Atualizar Preço Customizado do Item
+  const handleAtualizarPrecoItem = (servico_id: string, novoPrecoStr: string) => {
+    const limpo = novoPrecoStr.replace(',', '.');
+    const valorNum = parseFloat(limpo);
+    setSelectedItens((prev) =>
+      prev.map((it) => (it.servico_id === servico_id ? { ...it, preco: isNaN(valorNum) ? 0 : valorNum } : it))
+    );
   };
 
   // Toggle de Combo
@@ -168,8 +267,15 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     if (allSelected) {
       setSelectedItens((prev) => prev.filter((i) => i.combo_id !== combo.id));
     } else {
+      const comboPrecoObj = combo.combo_precos?.find(
+        (cp: any) => cp.categoria_id === selectedCategoriaObj?.id
+      );
+      const comboPreco = comboPrecoObj?.preco_base !== undefined && comboPrecoObj?.preco_base !== null
+        ? Number(comboPrecoObj.preco_base)
+        : Number(combo.preco_base || 0);
+
       const novosItens = [...selectedItens.filter((i) => !comboServicoIds.includes(i.servico_id))];
-      (combo.combo_servicos || []).forEach((cs: any) => {
+      (combo.combo_servicos || []).forEach((cs: any, idx: number) => {
         const serv = cs.servicos || servicos.find((s) => s.id === cs.servico_id);
         if (serv) {
           novosItens.push({
@@ -177,6 +283,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
             combo_id: combo.id,
             comboNome: combo.nome,
             servico: serv,
+            preco: idx === 0 ? comboPreco : 0, // Atribui o preço ao primeiro item do combo
           });
         }
       });
@@ -184,65 +291,56 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     }
   };
 
-  // Criar Cliente Rápido
-  const handleCriarCliente = async () => {
-    if (!tenant || !novoClienteNome.trim()) return;
-    try {
-      setLoading(true);
-      const { data, error: clError } = await supabase
-        .from('clientes')
-        .insert({
-          tenant_id: tenant.id,
-          nome: novoClienteNome.trim(),
-          telefone: novoClienteTelefone.trim() || null,
-        })
-        .select('id, nome, telefone')
-        .single();
-
-      if (clError) throw clError;
-      setClientes((prev) => [...prev, data]);
-      setSelectedCliente(data.id);
-      setShowNovoCliente(false);
-      setNovoClienteNome('');
-      setNovoClienteTelefone('');
-    } catch (err: any) {
-      setError('Erro ao criar cliente: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+  // Confirmar Cliente Rápido em memória (salva apenas no registro da entrada)
+  const handleCriarCliente = () => {
+    if (!novoClienteNome.trim()) return;
+    const tempId = `temp_novo_cliente_${Date.now()}`;
+    const novoObj = {
+      id: tempId,
+      nome: novoClienteNome.trim(),
+      telefone: novoClienteTelefone.trim() || null,
+      isTemp: true,
+    };
+    setNovoClienteData({
+      nome: novoClienteNome.trim(),
+      telefone: novoClienteTelefone.trim() || null,
+    });
+    setClientes((prev) => [novoObj, ...prev.filter((c) => !c.isTemp)]);
+    setSelectedCliente(tempId);
+    setShowNovoCliente(false);
+    setNovoClienteNome('');
+    setNovoClienteTelefone('');
+    setVeiculos([]);
+    setSelectedVeiculo('');
   };
 
-  // Criar Veículo Rápido
-  const handleCriarVeiculo = async () => {
-    if (!tenant || !selectedCliente || !novoVeiculoModelo.trim() || !novoVeiculoPlaca.trim()) return;
-    try {
-      setLoading(true);
-      const { data, error: vError } = await supabase
-        .from('veiculos')
-        .insert({
-          tenant_id: tenant.id,
-          cliente_id: selectedCliente,
-          modelo: novoVeiculoModelo.trim(),
-          placa: novoVeiculoPlaca.trim().toUpperCase(),
-          categoria_id: selectedCategoriaObj?.id || null,
-        })
-        .select('id, modelo, placa, marca, cor, categoria_id')
-        .single();
-
-      if (vError) throw vError;
-      setVeiculos((prev) => [...prev, data]);
-      setSelectedVeiculo(data.id);
-      setShowNovoVeiculo(false);
-      setNovoVeiculoModelo('');
-      setNovoVeiculoPlaca('');
-    } catch (err: any) {
-      setError('Erro ao criar veículo: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+  // Confirmar Veículo Rápido em memória (salva apenas no registro da entrada)
+  const handleCriarVeiculo = () => {
+    if (!novoVeiculoModelo.trim() || !novoVeiculoPlaca.trim()) return;
+    const tempId = `temp_novo_veiculo_${Date.now()}`;
+    const novoObj = {
+      id: tempId,
+      modelo: novoVeiculoModelo.trim(),
+      placa: novoVeiculoPlaca.trim().toUpperCase(),
+      cor: novoVeiculoCor.trim() || null,
+      categoria_id: selectedCategoriaObj?.id || null,
+      isTemp: true,
+    };
+    setNovoVeiculoData({
+      modelo: novoVeiculoModelo.trim(),
+      placa: novoVeiculoPlaca.trim().toUpperCase(),
+      cor: novoVeiculoCor.trim() || null,
+      categoria_id: selectedCategoriaObj?.id || null,
+    });
+    setVeiculos((prev) => [novoObj, ...prev.filter((v) => !v.isTemp)]);
+    setSelectedVeiculo(tempId);
+    setShowNovoVeiculo(false);
+    setNovoVeiculoModelo('');
+    setNovoVeiculoPlaca('');
+    setNovoVeiculoCor('');
   };
 
-  // Submeter Entrada Avulsa (com p_itens jsonb)
+  // Submeter Entrada Avulsa (com persistência atômica de cliente e veículo se forem novos)
   const handleSubmit = async () => {
     if (!selectedCliente || !selectedVeiculo || selectedItens.length === 0 || !selectedCategoriaObj) {
       setError('Por favor, preencha todos os campos obrigatórios e selecione ao menos um serviço.');
@@ -252,20 +350,60 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     setLoading(true);
     setError(null);
     try {
+      let clienteIdFinal = selectedCliente;
+      let veiculoIdFinal = selectedVeiculo;
+
+      // 1. Salva cliente no banco agora, se for novo
+      if (novoClienteData && selectedCliente.startsWith('temp_novo_cliente')) {
+        const { data: clCriado, error: errCl } = await supabase
+          .from('clientes')
+          .insert({
+            tenant_id: tenant!.id,
+            nome: novoClienteData.nome,
+            telefone: novoClienteData.telefone || null,
+          })
+          .select('id')
+          .single();
+
+        if (errCl) throw new Error('Erro ao cadastrar cliente: ' + errCl.message);
+        clienteIdFinal = clCriado.id;
+      }
+
+      // 2. Salva veículo no banco agora, se for novo
+      if (novoVeiculoData && selectedVeiculo.startsWith('temp_novo_veiculo')) {
+        const { data: vCriado, error: errV } = await supabase
+          .from('veiculos')
+          .insert({
+            tenant_id: tenant!.id,
+            cliente_id: clienteIdFinal,
+            modelo: novoVeiculoData.modelo,
+            placa: novoVeiculoData.placa,
+            cor: novoVeiculoData.cor || null,
+            categoria_id: selectedCategoriaObj?.id || null,
+          })
+          .select('id')
+          .single();
+
+        if (errV) throw new Error('Erro ao cadastrar veículo: ' + errV.message);
+        veiculoIdFinal = vCriado.id;
+      }
+
       const payloadItens = selectedItens.map((i) => ({
         servico_id: i.servico_id,
         combo_id: i.combo_id || null,
+        preco: i.preco !== undefined ? Number(i.preco) : undefined,
       }));
 
       const { data: agendamentoId, error: rpcError } = await supabase.rpc('entrada_avulsa', {
-        p_cliente: selectedCliente,
-        p_veiculo: selectedVeiculo,
+        p_cliente: clienteIdFinal,
+        p_veiculo: veiculoIdFinal,
         p_itens: payloadItens,
         p_categoria: selectedCategoriaObj.id,
       });
 
       if (rpcError) throw rpcError;
 
+      limparDraft();
       onClose();
       // Redireciona imediatamente para a vistoria de entrada
       navigate(`/checkin/${agendamentoId}`);
@@ -280,6 +418,24 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Entrada de Veículo no Pátio (Balcão)">
       <div className="flex flex-col gap-4">
+        {/* Barra Superior com Stepper e Botão Limpar e Recomeçar */}
+        <div className="flex items-center justify-between pb-1">
+          <span className="text-[11px] font-sans text-vapor-400 font-medium">
+            Passo {step} de 3
+          </span>
+          {(selectedCliente || selectedVeiculo || selectedItens.length > 0 || step > 1) && (
+            <button
+              type="button"
+              onClick={limparDraft}
+              className="text-xs text-vapor-400 hover:text-amber-400 flex items-center gap-1.5 transition py-1 px-2 rounded hover:bg-graphite-800"
+              title="Limpar todos os campos e recomeçar"
+            >
+              <RotateCcw size={13} />
+              <span>Limpar e recomeçar</span>
+            </button>
+          )}
+        </div>
+
         {/* Stepper Superior */}
         <div className="grid grid-cols-3 gap-2 pb-2 border-b border-graphite-700 font-display text-[12px] uppercase">
           <div className={`p-2 rounded text-center flex items-center justify-center gap-1.5 ${step === 1 ? 'bg-amber-500 text-graphite-950 font-bold' : 'bg-graphite-800 text-vapor-400'}`}>
@@ -295,6 +451,19 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
             <span>3. Serviços</span>
           </div>
         </div>
+
+        {rascunhoRestaurado && (
+          <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-center justify-between text-xs text-blue-300">
+            <span>Rascunho de entrada recuperado de onde você parou.</span>
+            <button
+              type="button"
+              onClick={limparDraft}
+              className="text-amber-400 hover:text-amber-300 font-bold underline"
+            >
+              Recomeçar
+            </button>
+          </div>
+        )}
 
         {error && (
           <AlertaErro erro={error} />
@@ -404,18 +573,27 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
               <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-3">
                 <input
                   type="text"
-                  placeholder="Modelo (ex: Honda Civic)"
+                  placeholder="Modelo (ex: Azzera, Honda Civic)"
                   value={novoVeiculoModelo}
                   onChange={(e) => setNovoVeiculoModelo(e.target.value)}
                   className="bg-graphite-950 border border-graphite-700 rounded p-2.5 text-vapor-100 font-sans text-[14px]"
                 />
-                <input
-                  type="text"
-                  placeholder="Placa (ex: ABC1D23)"
-                  value={novoVeiculoPlaca}
-                  onChange={(e) => setNovoVeiculoPlaca(e.target.value)}
-                  className="bg-graphite-950 border border-graphite-700 rounded p-2.5 text-vapor-100 font-sans text-[14px] uppercase"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Placa (ex: NKT4469)"
+                    value={novoVeiculoPlaca}
+                    onChange={(e) => setNovoVeiculoPlaca(e.target.value)}
+                    className="bg-graphite-950 border border-graphite-700 rounded p-2.5 text-vapor-100 font-sans text-[14px] uppercase"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Cor (ex: Preto, Prata, Branco)"
+                    value={novoVeiculoCor}
+                    onChange={(e) => setNovoVeiculoCor(e.target.value)}
+                    className="bg-graphite-950 border border-graphite-700 rounded p-2.5 text-vapor-100 font-sans text-[14px]"
+                  />
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="secondary" onClick={() => setShowNovoVeiculo(false)}>Cancelar</Button>
                   <Button type="button" variant="primary" onClick={handleCriarVeiculo} disabled={!novoVeiculoModelo.trim() || !novoVeiculoPlaca.trim()}>Salvar Veículo</Button>
@@ -481,6 +659,49 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
               onToggleCombo={handleToggleCombo}
               onCloseModal={onClose}
             />
+
+            {/* Lista de Valores Editáveis para Serviços Selecionados */}
+            {selectedItens.length > 0 && (
+              <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-2.5">
+                <div className="flex items-center justify-between border-b border-graphite-800 pb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    Valores dos Serviços na Entrada (Editável)
+                  </span>
+                  <span className="text-[11px] text-vapor-400">
+                    Ajuste o valor real combinado
+                  </span>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {selectedItens.map((it) => (
+                    <div
+                      key={it.servico_id}
+                      className="flex items-center justify-between gap-3 p-2.5 bg-graphite-800 rounded border border-graphite-700"
+                    >
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="text-xs font-bold text-vapor-100 truncate">
+                          {it.servico?.nome || 'Serviço'}
+                        </span>
+                        {it.comboNome && (
+                          <span className="text-[10px] text-amber-400 font-mono">
+                            Combo: {it.comboNome}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 w-32 shrink-0">
+                        <span className="text-xs font-mono text-vapor-400">R$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={it.preco !== undefined ? it.preco : ''}
+                          onChange={(e) => handleAtualizarPrecoItem(it.servico_id, e.target.value)}
+                          className="w-full bg-graphite-950 border border-graphite-700 rounded px-2 py-1 text-right font-mono text-xs text-vapor-100 font-bold outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-[12px]">
               Ao registrar a entrada, o atendimento será criado com status <strong>'confirmado'</strong> e você será direcionado imediatamente para a vistoria de entrada.

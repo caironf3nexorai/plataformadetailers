@@ -181,6 +181,15 @@ export const FormularioCheckin: React.FC = () => {
       setAgendamento(agData);
       setAssinaturaNome((agData.cliente as any)?.nome || '');
 
+      // Se o atendimento já foi concluído/finalizado, bloqueia nova vistoria de entrada
+      if (agData.status === 'concluido') {
+        navigate(`/atendimento/${agendamentoId}`, { 
+          replace: true,
+          state: { aviso: 'Você não realizou vistoria de entrada neste serviço.' }
+        });
+        return;
+      }
+
       // 2. Chamar RPC iniciar_checkin para obter ou criar o registro
       const { data: checkinId, error: rpcErr } = await supabase.rpc('iniciar_checkin', {
         p_agendamento: agendamentoId,
@@ -513,13 +522,21 @@ export const FormularioCheckin: React.FC = () => {
     );
   }
 
+  const handleVoltar = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/hoje');
+    }
+  };
+
   if (error || !agendamento) {
     return (
       <div className="p-6 max-w-lg mx-auto bg-graphite-800 border border-flare-500/40 rounded-xl text-center flex flex-col gap-4">
         <AlertTriangle size={36} className="text-flare-400 mx-auto" />
         <h3 className="font-display text-[18px] text-vapor-100 uppercase">Erro na Vistoria</h3>
         <p className="font-sans text-[14px] text-vapor-400">{error}</p>
-        <Button variant="secondary" onClick={() => navigate('/agenda')}>Voltar para Agenda</Button>
+        <Button variant="secondary" onClick={handleVoltar}>Voltar</Button>
       </div>
     );
   }
@@ -531,8 +548,9 @@ export const FormularioCheckin: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={handleVoltar}
             className="p-2 text-vapor-400 hover:text-vapor-100 rounded-lg hover:bg-graphite-800 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+            title="Voltar para a página anterior"
           >
             <ArrowLeft size={20} />
           </button>
@@ -1078,10 +1096,10 @@ export const FormularioCheckin: React.FC = () => {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => navigate('/')}
+                      onClick={handleVoltar}
                       className="min-h-[48px] px-4 font-semibold text-[13px]"
                     >
-                      Ir para Tela Inicial (Hoje)
+                      Voltar
                     </Button>
                   </div>
                 </div>

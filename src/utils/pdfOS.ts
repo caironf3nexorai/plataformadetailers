@@ -228,9 +228,10 @@ export async function gerarPDFOS(
     : 'A combinar';
   doc.text(`Previsão: ${prevEntrega}`, colDirX, y + 11.5);
 
-  const conclEm = data.data_conclusao
-    ? `${formatarData(data.data_conclusao)} ${formatarHora(data.data_conclusao)}`
-    : 'Em andamento';
+  const dataTermino = data.data_conclusao || data.concluido_em;
+  const conclEm = dataTermino
+    ? `${formatarData(dataTermino)} ${formatarHora(dataTermino)}`
+    : (data.status === 'concluido' ? 'Concluído' : 'Em andamento');
   doc.text(`Conclusão: ${conclEm}`, colDirX, y + 16.5);
 
   const respNome = data.responsavel_nome || 'Equipe Técnica';
@@ -256,8 +257,8 @@ export async function gerarPDFOS(
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.text('DESCRIÇÃO DO SERVIÇO', pageMargin + 5, y + 4.8);
-  doc.text('QTD', rightMarginX - 52, y + 4.8, { align: 'center' });
-  doc.text('DURAÇÃO', rightMarginX - 30, y + 4.8, { align: 'center' });
+  doc.text('QTD', rightMarginX - 60, y + 4.8, { align: 'center' });
+  doc.text('DURAÇÃO', rightMarginX - 38, y + 4.8, { align: 'center' });
   doc.text('VALOR TOTAL', rightMarginX - 5, y + 4.8, { align: 'right' });
 
   y += 7.5;
@@ -296,8 +297,8 @@ export async function gerarPDFOS(
       doc.text(`• ${item.servico_nome}`, pageMargin + 5, y + 5);
 
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-      doc.text(String(item.quantidade || 1), rightMarginX - 52, y + 5, { align: 'center' });
-      doc.text(item.duracao_minutos ? `${item.duracao_minutos} min` : '—', rightMarginX - 30, y + 5, { align: 'center' });
+      doc.text(String(item.quantidade || 1), rightMarginX - 60, y + 5, { align: 'center' });
+      doc.text(item.duracao_minutos ? `${item.duracao_minutos} min` : '—', rightMarginX - 38, y + 5, { align: 'center' });
 
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
@@ -435,11 +436,21 @@ export async function gerarPDFOS(
   onProgress?.('Finalizando PDF da Ordem de Serviço...');
   const nomeArquivo = `os_${data.veiculoPlaca.toUpperCase()}_${osFormatada.replace(/\s+/g, '_')}.pdf`;
 
-  if (acao === 'print') {
-    doc.autoPrint();
-    const blobUrl = doc.output('bloburl');
-    window.open(blobUrl, '_blank');
+  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (acao === 'print' && !isMobile) {
+    try {
+      doc.autoPrint();
+      const blobUrl = doc.output('bloburl');
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        doc.save(nomeArquivo);
+      }
+    } catch {
+      doc.save(nomeArquivo);
+    }
   } else {
+    // No mobile (especialmente iOS Safari) e em downloads normais, doc.save é seguro e não causa erro WebKitBlobResource
     doc.save(nomeArquivo);
   }
 }

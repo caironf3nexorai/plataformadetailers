@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Profile, Tenant, TenantMember } from '../types/auth';
@@ -32,11 +32,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return localStorage.getItem('detailers_selected_tenant_id');
   });
   const [loading, setLoading] = useState<boolean>(true);
+  const currentUserRef = useRef<string | null>(null);
 
-  const fetchUserData = async (currentUser: User | null) => {
+  const fetchUserData = async (currentUser: User | null, isBackground = false) => {
     if (!currentUser) {
       setProfile(null);
       setUserTenants([]);
+      currentUserRef.current = null;
       setLoading(false);
       return;
     }
@@ -54,7 +56,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Atualiza atividade do usuário (touch last_seen_at) para rastreamento de acesso real
-      await supabase.rpc('touch_user_activity');
+      (async () => {
+        try {
+          await supabase.rpc('touch_user_activity');
+        } catch {}
+      })();
 
       // 2. Busca vínculos de tenant ativos do usuário
       const { data: membersData } = await supabase
@@ -63,8 +69,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('user_id', currentUser.id)
         .eq('status', 'ativo');
 
+      let tenantsList: Array<{ tenant: Tenant; membership: TenantMember }> = [];
+
       if (membersData && membersData.length > 0) {
-        const formattedTenants = membersData
+        tenantsList = membersData
           .filter((m: any) => m.tenant)
           .map((m: any) => ({
             tenant: m.tenant as Tenant,
@@ -79,26 +87,80 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               created_at: m.created_at,
             } as TenantMember,
           }));
+      }
 
-        setUserTenants(formattedTenants);
+      // 3. Se for Administrador da Plataforma, também carrega as oficinas da plataforma
+      // Isso permite que o admin acerte oficinas no app sem ser obrigado a cadastrar uma nova oficina pessoal
+      try {
+        const { data: isPlatformAdmin } = await supabase.rpc('is_platform_admin');
+        if (isPlatformAdmin) {
+          const { data: allTenants } = await supabase.rpc('admin_listar_tenants', {
+            p_busca: null,
+            p_plano: null,
+            p_limite: 100,
+            p_offset: 0,
+          });
+
+          if (allTenants && allTenants.length > 0) {
+            allTenants.forEach((t: any) => {
+              if (!tenantsList.some((ut) => ut.tenant.id === t.id)) {
+                tenantsList.push({
+                  tenant: {
+                    id: t.id,
+                    nome: t.nome,
+                    slug: t.slug,
+                    plano: t.plano,
+                    cidade: t.cidade,
+                    uf: t.uf,
+                    criado_por: currentUser.id,
+                    created_at: t.created_at,
+                    updated_at: t.created_at,
+                  } as Tenant,
+                  membership: {
+                    id: `admin-${t.id}`,
+                    tenant_id: t.id,
+                    user_id: currentUser.id,
+                    email: currentUser.email || '',
+                    role: 'dono',
+                    status: 'ativo',
+                    convite_token: null,
+                    created_at: t.created_at,
+                  } as TenantMember,
+                });
+              }
+            });
+          }
+        }
+      } catch (errAdmin) {
+        console.warn('[AuthContext] Falha ao carregar oficinas para platform admin:', errAdmin);
+      }
+
+      if (tenantsList.length > 0) {
+        setUserTenants(tenantsList);
 
         // Define tenant selecionado
         const storedId = localStorage.getItem('detailers_selected_tenant_id');
-        const found = formattedTenants.find((t) => t.tenant.id === storedId);
+        const found = tenantsList.find((t) => t.tenant.id === storedId);
         if (found) {
           setSelectedTenantId(found.tenant.id);
-        } else if (formattedTenants.length > 0) {
-          setSelectedTenantId(formattedTenants[0].tenant.id);
-          localStorage.setItem('detailers_selected_tenant_id', formattedTenants[0].tenant.id);
+        } else {
+          setSelectedTenantId((prev) => {
+            if (prev && tenantsList.some((t) => t.tenant.id === prev)) return prev;
+            localStorage.setItem('detailers_selected_tenant_id', tenantsList[0].tenant.id);
+            return tenantsList[0].tenant.id;
+          });
         }
       } else {
         setUserTenants([]);
         setSelectedTenantId(null);
       }
+      currentUserRef.current = currentUser.id;
     } catch (err) {
       console.error('Erro ao carregar dados do usuário:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   };
 
@@ -111,9 +173,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = session?.user ?? null;
       setUser(currentUser);
 
+      if (event === 'TOKEN_REFRESHED') {
+        // Renovação periódica de token do Supabase ao alternar abas/foco: não desmonta nem ativa loading
+        if (currentUser) {
+          (async () => {
+            try {
+              await supabase.rpc('touch_user_activity');
+            } catch {}
+          })();
+        }
+        return;
+      }
+
       if (currentUser) {
-        await fetchUserData(currentUser);
+        const isAlreadyLoaded = currentUserRef.current === currentUser.id;
+        await fetchUserData(currentUser, isAlreadyLoaded);
       } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_OUT') {
+        currentUserRef.current = null;
         setProfile(null);
         setUserTenants([]);
         setLoading(false);
@@ -125,7 +201,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!mounted) return;
       if (session?.user) {
         setUser(session.user);
-        fetchUserData(session.user);
+        const isAlreadyLoaded = currentUserRef.current === session.user.id;
+        fetchUserData(session.user, isAlreadyLoaded);
       } else {
         // Apenas conclui loading se não houver sessão ativa
         setLoading(false);
@@ -186,11 +263,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const trocarTenant = (tenantId: string) => {
-    const exists = userTenants.some((t) => t.tenant.id === tenantId);
-    if (exists) {
-      setSelectedTenantId(tenantId);
-      localStorage.setItem('detailers_selected_tenant_id', tenantId);
-    }
+    setSelectedTenantId(tenantId);
+    localStorage.setItem('detailers_selected_tenant_id', tenantId);
   };
 
   const refetchTenantData = async () => {

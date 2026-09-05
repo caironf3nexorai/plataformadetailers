@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   Search, 
   Filter, 
@@ -12,7 +14,8 @@ import {
   Eye,
   Activity,
   Edit2,
-  Shield
+  Shield,
+  LogIn
 } from 'lucide-react';
 
 interface TenantItem {
@@ -57,6 +60,13 @@ interface TenantDetail {
 
 export const AdminOficinas: React.FC = () => {
   const { showSuccess, showError } = useToast();
+  const navigate = useNavigate();
+  const { trocarTenant } = useAuth();
+
+  const handleAcessarOficina = (id: string) => {
+    trocarTenant(id);
+    navigate('/');
+  };
 
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -301,6 +311,15 @@ export const AdminOficinas: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5 text-right space-x-2">
                         <button
+                          onClick={() => handleAcessarOficina(t.id)}
+                          className="inline-flex items-center space-x-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded text-xs font-medium border border-emerald-500/30 transition"
+                          title="Acessar painel desta oficina no App"
+                        >
+                          <LogIn className="w-3.5 h-3.5" />
+                          <span>Acessar App</span>
+                        </button>
+
+                        <button
                           onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
                           className="inline-flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 transition"
                           title="Alterar plano da oficina"
@@ -374,6 +393,15 @@ export const AdminOficinas: React.FC = () => {
 
                     <div className="flex items-center space-x-2">
                       <button
+                        onClick={() => handleAcessarOficina(t.id)}
+                        className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs font-medium border border-emerald-500/30 flex items-center space-x-1"
+                        title="Acessar painel desta oficina no App"
+                      >
+                        <LogIn className="w-3 h-3" />
+                        <span>Acessar</span>
+                      </button>
+
+                      <button
                         onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
                         className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 flex items-center space-x-1"
                       >
@@ -431,13 +459,24 @@ export const AdminOficinas: React.FC = () => {
                         Plano {detailData.tenant.plano}
                       </span>
                     </div>
-                    <button
-                      onClick={() => handleAbrirModalPlano(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.plano)}
-                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                      <span>Alterar Plano</span>
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleAcessarOficina(detailData.tenant.id)}
+                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
+                        title="Acessar painel desta oficina no App"
+                      >
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span>Acessar no App</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleAbrirModalPlano(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.plano)}
+                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Alterar Plano</span>
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-slate-400 pt-1">
                     Cidade: {detailData.tenant.cidade ? `${detailData.tenant.cidade} - ${detailData.tenant.uf}` : 'Não cadastrada'}

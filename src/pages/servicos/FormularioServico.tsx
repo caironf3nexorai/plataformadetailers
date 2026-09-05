@@ -343,8 +343,15 @@ export const FormularioServico: React.FC = () => {
       <div className="flex items-center gap-3 border-b border-graphite-700 pb-4">
         <button
           type="button"
-          onClick={() => navigate('/servicos')}
+          onClick={() => {
+            if (window.history.state && window.history.state.idx > 0) {
+              navigate(-1);
+            } else {
+              navigate('/servicos');
+            }
+          }}
           className="p-2 text-vapor-400 hover:text-vapor-100 hover:bg-graphite-700 rounded transition-colors"
+          title="Voltar para a página anterior"
         >
           <ArrowLeft size={20} />
         </button>

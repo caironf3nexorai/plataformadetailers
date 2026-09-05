@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAdminAuth } from './AdminGuard';
+import { supabase } from '../../lib/supabase';
 import { 
   Building2, 
   CreditCard, 
@@ -22,6 +23,26 @@ import { LogoNuvemWash } from '../ui/LogoNuvemWash';
 export const AdminLayout: React.FC = () => {
   const { adminLevel, adminEmail } = useAdminAuth();
   const navigate = useNavigate();
+  const [feedbacksNovos, setFeedbacksNovos] = useState(0);
+
+  useEffect(() => {
+    const carregarFeedbacksNovos = async () => {
+      try {
+        const { data } = await supabase.rpc('admin_obter_contador_feedbacks_novos');
+        setFeedbacksNovos(data ? Number(data) : 0);
+      } catch (err) {
+        // Silently fail
+      }
+    };
+
+    carregarFeedbacksNovos();
+    window.addEventListener('feedbacks_atualizados', carregarFeedbacksNovos);
+    window.addEventListener('focus', carregarFeedbacksNovos);
+    return () => {
+      window.removeEventListener('feedbacks_atualizados', carregarFeedbacksNovos);
+      window.removeEventListener('focus', carregarFeedbacksNovos);
+    };
+  }, []);
 
   const navItems = [
     { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
@@ -85,6 +106,11 @@ export const AdminLayout: React.FC = () => {
                   >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
                     <span>{item.label}</span>
+                    {item.path === '/admin/feedbacks' && feedbacksNovos > 0 && (
+                      <span className="bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.5 rounded-full text-[10px] shadow ml-1">
+                        {feedbacksNovos}
+                      </span>
+                    )}
                   </NavLink>
                 );
               })}
@@ -126,6 +152,11 @@ export const AdminLayout: React.FC = () => {
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{item.label}</span>
+                {item.path === '/admin/feedbacks' && feedbacksNovos > 0 && (
+                  <span className="bg-amber-500 text-slate-950 font-extrabold px-1.5 py-0.2 rounded-full text-[9px] shadow ml-1">
+                    {feedbacksNovos}
+                  </span>
+                )}
               </NavLink>
             );
           })}

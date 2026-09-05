@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { AlertTriangle, Building2, LogOut } from 'lucide-react';
+import { AlertTriangle, Building2, LogOut, ShieldCheck } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const NovaOficina: React.FC = () => {
@@ -19,6 +19,7 @@ export const NovaOficina: React.FC = () => {
   const [telefone, setTelefone] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
 
   // Validação de sessão e convite pendente no carregamento da tela
   useEffect(() => {
@@ -38,7 +39,15 @@ export const NovaOficina: React.FC = () => {
           state: { errorMsg: 'Sua sessão expirou. Entre novamente para continuar.' },
           replace: true,
         });
+        return;
       }
+
+      try {
+        const { data: isAdmin } = await supabase.rpc('is_platform_admin');
+        if (isAdmin) {
+          setIsPlatformAdmin(true);
+        }
+      } catch {}
     };
 
     checkSession();
@@ -219,6 +228,17 @@ export const NovaOficina: React.FC = () => {
                 </>
               )}
             </Button>
+
+            {isPlatformAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate('/admin')}
+                className="mt-2 flex items-center justify-center gap-2 text-xs text-amber-400 hover:text-amber-300 font-bold py-2.5 px-3 border border-amber-500/30 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition w-full"
+              >
+                <ShieldCheck size={16} />
+                Voltar ao Painel Admin
+              </button>
+            )}
           </form>
         </Card>
       </div>

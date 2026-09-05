@@ -851,12 +851,20 @@ export const DetalheOrcamento: React.FC = () => {
 
   const [gerandoPDF, setGerandoPDF] = useState<boolean>(false);
 
+  const executarNavegacaoVoltar = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/orcamentos');
+    }
+  };
+
   // BOTÃO VOLTAR COM CONFIRMAÇÃO SE SALVAMENTO ESTIVER EM ANDAMENTO
   const handleVoltar = () => {
     if (saveStatus === 'salvando') {
       setShowVoltarModal(true);
     } else {
-      navigate('/orcamentos');
+      executarNavegacaoVoltar();
     }
   };
 
@@ -2469,7 +2477,7 @@ export const DetalheOrcamento: React.FC = () => {
         onClose={() => setShowVoltarModal(false)}
         onConfirm={() => {
           setShowVoltarModal(false);
-          navigate('/orcamentos');
+          executarNavegacaoVoltar();
         }}
         title="Salvamento em Andamento"
         mensagem="As alterações do orçamento estão sendo salvas no servidor. Deseja realmente sair agora?"

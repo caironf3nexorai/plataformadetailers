@@ -159,7 +159,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
 
       supabase
         .from('execucoes')
-        .select('id, status, valor_total_final, iniciado_em, segundos_pausados, segundos_trabalhados, pausado_em, retomado_em, execucao_itens(id, concluido, obrigatorio, item_nome)')
+        .select('id, status, valor_total_final, iniciado_em, finalizado_em, segundos_pausados, segundos_trabalhados, pausado_em, retomado_em, execucao_itens(id, concluido, obrigatorio, item_nome)')
         .eq('agendamento_id', agendamento.id)
         .maybeSingle()
         .then(({ data }) => {
@@ -171,6 +171,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
               status: data.status,
               valor_total_final: data.valor_total_final,
               iniciado_em: data.iniciado_em,
+              finalizado_em: data.finalizado_em,
               segundos_pausados: data.segundos_pausados || 0,
               segundos_trabalhados: data.segundos_trabalhados || 0,
               pausado_em: data.pausado_em,
@@ -320,13 +321,38 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
         ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
         : undefined;
 
-      const itensFormatados = itensList.map((it: any) => ({
-        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
-        categoria_nome: it.categoria?.nome,
-        preco: Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? 0),
-        duracao_minutos: it.duracao_minutos || it.servicos?.duracao_minutos,
-        quantidade: it.quantidade || 1,
-      }));
+      // 1. Calcular o valor total real faturado para ordens concluídas
+      const valorFinalTotal = (execucaoInfo && execucaoInfo.valor_total_final !== null && execucaoInfo.valor_total_final !== undefined && Number(execucaoInfo.valor_total_final) > 0)
+        ? Number(execucaoInfo.valor_total_final)
+        : (agendamento.preco_estimado_total !== null && agendamento.preco_estimado_total !== undefined && Number(agendamento.preco_estimado_total) > 0)
+        ? Number(agendamento.preco_estimado_total)
+        : Number(precoEstimadoCalculado || 0);
+
+      // 2. Data de conclusão real e tempo trabalhado
+      const dataConclusao = execucaoInfo?.finalizado_em 
+        || (agendamento.status === 'concluido' ? ((agendamento as any).fim || (agendamento as any).updated_at) : null);
+
+      const tempoRealTrabalhadoMinutos = execucaoInfo?.tempo_efetivo_minutos && execucaoInfo.tempo_efetivo_minutos > 0
+        ? execucaoInfo.tempo_efetivo_minutos
+        : undefined;
+
+      // 3. Mapear itens da OS refletindo o valor real cobrado e a duração real
+      const itensFormatados = itensList.map((it: any) => {
+        let precoItem = Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? 0);
+        if (agendamento.status === 'concluido' && itensList.length === 1 && valorFinalTotal > 0) {
+          precoItem = valorFinalTotal;
+        }
+
+        return {
+          servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+          categoria_nome: it.categoria?.nome,
+          preco: precoItem,
+          duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && itensList.length <= 1)
+            ? tempoRealTrabalhadoMinutos
+            : (it.duracao_minutos || it.servicos?.duracao_minutos || (agendamento as any).duracao_total || agendamento.duracao_minutos),
+          quantidade: it.quantidade || 1,
+        };
+      });
 
       await gerarPDFOS(
         {
@@ -335,7 +361,8 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
           status: agendamento.status || (execucaoInfo?.status === 'finalizado' ? 'concluido' : 'agendado'),
           inicio: agendamento.inicio,
           previsao_entrega: (agendamento as any).previsao_entrega || (agendamento as any).fim,
-          concluido_em: (execucaoInfo as any)?.finalizado_em,
+          data_conclusao: dataConclusao,
+          concluido_em: dataConclusao,
           responsavel_nome: 'Oficina / Responsável',
           observacoes: (agendamento as any).observacoes,
           clienteNome: agendamento.cliente?.nome || 'Cliente',
@@ -364,7 +391,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
           itens: itensFormatados,
-          valor_total: Number(precoEstimadoCalculado || 0),
+          valor_total: Number(valorFinalTotal || 0),
           desconto: Number((agendamento as any).desconto_valor || 0),
           forma_pagamento: (agendamento as any).forma_pagamento,
           assinaturaClienteNome: agendamento.cliente?.nome,

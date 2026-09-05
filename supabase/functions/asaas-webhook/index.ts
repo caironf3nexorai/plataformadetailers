@@ -95,6 +95,13 @@ serve(async (req) => {
         await supabase.rpc('processar_conversao_indicacao', {
           p_indicado_tenant_id: tenantId,
         });
+
+        // AUTOMAÇÃO DO PARCEIRO: Se esta oficina veio de um parceiro comercial, gera e aprova a comissão automaticamente
+        const valorPagoCentavos = payment?.value ? Math.round(payment.value * 100) : (planoContratado === 'studio' ? 14700 : 6700);
+        await supabase.rpc('processar_pagamento_asaas_parceiro', {
+          p_tenant_id: tenantId,
+          p_valor_centavos: valorPagoCentavos,
+        });
       }
     } else if (event === 'PAYMENT_OVERDUE') {
       if (tenantId) {

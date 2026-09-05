@@ -5,6 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { AlertTriangle, LogIn } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
@@ -36,6 +37,24 @@ export const Entrar: React.FC = () => {
         if (conviteParam) {
           navigate(`/convite/${conviteParam}`);
         } else {
+          // Checa se o usuário é parceiro e se não possui oficinas vinculadas
+          try {
+            const { data: statusData } = await supabase.rpc('obter_status_usuario_atual');
+            if (statusData?.is_partner && !statusData?.is_admin) {
+              const { data: memberRows } = await supabase
+                .from('tenant_members')
+                .select('id')
+                .eq('status', 'ativo')
+                .limit(1);
+
+              if (!memberRows || memberRows.length === 0) {
+                navigate('/parceiro/painel');
+                return;
+              }
+            }
+          } catch (e) {
+            // Em caso de falha de verificação, segue fluxo padrão
+          }
           navigate('/');
         }
       }

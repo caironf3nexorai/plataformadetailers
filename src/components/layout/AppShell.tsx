@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { SidebarNav } from './SidebarNav';
 import { BottomNav } from './BottomNav';
 import { TopBar } from './TopBar';
@@ -10,8 +10,11 @@ import { TrialBanner } from './TrialBanner';
 import { supabase } from '../../lib/supabase';
 
 export const AppShell: React.FC = () => {
+  const location = useLocation();
   const [assinatura, setAssinatura] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isTelaCheiaOperacional = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
 
   useEffect(() => {
     async function carregarAssinatura() {
@@ -60,11 +63,13 @@ export const AppShell: React.FC = () => {
             <Outlet />
           </main>
           
-          {/* Barra Inferior Mobile (< 1024px) */}
-          <BottomNav 
-            onOpenMenu={() => setMobileMenuOpen(true)} 
-            isMenuOpen={mobileMenuOpen} 
-          />
+          {/* Barra Inferior Mobile (< 1024px) - Oculta em telas operacionais de execução e checkin */}
+          {!isTelaCheiaOperacional && (
+            <BottomNav 
+              onOpenMenu={() => setMobileMenuOpen(true)} 
+              isMenuOpen={mobileMenuOpen} 
+            />
+          )}
 
           {/* Drawer Lateral Deslizante Mobile (< 1024px) */}
           <MobileNavDrawer 

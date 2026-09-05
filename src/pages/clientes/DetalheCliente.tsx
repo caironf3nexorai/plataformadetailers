@@ -244,8 +244,15 @@ export const DetalheCliente: React.FC = () => {
         <Button
           type="button"
           variant="ghost"
-          onClick={() => navigate('/clientes')}
+          onClick={() => {
+            if (window.history.state && window.history.state.idx > 0) {
+              navigate(-1);
+            } else {
+              navigate('/clientes');
+            }
+          }}
           className="min-h-[40px] px-3"
+          title="Voltar para a página anterior"
         >
           <ArrowLeft size={18} />
           Voltar

@@ -235,8 +235,17 @@ export const FotosPrestesAExpirarPage: React.FC = () => {
           <p className="text-sm text-vapor-400 mt-2">
             Apenas Donos e Gerentes do estabelecimento possuem permissão para gerenciar a retenção e expurgo de fotos em lote.
           </p>
-          <Button onClick={() => navigate('/')} className="mt-4 w-full">
-            Voltar ao Dashboard
+          <Button
+            onClick={() => {
+              if (window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/hoje');
+              }
+            }}
+            className="mt-4 w-full"
+          >
+            Voltar
           </Button>
         </Card>
       </div>
@@ -250,8 +259,15 @@ export const FotosPrestesAExpirarPage: React.FC = () => {
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => {
+                if (window.history.state && window.history.state.idx > 0) {
+                  navigate(-1);
+                } else {
+                  navigate('/hoje');
+                }
+              }}
               className="p-2 rounded-lg bg-graphite-800 text-vapor-300 hover:text-vapor-100 transition-colors"
+              title="Voltar para a página anterior"
             >
               <ArrowLeft size={20} />
             </button>

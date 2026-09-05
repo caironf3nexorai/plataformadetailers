@@ -4,7 +4,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Award, Plus, DollarSign, Upload, CheckCircle2, Search, Ticket, Zap, Pencil } from 'lucide-react';
+import { Award, Plus, DollarSign, Upload, CheckCircle2, Search, Ticket, Zap, Pencil, X } from 'lucide-react';
 
 interface ParceiroItem {
   id: string;
@@ -17,6 +17,7 @@ interface ParceiroItem {
   recorrente: boolean;
   pix_chave: string | null;
   pix_tipo: string | null;
+  user_id?: string | null;
   ativo: boolean;
   desconto_tipo?: 'nenhum' | 'percentual' | 'valor_fixo';
   desconto_valor?: number;
@@ -102,6 +103,7 @@ export const AdminParceiros: React.FC = () => {
   const [editDescontoValor, setEditDescontoValor] = useState('0');
   const [editRecorrente, setEditRecorrente] = useState(true);
   const [editPixChave, setEditPixChave] = useState('');
+  const [editUsuarioId, setEditUsuarioId] = useState('');
   const [editAtivo, setEditAtivo] = useState(true);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
@@ -189,28 +191,37 @@ export const AdminParceiros: React.FC = () => {
 
       setOficinas(listaOficinas);
 
-      // 4. Carregar Usuários Registrados da Plataforma (Profiles / Tenants)
-      const { data: dataProfiles } = await supabase
-        .from('profiles')
-        .select('id, nome, email, telefone')
-        .order('created_at', { ascending: false });
+      // 4. Carregar Usuários Registrados da Plataforma via RPC admin_listar_usuarios_para_parceiro
+      try {
+        const { data: dataRpc, error: errRpc } = await supabase.rpc('admin_listar_usuarios_para_parceiro');
+        if (!errRpc && dataRpc && dataRpc.length > 0) {
+          const listaUsers: UsuarioPlataformaItem[] = dataRpc.map((u: any) => ({
+            id: u.id,
+            nome: u.nome || u.email,
+            email: u.email,
+            telefone: u.telefone,
+            tenant_nome: u.tenant_nome,
+          }));
+          setUsuariosPlataforma(listaUsers);
+        } else {
+          // Fallback via profiles ou tenant_members
+          const { data: dataProfiles } = await supabase
+            .from('profiles')
+            .select('id, nome, telefone')
+            .order('created_at', { ascending: false });
 
-      if (dataProfiles && dataProfiles.length > 0) {
-        const listaUsers: UsuarioPlataformaItem[] = dataProfiles.map((p: any) => ({
-          id: p.id,
-          nome: p.nome || p.email,
-          email: p.email,
-          telefone: p.telefone,
-        }));
-        setUsuariosPlataforma(listaUsers);
-      } else {
-        const listaFallback: UsuarioPlataformaItem[] = (dataTenants || []).map((t: any) => ({
-          id: t.id,
-          nome: t.nome,
-          email: `${t.nome.toLowerCase().replace(/[^a-z0-9]/g, '')}@oficina.com`,
-          tenant_nome: t.nome,
-        }));
-        setUsuariosPlataforma(listaFallback);
+          if (dataProfiles && dataProfiles.length > 0) {
+            const listaUsers: UsuarioPlataformaItem[] = dataProfiles.map((p: any) => ({
+              id: p.id,
+              nome: p.nome || 'Usuário',
+              email: 'usuario@plataforma.com',
+              telefone: p.telefone,
+            }));
+            setUsuariosPlataforma(listaUsers);
+          }
+        }
+      } catch (errUsers) {
+        console.warn('Erro ao listar usuários para parceiro:', errUsers);
       }
 
     } catch (err: any) {
@@ -237,6 +248,7 @@ export const AdminParceiros: React.FC = () => {
     setEditDescontoValor(String(p.desconto_valor || 0));
     setEditRecorrente(p.recorrente);
     setEditPixChave(p.pix_chave || '');
+    setEditUsuarioId(p.user_id || '');
     setEditAtivo(p.ativo);
   };
 
@@ -264,6 +276,7 @@ export const AdminParceiros: React.FC = () => {
           desconto_valor: parseFloat(editDescontoValor) || 0,
           recorrente: editRecorrente,
           pix_chave: editPixChave.trim() || null,
+          user_id: editUsuarioId ? editUsuarioId : null,
           ativo: editAtivo,
         })
         .eq('id', parceiroEditando.id);
@@ -347,6 +360,7 @@ export const AdminParceiros: React.FC = () => {
         desconto_valor: parseFloat(descontoValor) || 0,
         recorrente,
         pix_chave: pixChave.trim() || null,
+        user_id: usuarioSelecionadoId || null,
         ativo: true,
       });
 
@@ -778,11 +792,22 @@ export const AdminParceiros: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 font-mono text-xs text-vapor-300">{p.pix_chave || '—'}</td>
                       <td className="py-3 px-4">
-                        {p.ativo ? (
-                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Ativo</span>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 rounded bg-flare-400/10 text-flare-400 border border-flare-400/20">Inativo</span>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {p.ativo ? (
+                            <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium w-fit">Ativo</span>
+                          ) : (
+                            <span className="text-[11px] px-2 py-0.5 rounded bg-flare-400/10 text-flare-400 border border-flare-400/20 font-medium w-fit">Inativo</span>
+                          )}
+                          {p.user_id ? (
+                            <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono font-medium">
+                              <CheckCircle2 size={11} /> Login Ativo
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-vapor-500 flex items-center gap-1 font-mono" title="O parceiro será vinculado automaticamente quando cadastrar ou logar com este e-mail">
+                              ⚪ Aguardando Login
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <Button
@@ -878,11 +903,27 @@ export const AdminParceiros: React.FC = () => {
 
       {/* Modal Cadastro de Novo Parceiro */}
       {modalNovoParceiro && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide">
-              Cadastrar Novo Parceiro Comercial
-            </h3>
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !salvandoParceiro) setModalNovoParceiro(false);
+          }}
+        >
+          <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-graphite-700 pb-3">
+              <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide">
+                Cadastrar Novo Parceiro Comercial
+              </h3>
+              <button
+                type="button"
+                onClick={() => setModalNovoParceiro(false)}
+                disabled={salvandoParceiro}
+                className="text-vapor-400 hover:text-vapor-100 p-1 rounded-lg hover:bg-graphite-700/60 transition disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
             <form onSubmit={handleCriarParceiro} className="space-y-3 font-sans text-sm">
               <div className="p-3 bg-graphite-900/90 rounded-xl border border-blue-500/30 space-y-1.5">
@@ -1058,12 +1099,28 @@ export const AdminParceiros: React.FC = () => {
 
       {/* Modal Vincular Oficina ao Parceiro */}
       {parceiroVinculoTarget && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide flex items-center gap-2">
-              <Plus className="text-blue-400" size={20} />
-              Atribuir Oficina a Parceiro
-            </h3>
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !salvandoVinculo) setParceiroVinculoTarget(null);
+          }}
+        >
+          <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-graphite-700 pb-3">
+              <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide flex items-center gap-2">
+                <Plus className="text-blue-400" size={20} />
+                Atribuir Oficina a Parceiro
+              </h3>
+              <button
+                type="button"
+                onClick={() => setParceiroVinculoTarget(null)}
+                disabled={salvandoVinculo}
+                className="text-vapor-400 hover:text-vapor-100 p-1 rounded-lg hover:bg-graphite-700/60 transition disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
+            </div>
 
             <p className="text-xs text-vapor-300 font-sans">
               Selecione uma oficina cadastrada na plataforma para atrelá-la ao parceiro{' '}
@@ -1115,19 +1172,68 @@ export const AdminParceiros: React.FC = () => {
 
       {/* Modal Editar Parceiro Existente */}
       {parceiroEditando && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !salvandoEdicao) setParceiroEditando(null);
+          }}
+        >
+          <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-graphite-700 pb-3">
-              <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide flex items-center gap-2">
-                <Pencil className="text-amber-400" size={18} />
-                Editar Parceiro Comercial
-              </h3>
-              <span className="text-xs font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded">
-                {parceiroEditando.codigo}
-              </span>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide flex items-center gap-2">
+                  <Pencil className="text-amber-400" size={18} />
+                  Editar Parceiro Comercial
+                </h3>
+                <span className="text-xs font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded">
+                  {parceiroEditando.codigo}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setParceiroEditando(null)}
+                disabled={salvandoEdicao}
+                className="text-vapor-400 hover:text-vapor-100 p-1 rounded-lg hover:bg-graphite-700/60 transition disabled:opacity-50"
+                aria-label="Fechar"
+              >
+                <X size={20} />
+              </button>
             </div>
 
             <form onSubmit={handleSalvarEdicaoParceiro} className="space-y-3 font-sans text-sm">
+              <div className="p-3 bg-graphite-900/90 rounded-xl border border-blue-500/30 space-y-1.5">
+                <label className="text-xs text-blue-400 font-semibold block">
+                  Vínculo com Usuário da Plataforma (Login)
+                </label>
+                <select
+                  value={editUsuarioId}
+                  onChange={(e) => {
+                    setEditUsuarioId(e.target.value);
+                    if (e.target.value) {
+                      const uObj = usuariosPlataforma.find((u) => u.id === e.target.value);
+                      if (uObj) {
+                        if (!editNome) setEditNome(uObj.nome);
+                        if (!editEmail) setEditEmail(uObj.email);
+                        if (uObj.telefone && !editTelefone) setEditTelefone(uObj.telefone);
+                      }
+                    }
+                  }}
+                  className="w-full bg-graphite-900 border border-graphite-700 rounded-lg p-2 text-vapor-100 text-xs focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">-- Vínculo Automático por E-mail --</option>
+                  {usuariosPlataforma.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nome} ({u.email}) {u.tenant_nome ? `- Oficina: ${u.tenant_nome}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-vapor-400 block">
+                  {editUsuarioId 
+                    ? '✅ Conta vinculada: este usuário acessa o Painel de Parceiros ao logar no sistema.'
+                    : 'Deixando em automático, o sistema vinculará assim que o e-mail acima for logado ou cadastrado.'}
+                </span>
+              </div>
+
               <div className="space-y-1">
                 <label className="text-xs text-vapor-400">Nome Completo / Empresa *</label>
                 <Input

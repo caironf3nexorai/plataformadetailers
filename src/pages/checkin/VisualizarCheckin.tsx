@@ -284,6 +284,14 @@ export const VisualizarCheckin: React.FC = () => {
     );
   }
 
+  const handleVoltar = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/hoje');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 max-w-4xl mx-auto pb-12">
       {/* Topo e Ações */}
@@ -291,9 +299,9 @@ export const VisualizarCheckin: React.FC = () => {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={handleVoltar}
             className="p-2 text-vapor-400 hover:text-vapor-100 rounded-lg hover:bg-graphite-800 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
-            title="Voltar à agenda"
+            title="Voltar para a página anterior"
           >
             <ArrowLeft size={20} />
           </button>
@@ -345,14 +353,14 @@ export const VisualizarCheckin: React.FC = () => {
             <span>{generatingPdf ? pdfProgress || 'Gerando PDF...' : 'Baixar PDF'}</span>
           </Button>
 
-          {/* 3. Voltar à agenda — terciária, discreta */}
+          {/* 3. Voltar — terciária, discreta */}
           <Button
             type="button"
             variant="ghost"
-            onClick={() => navigate('/')}
+            onClick={handleVoltar}
             className="min-h-[56px] px-3 font-medium text-vapor-400 hover:text-vapor-100 flex items-center justify-center gap-1.5"
           >
-            <span>Voltar à agenda</span>
+            <span>Voltar</span>
           </Button>
         </div>
       </div>

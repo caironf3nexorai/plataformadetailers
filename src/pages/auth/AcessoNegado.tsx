@@ -22,10 +22,16 @@ export const AcessoNegado: React.FC = () => {
         <Button
           type="button"
           variant="primary"
-          onClick={() => navigate('/')}
+          onClick={() => {
+            if (window.history.state && window.history.state.idx > 0) {
+              navigate(-1);
+            } else {
+              navigate('/hoje');
+            }
+          }}
           className="mt-2 min-h-[48px] px-6"
         >
-          Voltar ao Dashboard
+          Voltar
         </Button>
       </Card>
     </div>

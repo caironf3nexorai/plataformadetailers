@@ -95,13 +95,36 @@ export const ExecucaoPage: React.FC = () => {
         ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
         : undefined;
 
+      // 1. Tempo real trabalhado na execução (se concluído)
+      const tempoRealTrabalhadoMinutos = execucao?.tempo_efetivo_minutos && execucao.tempo_efetivo_minutos > 0
+        ? execucao.tempo_efetivo_minutos
+        : undefined;
+
       const itensFormatados = (agendamento.itens || agendamento.agendamento_itens || []).map((it: any) => ({
         servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
         categoria_nome: it.categoria?.nome,
         preco: Number(it.preco_praticado ?? it.preco ?? it.servicos?.preco ?? 0),
-        duracao_minutos: it.duracao_minutos || it.servicos?.duracao_minutos,
+        duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && (agendamento.itens || agendamento.agendamento_itens || []).length <= 1)
+          ? tempoRealTrabalhadoMinutos
+          : (it.duracao_minutos || it.servicos?.duracao_minutos || (agendamento as any).duracao_total || agendamento.duracao_minutos),
         quantidade: it.quantidade || 1,
       }));
+
+      const totalItens = itensFormatados.reduce((acc: number, it: any) => acc + (it.preco * (it.quantidade || 1)), 0);
+      const valorFinalTotal = Number(
+        execucao?.valor_total_final ?? 
+        (agendamento as any).preco_estimado_total ?? 
+        (agendamento as any).preco_total ?? 
+        totalItens
+      );
+
+      // Se há um serviço único ou item principal e o valor final faturado foi ajustado (ex: R$ 150),
+      // alinha o preço do item para bater com o total faturado no documento da OS
+      if (itensFormatados.length === 1 && valorFinalTotal > 0) {
+        itensFormatados[0].preco = valorFinalTotal;
+      }
+
+      const dataConclusao = execucao?.finalizado_em || (agendamento.status === 'concluido' ? agendamento.fim : undefined);
 
       await gerarPDFOS(
         {
@@ -110,7 +133,8 @@ export const ExecucaoPage: React.FC = () => {
           status: agendamento.status || (execucao?.status === 'finalizado' ? 'concluido' : 'em_andamento'),
           inicio: agendamento.inicio,
           previsao_entrega: agendamento.fim,
-          concluido_em: execucao?.finalizado_em,
+          concluido_em: dataConclusao,
+          data_conclusao: dataConclusao,
           responsavel_nome: 'Oficina / Responsável',
           observacoes: (agendamento as any).observacoes || (execucao as any)?.observacoes,
           clienteNome: agendamento.cliente?.nome || 'Cliente',
@@ -139,7 +163,7 @@ export const ExecucaoPage: React.FC = () => {
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
           itens: itensFormatados,
-          valor_total: Number(agendamento.preco_total || 0),
+          valor_total: valorFinalTotal,
           desconto: Number(agendamento.desconto_valor || 0),
           forma_pagamento: agendamento.forma_pagamento,
           assinaturaClienteNome: agendamento.cliente?.nome,
@@ -607,6 +631,14 @@ export const ExecucaoPage: React.FC = () => {
     );
   }
 
+  const handleVoltar = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/hoje');
+    }
+  };
+
   if (errorMsg || !execucao) {
     return (
       <div className="min-h-screen bg-graphite-950 text-vapor-100 flex items-center justify-center p-4">
@@ -622,8 +654,8 @@ export const ExecucaoPage: React.FC = () => {
             <Button onClick={() => loadExecucaoData()} variant="primary" className="flex-1">
               Tentar Novamente
             </Button>
-            <Button onClick={() => navigate('/')} variant="secondary" className="flex-1">
-              Voltar para Hoje
+            <Button onClick={handleVoltar} variant="secondary" className="flex-1">
+              Voltar
             </Button>
           </div>
         </div>
@@ -638,11 +670,12 @@ export const ExecucaoPage: React.FC = () => {
         <div className="max-w-xl mx-auto flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-1 text-[13px] text-vapor-400 hover:text-vapor-100 transition-colors"
+              onClick={handleVoltar}
+              className="flex items-center gap-1.5 text-[13px] text-vapor-400 hover:text-vapor-100 transition-colors"
+              title="Voltar para a página anterior"
             >
               <ArrowLeft size={18} />
-              <span>Hoje</span>
+              <span>Voltar</span>
             </button>
 
             <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -1228,7 +1261,10 @@ export const ExecucaoPage: React.FC = () => {
       </main>
 
       {/* RODAPÉ FIXO — BOTÃO DE FINALIZAÇÃO 56PX */}
-      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-graphite-900 border-t border-graphite-700 p-4 shadow-2xl">
+      <footer 
+        className="fixed bottom-0 left-0 right-0 z-40 bg-graphite-900 border-t border-graphite-700 p-4 shadow-2xl"
+        style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))' }}
+      >
         <div className="max-w-xl mx-auto flex flex-col gap-1.5">
           {pendingRequiredItems.length > 0 && execucao?.status !== 'finalizado' && (
             <div className="flex items-center justify-center gap-1.5 text-[12px] font-mono text-amber-400 font-medium">
@@ -1274,7 +1310,7 @@ export const ExecucaoPage: React.FC = () => {
           agendamentoItens={agendamento.itens || []}
           fotosSaidaExistentes={fotos.filter((f) => f.momento === 'saida')}
           onSuccess={() => {
-            navigate('/hoje');
+            handleVoltar();
           }}
         />
       )}

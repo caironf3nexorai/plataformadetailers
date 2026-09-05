@@ -469,8 +469,10 @@ export const Hoje: React.FC = () => {
   const totalVeiculos = agendamentosHoje.length;
   const emAndamentoCount = execucoesAbertas.length;
 
-  const faturadoCalculado = agendamentosHoje
-    .filter((a) => a.status === 'concluido')
+  const concluidosHoje = agendamentosHoje.filter((a) => a.status === 'concluido');
+  const concluidosCount = concluidosHoje.length;
+
+  const faturadoCalculado = concluidosHoje
     .reduce((acc, a) => {
       const exVal = execucoesMap[a.id]?.valor_total_final;
       const val = exVal ?? (a as any).preco_estimado_total ?? (a as any).preco_estimado ?? (a as any).valor_total ?? 0;
@@ -789,7 +791,7 @@ export const Hoje: React.FC = () => {
       )}
 
       {/* Faixa de resumo do dia */}
-      <div className="grid grid-cols-3 gap-4 lg:gap-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
         <StatValue
           label="Veículos hoje"
           value={String(totalVeiculos).padStart(2, '0')}
@@ -799,7 +801,11 @@ export const Hoje: React.FC = () => {
           value={String(emAndamentoCount).padStart(2, '0')}
         />
         <StatValue
-          label="Concluído hoje"
+          label="Concluídos hoje"
+          value={String(concluidosCount).padStart(2, '0')}
+        />
+        <StatValue
+          label="Faturado hoje"
           value={faturadoDisplay}
         />
       </div>

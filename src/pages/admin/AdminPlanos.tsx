@@ -57,6 +57,7 @@ export const AdminPlanos: React.FC = () => {
     { chave: 'membros', nome: 'Membros / Operadores da Equipe', grupo: 'Gestão' },
     { chave: 'servicos', nome: 'Serviços / Produtos no Catálogo', grupo: 'Catálogo' },
     { chave: 'retencao_fotos_execucao_dias', nome: 'Retenção de Fotos (Dias)', grupo: 'Armazenamento' },
+    { chave: 'atendimentos_preservados_limite', nome: 'Atendimentos Preservados (Cota Fotos)', grupo: 'Armazenamento' },
   ];
 
   const fetchDadosCompletos = async () => {
@@ -585,7 +586,12 @@ export const AdminPlanos: React.FC = () => {
 
       {/* Modal Criar Novo Plano */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !creating) setShowCreateModal(false);
+          }}
+        >
           <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="text-lg font-bold text-white flex items-center space-x-2">

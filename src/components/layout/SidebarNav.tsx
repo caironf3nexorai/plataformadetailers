@@ -17,6 +17,7 @@ import {
   GraduationCap,
   FolderArchive,
   Building2,
+  Award,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
@@ -45,22 +46,47 @@ export const SidebarNav: React.FC = () => {
   const { isOperador, podeVerFinanceiro, podeGerirEstoque, podeGerirServicos } = usePermissao();
   const { nomePlano } = usePlano();
   const [isPlatformAdminUser, setIsPlatformAdminUser] = useState(false);
+  const [isPartnerUser, setIsPartnerUser] = useState(false);
   const [feedbacksNovos, setFeedbacksNovos] = useState(0);
 
   useEffect(() => {
-    async function checkAdmin() {
+    async function checkRoles() {
       try {
-        const { data } = await supabase.rpc('is_platform_admin');
-        if (data) {
-          setIsPlatformAdminUser(true);
-          const { data: countData } = await supabase.rpc('admin_obter_contador_feedbacks_novos');
-          if (countData) setFeedbacksNovos(Number(countData));
+        const { data: statusData } = await supabase.rpc('obter_status_usuario_atual');
+        if (statusData) {
+          if (statusData.is_admin) {
+            setIsPlatformAdminUser(true);
+            const { data: countData } = await supabase.rpc('admin_obter_contador_feedbacks_novos');
+            if (countData) setFeedbacksNovos(Number(countData));
+          }
+          if (statusData.is_partner) {
+            setIsPartnerUser(true);
+          }
+        } else {
+          const { data } = await supabase.rpc('is_platform_admin');
+          if (data) setIsPlatformAdminUser(true);
         }
       } catch (err) {
-        // Silently fail if not admin
+        // Silently fail
       }
     }
-    checkAdmin();
+    checkRoles();
+
+    const handleAtualizarContador = async () => {
+      try {
+        const { data: countData } = await supabase.rpc('admin_obter_contador_feedbacks_novos');
+        setFeedbacksNovos(countData ? Number(countData) : 0);
+      } catch (err) {
+        // Silently fail
+      }
+    };
+
+    window.addEventListener('feedbacks_atualizados', handleAtualizarContador);
+    window.addEventListener('focus', handleAtualizarContador);
+    return () => {
+      window.removeEventListener('feedbacks_atualizados', handleAtualizarContador);
+      window.removeEventListener('focus', handleAtualizarContador);
+    };
   }, []);
 
   const navGroups: NavGroup[] = [
@@ -158,6 +184,22 @@ export const SidebarNav: React.FC = () => {
                 {feedbacksNovos}
               </span>
             )}
+          </NavLink>
+        )}
+
+        {/* Botão de Atalho para o Painel do Parceiro (exclusivo para quem for parceiro confirmado) */}
+        {isPartnerUser && (
+          <NavLink
+            to="/parceiro/painel"
+            className="mt-1 flex items-center justify-between space-x-2 bg-gradient-to-r from-emerald-500/20 to-teal-600/20 border border-emerald-500/40 text-emerald-400 font-bold text-xs py-2 px-3 rounded-lg hover:bg-emerald-500/30 transition shadow-inner"
+          >
+            <div className="flex items-center space-x-2">
+              <Award size={16} className="text-emerald-400" />
+              <span>PAINEL DO PARCEIRO</span>
+            </div>
+            <span className="font-mono text-[9px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+              AFILIADO
+            </span>
           </NavLink>
         )}
       </div>

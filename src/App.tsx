@@ -70,6 +70,8 @@ const AdminIndicacoes = lazy(() => import('./pages/admin/AdminIndicacoes').then(
 const AdminParceiros = lazy(() => import('./pages/admin/AdminParceiros').then(m => ({ default: m.AdminParceiros })));
 const AdminPrecificacaoReferencia = lazy(() => import('./pages/admin/AdminPrecificacaoReferencia').then(m => ({ default: m.AdminPrecificacaoReferencia })));
 const AdminTreinamentos = lazy(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
+const LoginParceiro = lazy(() => import('./pages/parceiro/LoginParceiro').then(m => ({ default: m.LoginParceiro })));
+const PainelParceiro = lazy(() => import('./pages/parceiro/PainelParceiro').then(m => ({ default: m.PainelParceiro })));
 
 
 const PaginaCarregando = () => (
@@ -98,8 +100,11 @@ function App() {
             <Route path="/agendar/:slug" element={<CatalogoPublico />} />
             <Route path="/calculadora" element={<CalculadoraPublica />} />
             <Route path="/entrar" element={<Entrar />} />
+            <Route path="/login" element={<Navigate to="/entrar" replace />} />
             <Route path="/criar-conta" element={<CriarConta />} />
             <Route path="/convite/:codigo" element={<PaginaConvite />} />
+            <Route path="/parceiro/login" element={<LoginParceiro />} />
+            <Route path="/parceiro/painel" element={<PainelParceiro />} />
             <Route path="/parceiro/:codigo" element={<PaginaParceiro />} />
             <Route path="/convite/:token" element={<Convite />} />
             <Route path="/recuperar-senha" element={<RecuperarSenha />} />

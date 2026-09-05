@@ -85,6 +85,8 @@ interface ModalFinalizarExecucaoProps {
   concluidosChecklistCount?: number;
 }
 
+const EMPTY_SERVICOS_NOMES: string[] = [];
+
 export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   isOpen,
   onClose,
@@ -101,13 +103,14 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   modoDefinirValorOnly = false,
   iniciadoEm: _iniciadoEm,
   duracaoEstimadaMinutos: _duracaoEstimadaMinutos = 60,
-  servicosNomes = [],
+  servicosNomes = EMPTY_SERVICOS_NOMES,
   totalChecklistCount,
   concluidosChecklistCount,
 }) => {
   const { membership, user: _user } = useAuth();
   const podeVerValor = membership?.role === 'dono' || membership?.role === 'gerente';
 
+  const hasLoadedPrecoRef = useRef(false);
   const [observacoes] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -318,10 +321,16 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
       }
     };
 
-    if (isOpen) {
+    if (!isOpen) {
+      hasLoadedPrecoRef.current = false;
+      return;
+    }
+
+    if (!hasLoadedPrecoRef.current) {
+      hasLoadedPrecoRef.current = true;
       carregarItensPreco();
     }
-  }, [isOpen, agendamentoItens, agendamentoId, execucaoId, servicosNomes, tenantId]);
+  }, [isOpen, agendamentoId, execucaoId, tenantId]);
 
   // Carregar produtos para consumo
   useEffect(() => {
@@ -500,6 +509,59 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
 
   const handleRemovePagamento = (id: string) => {
     setPagamentosLancados((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Inserir a diferença exata restante com 1 clique
+  const handleInserirDiferenca = async () => {
+    if (diferencaPagamentos <= 0) return;
+    const forma = formasPagamento.find((f) => f.id === novoFormaId) || formasPagamento[0];
+    if (!forma) return;
+
+    const parcelas = parseInt(novoParcelas, 10) || 1;
+    let taxaEstimada = false;
+    let maqNome = '';
+
+    if (forma.tipo === 'debito' || forma.tipo === 'credito') {
+      const maqId = novoMaquininhaId || maquininhas[0]?.id;
+      const maqObj = maquininhas.find((m) => m.id === maqId);
+      if (maqObj) maqNome = maqObj.nome;
+
+      if (maqId) {
+        try {
+          const { data: resTaxa } = await supabase.rpc('resolver_taxa_cartao', {
+            p_maquininha: maqId,
+            p_tipo: forma.tipo,
+            p_bandeira: novoBandeiraCodigo || null,
+            p_parcelas: parcelas,
+          });
+          if (resTaxa && resTaxa.length > 0) {
+            taxaEstimada = resTaxa[0].taxa_estimada;
+          }
+        } catch (e) {
+          // Ignora
+        }
+      }
+    }
+
+    setPagamentosLancados((prev) => [
+      ...prev,
+      {
+        id: Math.random().toString(),
+        forma_id: forma.id,
+        forma_nome: forma.nome,
+        forma_tipo: forma.tipo,
+        maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
+        maquininha_nome: maqNome,
+        bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
+        taxa_estimada: taxaEstimada,
+        total_parcelas: parcelas,
+        valor_bruto: diferencaPagamentos,
+        previsto_para: novoVencimento,
+      },
+    ]);
+
+    setNovoValor('');
+    setErrorMsg(null);
   };
 
   const concluiuRef = useRef(false);
@@ -862,8 +924,23 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                   </div>
                 ))}
 
-                {/* Bloco Adicionar novo pagamento */}
+                {/* Bloco Adicionar novo pagamento ou Confirmação de Quitado */}
                 {(() => {
+                  const saldoTotalmenteLancado = diferencaPagamentos <= 0.009 && pagamentosLancados.length > 0;
+
+                  if (saldoTotalmenteLancado) {
+                    return (
+                      <div className="p-3.5 bg-mint-500/10 border border-mint-500/30 rounded-xl flex items-center justify-between text-xs font-mono text-mint-400">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={18} className="text-mint-400 shrink-0" />
+                          <span className="font-semibold">
+                            Valor total 100% coberto pelos pagamentos lançados ({formatarMoeda(somaPagamentosLancados)})
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const formaSelecionada = formasPagamento.find((f) => f.id === novoFormaId);
                   const isCartao = formaSelecionada?.tipo === 'debito' || formaSelecionada?.tipo === 'credito';
 
@@ -986,17 +1063,19 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                 })()}
 
                 {/* Status da soma dos pagamentos */}
-                <div className={`p-3 rounded-xl text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                <div className={`p-3.5 rounded-xl text-xs font-mono flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
                   Math.abs(diferencaPagamentos) < 0.01
                     ? 'bg-mint-500/10 text-mint-400 border border-mint-500/30'
                     : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
                 }`}>
                   <div className="flex items-center gap-2 flex-wrap">
+                    <span>Total a Receber: <strong className="text-vapor-100">{formatarMoeda(saldoRestante)}</strong></span>
+                    <span className="text-vapor-600">•</span>
                     <span>Lançado: <strong className="text-vapor-100">{formatarMoeda(somaPagamentosLancados)}</strong></span>
                     <span className="text-vapor-600">•</span>
-                    <span>Restante: <strong className="text-vapor-100">{formatarMoeda(saldoRestante)}</strong></span>
+                    <span>Falta Lançar: <strong className="text-vapor-100">{formatarMoeda(Math.max(0, diferencaPagamentos))}</strong></span>
                   </div>
-                  {Math.abs(diferencaPagamentos) >= 0.01 && (
+                  {diferencaPagamentos > 0.01 && (
                     <span className="font-bold text-amber-400 whitespace-nowrap">
                       Diferença: {formatarMoeda(diferencaPagamentos)}
                     </span>
@@ -1007,20 +1086,35 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
           </div>
         )}
 
-        <Button
-          type="button"
-          variant="primary"
-          onClick={handleConcluir}
-          disabled={loading || (!modoDefinirValorOnly && pendingRequiredCount > 0) || (podeVerValor && saldoRestante > 0 && Math.abs(diferencaPagamentos) >= 0.01)}
-          className="w-full min-h-[56px] text-[16px] font-bold tracking-wide uppercase mt-2 shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {loading ? 'Salvando...' : (
-            <>
-              <CheckCircle2 size={20} />
-              <span>Concluir Atendimento</span>
-            </>
+        {/* Rodapé com Ação de Inserir Diferença e Concluir */}
+        <div className="flex flex-col sm:flex-row gap-2.5 mt-2">
+          {podeVerValor && saldoRestante > 0 && diferencaPagamentos > 0.01 && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleInserirDiferenca}
+              className="sm:w-1/2 min-h-[56px] text-xs font-bold uppercase tracking-wide border-amber-500/50 text-amber-400 hover:bg-amber-500/10 flex items-center justify-center gap-2"
+            >
+              <Plus size={18} className="text-amber-400" />
+              <span>Inserir Diferença ({formatarMoeda(diferencaPagamentos)})</span>
+            </Button>
           )}
-        </Button>
+
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleConcluir}
+            disabled={loading || (!modoDefinirValorOnly && pendingRequiredCount > 0) || (podeVerValor && saldoRestante > 0 && diferencaPagamentos > 0.01)}
+            className={`${podeVerValor && saldoRestante > 0 && diferencaPagamentos > 0.01 ? 'sm:w-1/2' : 'w-full'} min-h-[56px] text-[16px] font-bold tracking-wide uppercase shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
+          >
+            {loading ? 'Salvando...' : (
+              <>
+                <CheckCircle2 size={20} />
+                <span>Concluir Atendimento</span>
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </Modal>
   );

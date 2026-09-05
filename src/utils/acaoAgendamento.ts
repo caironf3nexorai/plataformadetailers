@@ -23,12 +23,14 @@ export interface ExecucaoInfo {
   status: string;
   valor_total_final: number | null;
   iniciado_em?: string;
+  finalizado_em?: string | null;
   segundos_pausados?: number;
   segundos_trabalhados?: number;
   pausado_em?: string | null;
   retomado_em?: string | null;
   totalItens?: number;
   concluidosCount?: number;
+  tempo_efetivo_minutos?: number | null;
 }
 
 export interface ResultadoAcaoAgendamento {
