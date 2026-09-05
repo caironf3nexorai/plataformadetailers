@@ -265,6 +265,13 @@ export async function gerarPDFOS(
 
   // Linhas da Tabela
   const itens = data.itens && data.itens.length > 0 ? data.itens : [];
+  const somaItens = itens.reduce((acc, it) => acc + (Number(it.preco) || 0) * (it.quantidade || 1), 0);
+  if (itens.length === 1 && somaItens === 0 && data.valor_total > 0) {
+    itens[0].preco = data.valor_total;
+  } else if (itens.length > 1 && somaItens === 0 && data.valor_total > 0) {
+    itens[0].preco = data.valor_total;
+  }
+
   if (itens.length === 0) {
     doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
     doc.rect(pageMargin, y, usableWidth, 8, 'F');
@@ -424,14 +431,18 @@ export async function gerarPDFOS(
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   doc.text('Responsável Técnico / Oficina', col2StartX + colW / 2, sigY + 16.5, { align: 'center' });
 
-  // Rodapé padrão
-  rodapeDocumento(doc, {
-    planoCodigo: data.planoCodigo,
-    pdfTextoRodape: data.pdfTextoRodape,
-    pdfOcultarMarcaDagua: data.pdfOcultarMarcaDagua,
-    paginaAtual: 1,
-    totalPaginas: doc.getNumberOfPages(),
-  });
+  // Rodapé padrão em todas as páginas
+  const totalPaginas = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPaginas; p++) {
+    doc.setPage(p);
+    rodapeDocumento(doc, {
+      planoCodigo: data.planoCodigo,
+      pdfTextoRodape: data.pdfTextoRodape,
+      pdfOcultarMarcaDagua: data.pdfOcultarMarcaDagua,
+      paginaAtual: p,
+      totalPaginas,
+    });
+  }
 
   onProgress?.('Finalizando PDF da Ordem de Serviço...');
   const nomeArquivo = `os_${data.veiculoPlaca.toUpperCase()}_${osFormatada.replace(/\s+/g, '_')}.pdf`;

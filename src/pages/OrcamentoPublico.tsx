@@ -205,10 +205,10 @@ export const OrcamentoPublico: React.FC = () => {
         valor_original: n.valor_original,
         duracao_total: n.duracao_total,
         destaque: n.destaque,
-        itens: (n.itens || []).map((i) => ({
-          servico_nome: i.servico_nome,
+        itens: (n.itens || []).map((i: any) => ({
+          servico_nome: i.servico_nome || 'Serviço',
           servico_descricao: i.servico_descricao,
-          preco: i.preco,
+          preco: i.preco !== undefined && i.preco !== null ? Number(i.preco) : 0,
           duracao_minutos: i.duracao_minutos,
         })),
       }));
@@ -239,6 +239,16 @@ export const OrcamentoPublico: React.FC = () => {
         assinaturaData: data.assinatura_data,
         desconto: data.desconto,
         niveis: niveisFormatados,
+        planoCodigo: (data.oficina as any)?.plano || undefined,
+        pdfCorPrimaria: (data.oficina as any)?.pdf_cor_primaria || undefined,
+        pdfCorFundoCabecalho: (data.oficina as any)?.pdf_cor_fundo_cabecalho || undefined,
+        pdfCorTextoCabecalho: (data.oficina as any)?.pdf_cor_texto_cabecalho || undefined,
+        pdfCorFundoSecoes: (data.oficina as any)?.pdf_cor_fundo_secoes || undefined,
+        pdfCorTextoSecoes: (data.oficina as any)?.pdf_cor_texto_secoes || undefined,
+        pdfSubtituloCabecalho: (data.oficina as any)?.pdf_subtitulo_cabecalho || undefined,
+        pdfTextoObservacoesOrcamento: data.oficina?.pdf_texto_observacoes_orcamento || undefined,
+        pdfTextoRodape: (data.oficina as any)?.pdf_texto_rodape || undefined,
+        pdfOcultarMarcaDagua: (data.oficina as any)?.pdf_ocultar_marca_dagua ?? undefined,
       });
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao gerar PDF:', err);

@@ -1109,11 +1109,18 @@ export const DetalheOrcamento: React.FC = () => {
           itens: Array.from(itensNivel[n.nivel]).map((sId) => {
             const s = servicosCatalogo.find((serv) => serv.id === sId);
             const cPrice = customPrecos[`${n.nivel}_${sId}`];
+            const dbNivel = orcamento.niveis?.find((lvl: any) => lvl.nivel === n.nivel);
+            const dbItem = dbNivel?.itens?.find((it: any) => it.servico_id === sId);
+            const nomeFinal = s?.nome || dbItem?.servico?.nome || (dbItem as any)?.servico_nome || 'Serviço';
+            const descFinal = s?.descricao_publica || s?.descricao_interna || dbItem?.servico?.descricao_publica;
+            const precoFinal = cPrice !== undefined ? cPrice : (s?.precoMatriz !== undefined ? s.precoMatriz : (dbItem?.preco ? Number(dbItem.preco) : 0));
+            const duracaoFinal = s?.duracaoMatriz !== undefined ? s.duracaoMatriz : (dbItem?.duracao_minutos ? Number(dbItem.duracao_minutos) : undefined);
+
             return {
-              servico_nome: s?.nome || 'Serviço',
-              servico_descricao: s?.descricao_publica || s?.descricao_interna,
-              preco: cPrice !== undefined ? cPrice : s?.precoMatriz,
-              duracao_minutos: s?.duracaoMatriz,
+              servico_nome: nomeFinal,
+              servico_descricao: descFinal,
+              preco: precoFinal,
+              duracao_minutos: duracaoFinal,
             };
           }),
         };

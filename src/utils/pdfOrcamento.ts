@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import { formatarData, formatarHora } from './datas';
 import { formatarMoeda, formatarCodigoProposta } from './formatters';
 import { fetchImageAsBase64, obterAssinaturaBase64, getEvidenciaSignedUrl } from './evidencias';
-import { cabecalhoDocumento, hexToRgb } from './pdf';
+import { cabecalhoDocumento, rodapeDocumento, hexToRgb } from './pdf';
 import type { TipoNivelOrcamento } from '../types/orcamento';
 
 export interface PDFOrcamentoItemData {
@@ -78,16 +78,16 @@ export interface PDFOrcamentoData {
   assinadoUsuarioEm?: string | null;
 
   // Branding Customizado
-  planoCodigo?: string;
-  pdfCorPrimaria?: string;
-  pdfCorFundoCabecalho?: string;
-  pdfCorTextoCabecalho?: string;
-  pdfCorFundoSecoes?: string;
-  pdfCorTextoSecoes?: string;
-  pdfSubtituloCabecalho?: string;
-  pdfTextoObservacoesOrcamento?: string;
-  pdfTextoRodape?: string;
-  pdfOcultarMarcaDagua?: boolean;
+  planoCodigo?: string | null;
+  pdfCorPrimaria?: string | null;
+  pdfCorFundoCabecalho?: string | null;
+  pdfCorTextoCabecalho?: string | null;
+  pdfCorFundoSecoes?: string | null;
+  pdfCorTextoSecoes?: string | null;
+  pdfSubtituloCabecalho?: string | null;
+  pdfTextoObservacoesOrcamento?: string | null;
+  pdfTextoRodape?: string | null;
+  pdfOcultarMarcaDagua?: boolean | null;
 }
 
 /**
@@ -179,7 +179,7 @@ export async function gerarPDFOrcamento(
       : `${formatarData(new Date().toISOString())} ${formatarHora(new Date().toISOString())}`,
     statusBadge: data.status === 'aprovado' ? 'STATUS: APROVADO' : 'PROPOSTA COMERCIAL',
     numeroOS: data.numero_os || undefined,
-    planoCodigo: data.planoCodigo,
+    planoCodigo: data.planoCodigo || undefined,
     pdfCorPrimaria: data.pdfCorPrimaria,
     pdfCorFundoCabecalho: data.pdfCorFundoCabecalho,
     pdfCorTextoCabecalho: data.pdfCorTextoCabecalho,
@@ -341,7 +341,7 @@ export async function gerarPDFOrcamento(
         doc.text(`• ${item.servico_nome}`, pageMargin + 5, currentCardY + 4.2);
 
         // Preço do serviço
-        if (item.preco) {
+        if (typeof item.preco === 'number') {
           doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(8);
@@ -674,6 +674,19 @@ export async function gerarPDFOrcamento(
     doc.text('Responsável Técnico / Oficina', col2StartX + colW / 2, sigY + 15.5, { align: 'center' });
 
     y += 36;
+  }
+
+  // Rodapé padrão em todas as páginas
+  const totalPaginas = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPaginas; p++) {
+    doc.setPage(p);
+    rodapeDocumento(doc, {
+      planoCodigo: data.planoCodigo || undefined,
+      pdfTextoRodape: data.pdfTextoRodape,
+      pdfOcultarMarcaDagua: data.pdfOcultarMarcaDagua,
+      paginaAtual: p,
+      totalPaginas,
+    });
   }
 
   onProgress?.('Finalizando PDF do orçamento...');

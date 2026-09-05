@@ -69,6 +69,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
   const { podeGerirServicos } = usePermissao();
   const [checkinInfo, setCheckinInfo] = useState<CheckinInfo | null>(null);
   const [execucaoInfo, setExecucaoInfo] = useState<ExecucaoInfo | null>(null);
+  const [execucaoValores, setExecucaoValores] = useState<any[]>([]);
   const [startingCheckin, setStartingCheckin] = useState(false);
   const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
   const [startingExec, setStartingExec] = useState(false);
@@ -159,13 +160,14 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
 
       supabase
         .from('execucoes')
-        .select('id, status, valor_total_final, iniciado_em, finalizado_em, segundos_pausados, segundos_trabalhados, pausado_em, retomado_em, execucao_itens(id, concluido, obrigatorio, item_nome)')
+        .select('id, status, valor_total_final, iniciado_em, finalizado_em, segundos_pausados, segundos_trabalhados, pausado_em, retomado_em, execucao_itens(id, concluido, obrigatorio, item_nome), execucao_valores(agendamento_item_id, valor_final)')
         .eq('agendamento_id', agendamento.id)
         .maybeSingle()
         .then(({ data }) => {
           if (data) {
             const itens = (data as any).execucao_itens || [];
             const pendingReq = itens.filter((i: any) => i.obrigatorio && !i.concluido);
+            setExecucaoValores((data as any).execucao_valores || []);
             setExecucaoInfo({
               id: data.id,
               status: data.status,
@@ -183,6 +185,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
             } as any);
           } else {
             setExecucaoInfo(null);
+            setExecucaoValores([]);
           }
         });
     }
@@ -338,7 +341,16 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
 
       // 3. Mapear itens da OS refletindo o valor real cobrado e a duração real
       const itensFormatados = itensList.map((it: any) => {
-        let precoItem = Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? 0);
+        const valFinalObj = execucaoValores.find((v: any) => v.agendamento_item_id === it.id);
+        let precoItem = Number(
+          valFinalObj?.valor_final ??
+          it.preco_estimado ??
+          it.preco_praticado ??
+          it.preco ??
+          it.valor ??
+          it.servicos?.preco ??
+          0
+        );
         if (agendamento.status === 'concluido' && itensList.length === 1 && valorFinalTotal > 0) {
           precoItem = valorFinalTotal;
         }
@@ -353,6 +365,13 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
           quantidade: it.quantidade || 1,
         };
       });
+
+      const totalItens = itensFormatados.reduce((acc: number, it: any) => acc + (it.preco * (it.quantidade || 1)), 0);
+      if (itensFormatados.length === 1 && valorFinalTotal > 0) {
+        itensFormatados[0].preco = valorFinalTotal;
+      } else if (itensFormatados.length > 1 && totalItens === 0 && valorFinalTotal > 0) {
+        itensFormatados[0].preco = valorFinalTotal;
+      }
 
       await gerarPDFOS(
         {

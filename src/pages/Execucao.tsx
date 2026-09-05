@@ -69,6 +69,7 @@ export const ExecucaoPage: React.FC = () => {
   const [modalFinalizarOpen, setModalFinalizarOpen] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [showAddExecutor, setShowAddExecutor] = useState(false);
+  const [execucaoValores, setExecucaoValores] = useState<any[]>([]);
 
   // Estados para inclusão e remoção de etapas avulsas
   const [novoItemText, setNovoItemText] = useState<Record<string, string>>({});
@@ -101,15 +102,28 @@ export const ExecucaoPage: React.FC = () => {
         : undefined;
 
       const rawItens = (agendamento.itens || agendamento.agendamento_itens || []);
-      const itensFormatados = rawItens.map((it: any) => ({
-        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
-        categoria_nome: it.categoria?.nome,
-        preco: Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? it.valor ?? it.servicos?.preco ?? 0),
-        duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && rawItens.length <= 1)
-          ? tempoRealTrabalhadoMinutos
-          : (it.duracao_minutos || it.servicos?.duracao_minutos || (agendamento as any).duracao_total || agendamento.duracao_minutos),
-        quantidade: it.quantidade || 1,
-      }));
+      const itensFormatados = rawItens.map((it: any) => {
+        const valFinalObj = execucaoValores.find((v: any) => v.agendamento_item_id === it.id);
+        const precoItem = Number(
+          valFinalObj?.valor_final ?? 
+          it.preco_estimado ?? 
+          it.preco_praticado ?? 
+          it.preco ?? 
+          it.valor ?? 
+          it.servicos?.preco ?? 
+          0
+        );
+
+        return {
+          servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+          categoria_nome: it.categoria?.nome,
+          preco: precoItem,
+          duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && rawItens.length <= 1)
+            ? tempoRealTrabalhadoMinutos
+            : (it.duracao_minutos || it.servicos?.duracao_minutos || (agendamento as any).duracao_total || agendamento.duracao_minutos),
+          quantidade: it.quantidade || 1,
+        };
+      });
 
       const totalItens = itensFormatados.reduce((acc: number, it: any) => acc + (it.preco * (it.quantidade || 1)), 0);
       const valorFinalTotal = Number(
@@ -270,6 +284,13 @@ export const ExecucaoPage: React.FC = () => {
         setTeamLoadError(null);
         setMembrosTenant(mems || []);
       }
+
+      // 7. Valores ajustados da execução (se faturado com novos valores na finalização)
+      const { data: valData } = await supabase
+        .from('execucao_valores')
+        .select('*')
+        .eq('execucao_id', execucaoId);
+      setExecucaoValores(valData || []);
     } catch (err: any) {
       console.error('[Execucao load error]:', err);
       setErrorMsg('Não foi possível abrir o atendimento. Tente novamente.');

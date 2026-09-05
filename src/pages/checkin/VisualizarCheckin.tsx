@@ -16,6 +16,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import {
   Download,
+  Printer,
   Lock,
   ArrowLeft,
   Fuel,
@@ -217,10 +218,10 @@ export const VisualizarCheckin: React.FC = () => {
     }
   };
 
-  const handleDownloadPDF = async () => {
+  const handleDownloadPDF = async (acao: 'download' | 'print' = 'download') => {
     if (!checkin || !agendamento || !tenant) return;
     setGeneratingPdf(true);
-    setPdfProgress('Iniciando...');
+    setPdfProgress(acao === 'print' ? 'Preparando impressão...' : 'Iniciando...');
     try {
       const logoUrl = tenant.logo_path
         ? supabase.storage.from('catalogo').getPublicUrl(tenant.logo_path).data.publicUrl
@@ -254,7 +255,8 @@ export const VisualizarCheckin: React.FC = () => {
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
         },
-        (msg) => setPdfProgress(msg)
+        (msg) => setPdfProgress(msg),
+        acao
       );
     } catch (err: any) {
       setError('Erro ao gerar PDF da vistoria: ' + err.message);
@@ -345,12 +347,25 @@ export const VisualizarCheckin: React.FC = () => {
           <Button
             type="button"
             variant="secondary"
-            onClick={handleDownloadPDF}
+            onClick={() => handleDownloadPDF('download')}
             disabled={generatingPdf}
             className="min-h-[56px] px-4 font-semibold flex items-center justify-center gap-2 text-vapor-200"
           >
             <Download size={18} />
             <span>{generatingPdf ? pdfProgress || 'Gerando PDF...' : 'Baixar PDF'}</span>
+          </Button>
+
+          {/* 2.1 Imprimir Relatório de Vistoria */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => handleDownloadPDF('print')}
+            disabled={generatingPdf}
+            className="min-h-[56px] px-4 font-semibold flex items-center justify-center gap-2 text-vapor-200"
+            title="Imprimir relatório da vistoria"
+          >
+            <Printer size={18} />
+            <span>Imprimir</span>
           </Button>
 
           {/* 3. Voltar — terciária, discreta */}

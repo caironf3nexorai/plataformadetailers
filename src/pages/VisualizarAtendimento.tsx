@@ -72,16 +72,29 @@ export const VisualizarAtendimento: React.FC = () => {
         ? execucao.tempo_efetivo_minutos
         : (segundosTrabalhados > 0 ? Math.round(segundosTrabalhados / 60) : undefined);
 
-      const rawItens = (agendamento.agendamento_itens || []);
-      const itensFormatados = rawItens.map((it: any) => ({
-        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
-        categoria_nome: it.categoria?.nome,
-        preco: Number(it.preco_estimado ?? it.preco_praticado ?? it.preco ?? it.valor ?? it.servicos?.preco ?? 0),
-        duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && rawItens.length <= 1)
-          ? tempoRealTrabalhadoMinutos
-          : (it.duracao_minutos || it.servicos?.duracao_minutos || agendamento.duracao_total || agendamento.duracao_minutos),
-        quantidade: it.quantidade || 1,
-      }));
+      const rawItens = (agendamento.agendamento_itens || agendamento.itens || []);
+      const itensFormatados = rawItens.map((it: any) => {
+        const valFinalObj = valores.find((v: any) => v.agendamento_item_id === it.id);
+        const precoItem = Number(
+          valFinalObj?.valor_final ??
+          it.preco_estimado ??
+          it.preco_praticado ??
+          it.preco ??
+          it.valor ??
+          it.servicos?.preco ??
+          0
+        );
+
+        return {
+          servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+          categoria_nome: it.categoria?.nome,
+          preco: precoItem,
+          duracao_minutos: (agendamento.status === 'concluido' && tempoRealTrabalhadoMinutos && rawItens.length <= 1)
+            ? tempoRealTrabalhadoMinutos
+            : (it.duracao_minutos || it.servicos?.duracao_minutos || agendamento.duracao_total || agendamento.duracao_minutos),
+          quantidade: it.quantidade || 1,
+        };
+      });
 
       const totalItens = itensFormatados.reduce((acc: number, it: any) => acc + (it.preco * (it.quantidade || 1)), 0);
       const valorFinalTotal = Number(

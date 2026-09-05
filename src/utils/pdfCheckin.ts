@@ -10,7 +10,7 @@ import {
   formatarNomeVista,
 } from './checkin';
 import { fetchImageAsBase64, getEvidenciaSignedUrl, obterAssinaturaBase64 } from './evidencias';
-import { cabecalhoDocumento, hexToRgb } from './pdf';
+import { cabecalhoDocumento, rodapeDocumento, hexToRgb } from './pdf';
 
 interface PDFCheckinData {
   checkin: Checkin;
@@ -133,12 +133,9 @@ async function drawProportionalImage(
 
 export async function gerarPDFCheckin(
   data: PDFCheckinData,
-  onProgress?: (statusText: string) => void
+  onProgress?: (statusText: string) => void,
+  acao: 'download' | 'print' = 'download'
 ): Promise<void> {
-  if (!data.checkin.assinatura_path) {
-    throw new Error('Vistoria de entrada não assinada pelo cliente. Não é possível gerar o documento sem assinatura.');
-  }
-
   const {
     checkin,
     avarias,
@@ -673,10 +670,12 @@ export async function gerarPDFCheckin(
     doc.text(line, pageMargin + 4, y + 6 + idx * 3.5);
   });
 
-  if (checkin.assinatura_path) {
+  const sigPathOrData = checkin.assinatura_path || (checkin as any).assinatura_url || (checkin as any).assinatura_base64;
+
+  if (sigPathOrData) {
     onProgress?.('Carregando assinatura digital do cliente...');
     try {
-      const assBase64 = await obterAssinaturaBase64(checkin.assinatura_path);
+      const assBase64 = await obterAssinaturaBase64(sigPathOrData);
       if (assBase64) {
         const sigBoxW = 48;
         const sigBoxH = 18;
@@ -735,6 +734,36 @@ export async function gerarPDFCheckin(
     y + 36
   );
 
-  onProgress?.('Finalizando PDF...');
-  doc.save(`vistoria_${veiculoPlaca.toUpperCase()}_${checkin.id.substring(0, 6)}.pdf`);
+  // Rodapé padrão em todas as páginas
+  const totalPaginas = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPaginas; p++) {
+    doc.setPage(p);
+    rodapeDocumento(doc, {
+      planoCodigo: data.planoCodigo,
+      pdfTextoRodape: data.pdfTextoRodape,
+      pdfOcultarMarcaDagua: data.pdfOcultarMarcaDagua,
+      paginaAtual: p,
+      totalPaginas,
+    });
+  }
+
+  onProgress?.('Finalizando PDF da vistoria...');
+  const nomeArquivo = `vistoria_${veiculoPlaca.toUpperCase()}_${checkin.id.substring(0, 6)}.pdf`;
+
+  const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  if (acao === 'print' && !isMobile) {
+    try {
+      doc.autoPrint();
+      const blobUrl = doc.output('bloburl');
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        doc.save(nomeArquivo);
+      }
+    } catch {
+      doc.save(nomeArquivo);
+    }
+  } else {
+    doc.save(nomeArquivo);
+  }
 }
