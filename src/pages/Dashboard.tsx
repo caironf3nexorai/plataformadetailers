@@ -146,11 +146,14 @@ export const Dashboard: React.FC = () => {
     }
   }, [isOperador, navigate]);
 
-  const carregarDashboard = async () => {
+  const carregarDashboard = async (periodoOverride?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc('dashboard_dono');
+      const periodoParam = periodoOverride || filtroPeriodo;
+      const { data: rpcData, error: rpcError } = await supabase.rpc('dashboard_dono', {
+        p_periodo: periodoParam,
+      });
 
       if (rpcError) {
         throw rpcError;
@@ -166,10 +169,10 @@ export const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!isOperador) {
-      carregarDashboard();
+    if (!isOperador && tenant) {
+      carregarDashboard(filtroPeriodo);
     }
-  }, [tenant?.id, isOperador]);
+  }, [tenant?.id, isOperador, filtroPeriodo]);
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -199,7 +202,7 @@ export const Dashboard: React.FC = () => {
         <AlertCircle size={48} className="text-flare-400" />
         <h2 className="font-display text-xl text-vapor-100 uppercase">Falha ao carregar Dashboard</h2>
         <p className="font-sans text-vapor-400 text-sm max-w-md">{error}</p>
-        <Button variant="secondary" onClick={carregarDashboard}>
+        <Button variant="secondary" onClick={() => carregarDashboard()}>
           Tentar Novamente
         </Button>
       </div>

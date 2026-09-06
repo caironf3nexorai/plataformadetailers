@@ -1332,18 +1332,16 @@ export const DetalheOrcamento: React.FC = () => {
         {/* BOTOES DE ACAO DO TOPO */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* EXCLUIR ORÇAMENTO */}
-          {canManageDiscount && (
-            <Button
-              tone="rose"
-              size="sm"
-              onClick={() => setShowConfirmExcluir(true)}
-              className="flex items-center gap-1.5 min-h-[44px]"
-              title="Excluir este orçamento definitivamente"
-            >
-              <Trash2 size={16} />
-              <span>Excluir</span>
-            </Button>
-          )}
+          <Button
+            tone="rose"
+            size="sm"
+            onClick={() => setShowConfirmExcluir(true)}
+            className="flex items-center gap-1.5 min-h-[44px]"
+            title="Excluir este orçamento definitivamente"
+          >
+            <Trash2 size={16} />
+            <span>Excluir</span>
+          </Button>
           {canManageDiscount && (
             <Button
               tone={Number(orcamento.desconto_valor) > 0 ? 'amber' : 'graphite'}
@@ -2838,7 +2836,7 @@ export const DetalheOrcamento: React.FC = () => {
           onClose={() => setShowModalEditarVeiculo(false)}
           veiculo={orcamento.veiculo as any}
           onSuccess={(veiculoAtualizado) => {
-            setOrcamento((prev) =>
+            setOrcamento((prev: any) =>
               prev ? { ...prev, veiculo: { ...prev.veiculo, ...veiculoAtualizado } } : null
             );
             fetchOrcamentoEDados();

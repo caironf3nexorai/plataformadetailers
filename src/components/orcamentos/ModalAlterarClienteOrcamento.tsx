@@ -26,7 +26,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
   onSuccess,
 }) => {
   const { tenant } = useAuth();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
 
   const [clientes, setClientes] = useState<any[]>([]);
   const [veiculos, setVeiculos] = useState<any[]>([]);
@@ -281,7 +281,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
             type="button"
             tone="graphite"
             onClick={onClose}
-            disabled={saving}
+            disabled={saving || loading}
           >
             Cancelar
           </Button>
@@ -289,6 +289,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
             type="submit"
             tone="cyan"
             loading={saving}
+            disabled={loading}
           >
             Salvar Alteração
           </Button>

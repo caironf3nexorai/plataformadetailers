@@ -15,7 +15,8 @@ import {
   Activity,
   Edit2,
   Shield,
-  LogIn
+  LogIn,
+  Award
 } from 'lucide-react';
 
 interface TenantItem {
@@ -39,6 +40,7 @@ interface TenantDetail {
   tenant: TenantItem;
   membros: Array<{
     id: string;
+    user_id?: string;
     email: string;
     nome: string;
     role: string;
@@ -86,6 +88,23 @@ export const AdminOficinas: React.FC = () => {
   const [motivoAudit, setMotivoAudit] = useState('');
   const [salvandoPlano, setSalvandoPlano] = useState(false);
 
+  // Estados para Gestão de Membros (Promover Admin / Tornar Parceiro)
+  const [platformAdminsEmails, setPlatformAdminsEmails] = useState<string[]>([]);
+  const [parceirosEmails, setParceirosEmails] = useState<Map<string, string>>(new Map());
+
+  const [modalAdminTarget, setModalAdminTarget] = useState<{ nome: string; email: string } | null>(null);
+  const [adminNivel, setAdminNivel] = useState<'admin' | 'suporte'>('admin');
+  const [adminObservacao, setAdminObservacao] = useState('');
+  const [salvandoAdmin, setSalvandoAdmin] = useState(false);
+
+  const [modalParceiroTarget, setModalParceiroTarget] = useState<{ nome: string; email: string; user_id?: string } | null>(null);
+  const [parceiroCodigo, setParceiroCodigo] = useState('');
+  const [parceiroComissaoTipo, setParceiroComissaoTipo] = useState<'percentual' | 'valor_fixo'>('percentual');
+  const [parceiroComissaoValor, setParceiroComissaoValor] = useState('20');
+  const [parceiroRecorrente, setParceiroRecorrente] = useState(true);
+  const [parceiroPixChave, setParceiroPixChave] = useState('');
+  const [salvandoParceiro, setSalvandoParceiro] = useState(false);
+
   const fetchTenants = async () => {
     try {
       setLoading(true);
@@ -113,13 +132,103 @@ export const AdminOficinas: React.FC = () => {
     setSelectedTenantId(id);
     setDetailLoading(true);
     try {
-      const { data, error } = await supabase.rpc('admin_detalhe_tenant', { p_tenant_id: id });
+      const [{ data, error }, { data: adminsData }, { data: parceirosData }] = await Promise.all([
+        supabase.rpc('admin_detalhe_tenant', { p_tenant_id: id }),
+        supabase.from('platform_admins').select('email').eq('ativo', true),
+        supabase.from('parceiros').select('email, codigo').eq('ativo', true),
+      ]);
+
       if (error) throw error;
       setDetailData(data);
+
+      if (adminsData) {
+        setPlatformAdminsEmails(adminsData.map((a: any) => (a.email || '').toLowerCase()));
+      }
+      if (parceirosData) {
+        const mapP = new Map<string, string>();
+        parceirosData.forEach((p: any) => {
+          if (p.email) mapP.set(p.email.toLowerCase(), p.codigo);
+        });
+        setParceirosEmails(mapP);
+      }
     } catch (err: any) {
       console.error('[AdminOficinas] Erro ao carregar detalhes:', err.message);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleConfirmarPromocaoAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalAdminTarget) return;
+
+    setSalvandoAdmin(true);
+    try {
+      const { error } = await supabase.rpc('admin_promover_administrador', {
+        p_email: modalAdminTarget.email,
+        p_nivel: adminNivel,
+        p_observacao: adminObservacao.trim() || `Promovido pela tela de oficinas (${detailData?.tenant.nome || ''})`,
+        p_super_admin: false,
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Usuário ${modalAdminTarget.nome} (${modalAdminTarget.email}) promovido a Administrador com sucesso!`);
+      setPlatformAdminsEmails((prev) => [...prev, modalAdminTarget.email.toLowerCase()]);
+      setModalAdminTarget(null);
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao promover administrador:', err);
+      showError(err.message || 'Erro ao promover usuário a administrador');
+    } finally {
+      setSalvandoAdmin(false);
+    }
+  };
+
+  const handleAbrirModalParceiro = (m: { nome: string; email: string; user_id?: string }) => {
+    setModalParceiroTarget(m);
+    const primeiroNome = m.nome.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    setParceiroCodigo(primeiroNome || 'PARCEIRO');
+    setParceiroComissaoTipo('percentual');
+    setParceiroComissaoValor('20');
+    setParceiroRecorrente(true);
+    setParceiroPixChave('');
+  };
+
+  const handleConfirmarTornarParceiro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalParceiroTarget || !parceiroCodigo.trim()) {
+      showError('Informe o código de indicação do parceiro.');
+      return;
+    }
+
+    setSalvandoParceiro(true);
+    try {
+      const { error } = await supabase.from('parceiros').insert({
+        nome: modalParceiroTarget.nome,
+        email: modalParceiroTarget.email.toLowerCase().trim(),
+        codigo: parceiroCodigo.trim().toUpperCase(),
+        comissao_tipo: parceiroComissaoTipo,
+        comissao_valor: parseFloat(parceiroComissaoValor) || 0,
+        recorrente: parceiroRecorrente,
+        pix_chave: parceiroPixChave.trim() || null,
+        user_id: modalParceiroTarget.user_id || null,
+        ativo: true,
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Parceiro comercial ${modalParceiroTarget.nome} cadastrado com o código "${parceiroCodigo.trim().toUpperCase()}"!`);
+      setParceirosEmails((prev) => {
+        const novo = new Map(prev);
+        novo.set(modalParceiroTarget.email.toLowerCase(), parceiroCodigo.trim().toUpperCase());
+        return novo;
+      });
+      setModalParceiroTarget(null);
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao cadastrar parceiro:', err);
+      showError(err.message || 'Erro ao cadastrar parceiro comercial');
+    } finally {
+      setSalvandoParceiro(false);
     }
   };
 
@@ -496,22 +605,68 @@ export const AdminOficinas: React.FC = () => {
                     {detailData.membros.length === 0 ? (
                       <p className="p-4 text-xs text-slate-500 text-center">Nenhum membro cadastrado.</p>
                     ) : (
-                      detailData.membros.map((m) => (
-                        <div key={m.id} className="p-3 flex items-center justify-between text-xs">
-                          <div>
-                            <div className="font-semibold text-slate-200">{m.nome}</div>
-                            <div className="text-slate-400 font-mono">{m.email}</div>
-                          </div>
-                          <div className="text-right">
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase">
-                              {m.role} ({m.status})
-                            </span>
-                            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                              Acesso: {m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
+                      detailData.membros.map((m) => {
+                        const isAlreadyAdmin = platformAdminsEmails.includes(m.email.toLowerCase());
+                        const parceiroCod = parceirosEmails.get(m.email.toLowerCase());
+
+                        return (
+                          <div key={m.id} className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-slate-900/50 transition">
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-slate-200">{m.nome}</span>
+                                {isAlreadyAdmin && (
+                                  <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 font-sans">
+                                    <Shield className="w-3 h-3 text-indigo-400" /> Admin Plataforma
+                                  </span>
+                                )}
+                                {parceiroCod && (
+                                  <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 font-sans">
+                                    <Award className="w-3 h-3 text-emerald-400" /> Parceiro ({parceiroCod})
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-slate-400 font-mono text-[11px] mt-0.5">{m.email}</div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-wrap self-end md:self-center">
+                              {!isAlreadyAdmin && (
+                                <button
+                                  onClick={() => {
+                                    setModalAdminTarget({ nome: m.nome, email: m.email });
+                                    setAdminNivel('admin');
+                                    setAdminObservacao('');
+                                  }}
+                                  className="bg-indigo-950/60 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-800/60 hover:border-indigo-500 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                                  title="Promover este membro a Administrador da Plataforma"
+                                >
+                                  <Shield className="w-3 h-3 text-indigo-400" />
+                                  <span>Promover Admin</span>
+                                </button>
+                              )}
+
+                              {!parceiroCod && (
+                                <button
+                                  onClick={() => handleAbrirModalParceiro(m)}
+                                  className="bg-emerald-950/60 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-800/60 hover:border-emerald-500 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                                  title="Cadastrar como Parceiro Comercial"
+                                >
+                                  <Award className="w-3 h-3 text-emerald-400" />
+                                  <span>Tornar Parceiro</span>
+                                </button>
+                              )}
+
+                              <div className="text-right pl-2 border-l border-slate-800">
+                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase">
+                                  {m.role} ({m.status})
+                                </span>
+                                <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                                  Acesso: {m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -602,6 +757,156 @@ export const AdminOficinas: React.FC = () => {
                 className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg"
               >
                 {salvandoPlano ? 'Salvando...' : 'Confirmar e Auditar Alteração'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Promover a Administrador */}
+      {modalAdminTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
+                <Shield className="text-indigo-400" size={18} />
+                Promover a Administrador da Plataforma
+              </h3>
+              <button onClick={() => setModalAdminTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmarPromocaoAdmin} className="flex flex-col gap-4">
+              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-1">
+                <div>Membro: <strong className="text-white">{modalAdminTarget.nome}</strong></div>
+                <div>E-mail: <span className="text-indigo-400 font-mono">{modalAdminTarget.email}</span></div>
+                <div className="text-slate-500 text-[11px] pt-1">Ao promover, este usuário terá acesso ao painel de Super Admin e gestão global da Plataforma Detailers.</div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Nível de Permissão</label>
+                <select
+                  value={adminNivel}
+                  onChange={(e) => setAdminNivel(e.target.value as any)}
+                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-indigo-500 outline-none cursor-pointer"
+                >
+                  <option value="admin">Administrador (Controle Total de Edição)</option>
+                  <option value="suporte">Suporte (Visualização e Suporte Técnico)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Observação / Justificativa</label>
+                <input
+                  type="text"
+                  value={adminObservacao}
+                  onChange={(e) => setAdminObservacao(e.target.value)}
+                  placeholder="Ex: Novo sócio ou membro da equipe interna"
+                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-indigo-500 outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={salvandoAdmin}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg flex items-center justify-center gap-2"
+              >
+                <Shield size={16} />
+                <span>{salvandoAdmin ? 'Promovendo...' : 'Confirmar Promoção para Admin'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tornar Parceiro Comercial */}
+      {modalParceiroTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
+                <Award className="text-emerald-400" size={18} />
+                Cadastrar como Parceiro Comercial
+              </h3>
+              <button onClick={() => setModalParceiroTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmarTornarParceiro} className="flex flex-col gap-4">
+              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-1">
+                <div>Nome: <strong className="text-white">{modalParceiroTarget.nome}</strong></div>
+                <div>E-mail: <span className="text-emerald-400 font-mono">{modalParceiroTarget.email}</span></div>
+                <div className="text-slate-500 text-[11px] pt-1">O login deste usuário terá acesso ao Portal do Parceiro e link de indicação exclusivo.</div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Código do Cupom / Link (URL)</label>
+                <input
+                  type="text"
+                  value={parceiroCodigo}
+                  onChange={(e) => setParceiroCodigo(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                  placeholder="Ex: MEUCUPOM"
+                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 font-mono focus:border-emerald-500 outline-none uppercase"
+                  required
+                />
+                <span className="text-[10px] text-slate-500">Link gerado: detailers.app/parceiro/{parceiroCodigo || 'CODIGO'}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-mono font-bold text-slate-300 uppercase">Comissão</label>
+                  <select
+                    value={parceiroComissaoTipo}
+                    onChange={(e) => setParceiroComissaoTipo(e.target.value as any)}
+                    className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-emerald-500 outline-none cursor-pointer"
+                  >
+                    <option value="percentual">Percentual (%)</option>
+                    <option value="valor_fixo">Fixo (R$)</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-mono font-bold text-slate-300 uppercase">Valor</label>
+                  <input
+                    type="number"
+                    value={parceiroComissaoValor}
+                    onChange={(e) => setParceiroComissaoValor(e.target.value)}
+                    className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-emerald-500 outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Chave PIX (Opcional)</label>
+                <input
+                  type="text"
+                  value={parceiroPixChave}
+                  onChange={(e) => setParceiroPixChave(e.target.value)}
+                  placeholder="CPF, Telefone, E-mail ou Aleatória"
+                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-emerald-500 outline-none"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={parceiroRecorrente}
+                  onChange={(e) => setParceiroRecorrente(e.target.checked)}
+                  className="w-4 h-4 rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-0"
+                />
+                <span className="text-xs text-slate-300">Comissão recorrente em todas as mensalidades</span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={salvandoParceiro || !parceiroCodigo.trim()}
+                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg flex items-center justify-center gap-2"
+              >
+                <Award size={16} />
+                <span>{salvandoParceiro ? 'Cadastrando...' : 'Confirmar Cadastro de Parceiro'}</span>
               </button>
             </form>
           </div>

@@ -31,7 +31,7 @@ export const AbaAssinatura: React.FC = () => {
   const carregarAssinatura = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('obter_resumo_assinatura_tenant');
+      const { data, error } = await supabase.rpc('obter_assinatura_tenant');
       if (error) throw error;
       setAssinatura(data);
     } catch (err: any) {

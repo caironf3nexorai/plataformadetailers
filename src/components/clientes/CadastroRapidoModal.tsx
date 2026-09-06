@@ -63,16 +63,14 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
 
     // Carrega categorias de veículo ativas do tenant logado (sem repetições)
     const fetchCategorias = async () => {
-      let query = supabase
+      if (!tenant?.id) return;
+
+      const { data } = await supabase
         .from('categorias_veiculo')
         .select('*')
-        .eq('ativo', true);
-
-      if (tenant?.id) {
-        query = query.eq('tenant_id', tenant.id);
-      }
-
-      const { data } = await query.order('ordem', { ascending: true });
+        .eq('tenant_id', tenant.id)
+        .eq('ativo', true)
+        .order('ordem', { ascending: true });
 
       if (data && data.length > 0) {
         // Desduplicação defensiva por nome normalizado
@@ -85,7 +83,10 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         }
         const categoriasUnicas = Array.from(mapaUnico.values());
         setCategorias(categoriasUnicas);
-        setCategoriaId(categoriasUnicas[0]?.id || data[0].id);
+        setCategoriaId((prev) => (prev && categoriasUnicas.some((c) => c.id === prev) ? prev : (categoriasUnicas[0]?.id || '')));
+      } else {
+        setCategorias([]);
+        setCategoriaId('');
       }
     };
 
@@ -287,7 +288,13 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
             <div className="flex flex-col gap-1.5">
               <label className="font-sans text-[13px] text-vapor-400 font-medium">Categoria / Porte *</label>
               <div className="flex flex-wrap gap-2">
-                {categorias.map((cat) => {
+                {Array.from(
+                  categorias.reduce((map, cat) => {
+                    const k = cat.nome.trim().toLowerCase();
+                    if (!map.has(k)) map.set(k, cat);
+                    return map;
+                  }, new Map<string, CategoriaVeiculo>()).values()
+                ).map((cat) => {
                   const isSelected = categoriaId === cat.id;
                   return (
                     <button

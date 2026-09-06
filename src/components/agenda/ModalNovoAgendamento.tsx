@@ -45,6 +45,7 @@ export interface ItemSelecionado {
   combo_id?: string | null;
   servico: any;
   comboNome?: string;
+  preco?: number;
 }
 
 interface ModalNovoAgendamentoProps {
@@ -209,6 +210,15 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
     setSelectedHorario(null);
   };
 
+  // Atualizar Preço Customizado do Item
+  const handleAtualizarPrecoItem = (servico_id: string, novoPrecoStr: string) => {
+    const limpo = novoPrecoStr.replace(',', '.');
+    const valorNum = parseFloat(limpo);
+    setSelectedItens((prev) =>
+      prev.map((it) => (it.servico_id === servico_id ? { ...it, preco: isNaN(valorNum) ? 0 : valorNum } : it))
+    );
+  };
+
   // Toggle de serviço individual
   const handleToggleServico = (serv: any) => {
     setSelectedHorario(null);
@@ -216,7 +226,17 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
     if (exists) {
       setSelectedItens((prev) => prev.filter((i) => i.servico_id !== serv.id));
     } else {
-      setSelectedItens((prev) => [...prev, { servico_id: serv.id, combo_id: null, servico: serv }]);
+      const matchPreco = serv.servico_precos?.find((p: any) => p.categoria_id === selectedCategoria?.id);
+      const precoPadrao = matchPreco?.preco_base !== undefined && matchPreco?.preco_base !== null
+        ? Number(matchPreco.preco_base)
+        : Number(serv.preco_base || 0);
+
+      setSelectedItens((prev) => [...prev, {
+        servico_id: serv.id,
+        combo_id: null,
+        servico: serv,
+        preco: precoPadrao
+      }]);
     }
   };
 
@@ -230,16 +250,21 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
       // Remove todos os itens desse combo
       setSelectedItens((prev) => prev.filter((i) => i.combo_id !== combo.id));
     } else {
-      // Adiciona todos os serviços do combo marcados com combo_id
+      const comboPrecoObj = combo.combo_precos?.find((cp: any) => cp.categoria_id === selectedCategoria?.id);
+      const comboPreco = comboPrecoObj?.preco_base !== undefined && comboPrecoObj?.preco_base !== null
+        ? Number(comboPrecoObj.preco_base)
+        : Number(combo.preco_base || 0);
+
       const novosItens = [...selectedItens.filter((i) => !comboServicoIds.includes(i.servico_id))];
-      (combo.combo_servicos || []).forEach((cs: any) => {
+      (combo.combo_servicos || []).forEach((cs: any, idx: number) => {
         const serv = cs.servicos || servicosList.find((s) => s.id === cs.servico_id);
         if (serv) {
           novosItens.push({
             servico_id: serv.id,
             combo_id: combo.id,
             comboNome: combo.nome,
-            servico: serv
+            servico: serv,
+            preco: idx === 0 ? comboPreco : 0
           });
         }
       });
@@ -259,7 +284,9 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
     const dur = matchPreco?.duracao_minutos || item.servico?.duracao_minutos || 60;
     duracaoTotalSum += dur;
 
-    if (item.combo_id) {
+    if (item.preco !== undefined) {
+      precoTotalSum += Number(item.preco);
+    } else if (item.combo_id) {
       if (!combosContabilizados.has(item.combo_id)) {
         combosContabilizados.add(item.combo_id);
         const comboObj = combosList.find((c) => c.id === item.combo_id);
@@ -362,10 +389,15 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
 
     try {
       const startIso = montarTimestampLocal(selectedData, selectedHorario);
-      const payloadItens = selectedItens.map((i) => ({
-        servico_id: i.servico_id,
-        combo_id: i.combo_id || null
-      }));
+      const payloadItens = selectedItens.map((i) => {
+        const matchPreco = i.servico?.servico_precos?.find((p: any) => p.categoria_id === selectedCategoria?.id);
+        const precoPadrao = matchPreco?.preco_base ?? i.servico?.preco_base ?? 0;
+        return {
+          servico_id: i.servico_id,
+          combo_id: i.combo_id || null,
+          preco: i.preco !== undefined ? Number(i.preco) : Number(precoPadrao)
+        };
+      });
 
       const { error } = await supabase.rpc('criar_agendamento', {
         p_cliente: selectedCliente.id,
@@ -594,17 +626,62 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
 
           {/* PASSO 3: SERVIÇOS & COMBOS (MÚLTIPLA ESCOLHA) */}
           {step === 3 && (
-            <SeletorServicos
-              categorias={categoriasList}
-              selectedCategoria={selectedCategoria}
-              onSelectCategoria={handleSelectCategoria}
-              servicos={servicosList}
-              combos={combosList}
-              selectedItens={selectedItens}
-              onToggleServico={handleToggleServico}
-              onToggleCombo={handleToggleCombo}
-              onCloseModal={onClose}
-            />
+            <div className="flex flex-col gap-4">
+              <SeletorServicos
+                categorias={categoriasList}
+                selectedCategoria={selectedCategoria}
+                onSelectCategoria={handleSelectCategoria}
+                servicos={servicosList}
+                combos={combosList}
+                selectedItens={selectedItens}
+                onToggleServico={handleToggleServico}
+                onToggleCombo={handleToggleCombo}
+                onCloseModal={onClose}
+              />
+
+              {/* Lista de Valores Editáveis para Serviços Selecionados */}
+              {selectedItens.length > 0 && (
+                <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between border-b border-graphite-800 pb-2">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                      Valores dos Serviços no Agendamento (Editável)
+                    </span>
+                    <span className="text-[11px] text-vapor-400">
+                      Ajuste o valor combinado
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {selectedItens.map((it) => (
+                      <div
+                        key={it.servico_id}
+                        className="flex items-center justify-between gap-3 p-2.5 bg-graphite-800 rounded border border-graphite-700"
+                      >
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="text-xs font-bold text-vapor-100 truncate">
+                            {it.servico?.nome || 'Serviço'}
+                          </span>
+                          {it.comboNome && (
+                            <span className="text-[10px] text-amber-400 font-mono">
+                              Combo: {it.comboNome}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 w-32 shrink-0">
+                          <span className="text-xs font-mono text-vapor-400">R$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={it.preco !== undefined ? it.preco : ''}
+                            onChange={(e) => handleAtualizarPrecoItem(it.servico_id, e.target.value)}
+                            className="w-full bg-graphite-950 border border-graphite-700 rounded px-2 py-1 text-right font-mono text-xs text-vapor-100 font-bold outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {/* PASSO 4: DATA */}
@@ -779,7 +856,9 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                       const matchPreco = item.servico?.servico_precos?.find((p: any) => p.categoria_id === selectedCategoria?.id);
                       const dur = matchPreco?.duracao_minutos || item.servico?.duracao_minutos || 60;
                       let itemPriceStr = 'A definir';
-                      if (item.servico?.sob_consulta) {
+                      if (item.preco !== undefined && !isNaN(item.preco)) {
+                        itemPriceStr = `R$ ${formatValorMoeda(Number(item.preco))}`;
+                      } else if (item.servico?.sob_consulta) {
                         itemPriceStr = 'Sob consulta';
                       } else if (matchPreco && matchPreco.preco_base !== null && matchPreco.preco_base !== undefined) {
                         itemPriceStr = `R$ ${formatValorMoeda(Number(matchPreco.preco_base))}`;

@@ -199,7 +199,7 @@ export const FormularioCheckin: React.FC = () => {
 
       if (agErr || !agData) throw new Error('Agendamento não encontrado.');
       setAgendamento(agData);
-      setVeiculoCor(agData.veiculo?.cor || '');
+      setVeiculoCor((agData.veiculo as any)?.cor || '');
       setAssinaturaNome((agData.cliente as any)?.nome || '');
 
       // Se o atendimento já foi concluído/finalizado, bloqueia nova vistoria de entrada

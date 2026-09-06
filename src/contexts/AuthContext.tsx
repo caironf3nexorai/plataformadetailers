@@ -89,50 +89,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }));
       }
 
-      // 3. Se for Administrador da Plataforma, também carrega as oficinas da plataforma
-      // Isso permite que o admin acerte oficinas no app sem ser obrigado a cadastrar uma nova oficina pessoal
+      // 3. Suporte a Administrador da Plataforma sem vazar todas as oficinas no seletor da Sidebar:
+      // Se o usuário tiver oficinas próprias, mantém estritamente as suas oficinas.
+      // Se for admin inspecionando uma oficina externa específica (via "Acessar App"), carrega apenas essa oficina.
+      // Se não tiver nenhuma oficina cadastrada, carrega uma como fallback para não forçar /nova-oficina.
       try {
         const { data: isPlatformAdmin } = await supabase.rpc('is_platform_admin');
         if (isPlatformAdmin) {
-          const { data: allTenants } = await supabase.rpc('admin_listar_tenants', {
-            p_busca: null,
-            p_plano: null,
-            p_limite: 100,
-            p_offset: 0,
-          });
+          const storedId = localStorage.getItem('detailers_selected_tenant_id');
 
-          if (allTenants && allTenants.length > 0) {
-            allTenants.forEach((t: any) => {
-              if (!tenantsList.some((ut) => ut.tenant.id === t.id)) {
-                tenantsList.push({
-                  tenant: {
-                    id: t.id,
-                    nome: t.nome,
-                    slug: t.slug,
-                    plano: t.plano,
-                    cidade: t.cidade,
-                    uf: t.uf,
-                    criado_por: currentUser.id,
-                    created_at: t.created_at,
-                    updated_at: t.created_at,
-                  } as Tenant,
-                  membership: {
-                    id: `admin-${t.id}`,
-                    tenant_id: t.id,
-                    user_id: currentUser.id,
-                    email: currentUser.email || '',
-                    role: 'dono',
-                    status: 'ativo',
-                    convite_token: null,
-                    created_at: t.created_at,
-                  } as TenantMember,
-                });
-              }
+          if (storedId && !tenantsList.some((ut) => ut.tenant.id === storedId)) {
+            const { data: targetTenant } = await supabase
+              .from('tenants')
+              .select('*')
+              .eq('id', storedId)
+              .maybeSingle();
+
+            if (targetTenant) {
+              tenantsList.push({
+                tenant: targetTenant as Tenant,
+                membership: {
+                  id: `admin-${targetTenant.id}`,
+                  tenant_id: targetTenant.id,
+                  user_id: currentUser.id,
+                  email: currentUser.email || '',
+                  role: 'dono',
+                  status: 'ativo',
+                  convite_token: null,
+                  created_at: targetTenant.created_at,
+                } as TenantMember,
+              });
+            }
+          } else if (tenantsList.length === 0) {
+            const { data: allTenants } = await supabase.rpc('admin_listar_tenants', {
+              p_busca: null,
+              p_plano: null,
+              p_limite: 1,
+              p_offset: 0,
             });
+
+            if (allTenants && allTenants.length > 0) {
+              const t = allTenants[0];
+              tenantsList.push({
+                tenant: {
+                  id: t.id,
+                  nome: t.nome,
+                  slug: t.slug,
+                  plano: t.plano,
+                  cidade: t.cidade,
+                  uf: t.uf,
+                  criado_por: currentUser.id,
+                  created_at: t.created_at,
+                  updated_at: t.created_at,
+                } as Tenant,
+                membership: {
+                  id: `admin-${t.id}`,
+                  tenant_id: t.id,
+                  user_id: currentUser.id,
+                  email: currentUser.email || '',
+                  role: 'dono',
+                  status: 'ativo',
+                  convite_token: null,
+                  created_at: t.created_at,
+                } as TenantMember,
+              });
+            }
           }
         }
       } catch (errAdmin) {
-        console.warn('[AuthContext] Falha ao carregar oficinas para platform admin:', errAdmin);
+        console.warn('[AuthContext] Falha ao verificar suporte a platform admin:', errAdmin);
       }
 
       if (tenantsList.length > 0) {

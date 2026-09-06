@@ -108,7 +108,7 @@ export const AbaIndiqueEGanhe: React.FC = () => {
 
   const handleCompartilharWhatsApp = () => {
     const texto = encodeURIComponent(
-      `Olá! Estou usando a NuvemWash na minha estética automotiva e recomendo muito! Cadastre-se pelo meu link exclusivo e ganhe 15 dias extras de bônus além da degustação grátis:\n\n${linkConvite}`
+      `Olá! Estou usando a NuvemWash na minha estética automotiva e recomendo muito! Cadastre-se pelo meu link exclusivo e ganhe 15 dias grátis para experimentar o Plano Pro:\n\n${linkConvite}`
     );
     window.open(`https://api.whatsapp.com/send?text=${texto}`, '_blank');
   };
@@ -134,7 +134,7 @@ export const AbaIndiqueEGanhe: React.FC = () => {
               Indique Amigos & Ganhe Dias Grátis
             </h2>
             <p className="font-sans text-xs sm:text-sm text-vapor-400 leading-relaxed">
-              Seu amigo ganha <strong>14 dias grátis</strong> ao se cadastrar. Quando ele <strong>assinar um plano pago</strong>, você ganha <strong>+15 dias de uso Pro</strong> e avança no Quadro de Metas!
+              Seu amigo ganha <strong>15 dias grátis</strong> para testar o Plano Pro ao se cadastrar. Quando ele <strong>assinar um plano pago</strong>, você ganha <strong>+15 dias de uso Pro</strong> e avança no Quadro de Metas!
             </p>
           </div>
         </div>
@@ -414,10 +414,10 @@ export const AbaIndiqueEGanhe: React.FC = () => {
           <div className="p-4 rounded-xl bg-graphite-900/60 border border-graphite-700/60 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
               <Gift size={16} />
-              <span>1. Convite com Degustação Grátis</span>
+              <span>1. Convite de 15 Dias no Plano Pro</span>
             </div>
             <p className="text-xs text-vapor-400 leading-relaxed">
-              Sua oficina amiga se cadastra pelo seu link exclusivo e ganha <strong>14 dias grátis</strong> de degustação Pro para experimentar todos os recursos da plataforma.
+              Sua oficina amiga se cadastra pelo seu link exclusivo e ganha <strong>15 dias grátis</strong> de degustação para experimentar todos os recursos do Plano Pro da plataforma.
             </p>
           </div>
 

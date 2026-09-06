@@ -534,6 +534,7 @@ export const Orcamentos: React.FC = () => {
 
                     <ChevronRight size={18} className="text-vapor-500 group-hover:text-amber-400 transition-colors" />
                   </div>
+                </div>
               </Card>
             );
           })}

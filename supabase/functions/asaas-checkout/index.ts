@@ -76,8 +76,16 @@ serve(async (req) => {
     const { data: tenant } = await supabase.from('tenants').select('*').eq('id', tenantId).single();
     const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
-    const valorReais = plano === 'pro' ? 67.0 : 147.0;
-    const valorCentavos = plano === 'pro' ? 6700 : 14700;
+    // Buscar valor real configurado na tabela public.plans
+    const { data: planRow } = await supabase
+      .from('plans')
+      .select('preco_centavos, nome')
+      .eq('codigo', plano)
+      .maybeSingle();
+
+    const precoCentavos = planRow?.preco_centavos ?? (plano === 'pro' ? 6700 : 14700);
+    const valorReais = Number((precoCentavos / 100).toFixed(2));
+    const valorCentavos = precoCentavos;
 
     // Buscar se a oficina já possui registro em assinaturas
     const { data: assExistente } = await supabase
@@ -126,6 +134,7 @@ serve(async (req) => {
         billingType,
         description: `Plataforma Detailers - Plano ${plano.toUpperCase()} (${tenant?.nome || ''})`,
         cycle: 'MONTHLY',
+        updatePendingPayments: true,
       };
 
       const resSub = await fetch(`${ASAAS_API_URL}/subscriptions/${assExistente.asaas_subscription_id}`, {

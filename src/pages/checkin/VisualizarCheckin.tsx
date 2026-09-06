@@ -31,6 +31,7 @@ import {
   X,
   Pencil,
   Play,
+  CheckCircle2,
 } from 'lucide-react';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
 
@@ -45,10 +46,11 @@ export const VisualizarCheckin: React.FC = () => {
 
   const [checkin, setCheckin] = useState<Checkin | null>(null);
   const [agendamento, setAgendamento] = useState<any>(null);
+  const [execucao, setExecucao] = useState<any | null>(null);
   const [avarias, setAvarias] = useState<CheckinAvaria[]>([]);
   const [fotos, setFotos] = useState<CheckinFoto[]>([]);
   const [signedPhotoUrls, setSignedPhotoUrls] = useState<Record<string, string>>({});
-  const [assinaturaSignedUrl, setAssinaturaSignedUrl] = useState<string>('');
+  const [assinaturaSignedUrl, setAssinaturaSignedUrl] = useState<string | null>(null);
   const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; data?: string } | null>(null);
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -179,6 +181,15 @@ export const VisualizarCheckin: React.FC = () => {
         .single();
 
       setAgendamento(agData);
+
+      // 2.1 Execucao relacionada
+      const { data: execData } = await supabase
+        .from('execucoes')
+        .select('id, status')
+        .eq('agendamento_id', chkData.agendamento_id)
+        .maybeSingle();
+
+      setExecucao(execData || null);
 
       // 3. Avarias
       const { data: avData } = await supabase
@@ -374,23 +385,45 @@ export const VisualizarCheckin: React.FC = () => {
 
         {/* 3 Ações na Ordem Estrita de Uso */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          {/* 1. Iniciar serviço agora — ação principal (apenas se não concluído/cancelado) */}
-          {agendamento.status !== 'concluido' && agendamento.status !== 'cancelado' && (
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleIniciarServicoAgora}
-              disabled={startingExec}
-              className="min-h-[56px] px-6 text-[15px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
-            >
-              {startingExec ? (
-                <div className="w-5 h-5 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Play size={20} className="fill-current" />
-              )}
-              <span>Iniciar serviço agora</span>
-            </Button>
-          )}
+          {/* 1. Iniciar serviço agora — ação principal (apenas se não concluído/cancelado/finalizado) */}
+          {(() => {
+            const isConcluidoOuFinalizado =
+              agendamento.status === 'concluido' ||
+              agendamento.status === 'finalizado' ||
+              agendamento.status === 'entregue' ||
+              agendamento.status === 'cancelado' ||
+              execucao?.status === 'finalizado';
+
+            if (!isConcluidoOuFinalizado) {
+              return (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleIniciarServicoAgora}
+                  disabled={startingExec}
+                  className="min-h-[56px] px-6 text-[15px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+                >
+                  {startingExec ? (
+                    <div className="w-5 h-5 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Play size={20} className="fill-current" />
+                  )}
+                  <span>Iniciar serviço agora</span>
+                </Button>
+              );
+            }
+
+            if (agendamento.status !== 'cancelado') {
+              return (
+                <div className="min-h-[56px] px-4 py-2.5 bg-mint-500/10 border border-mint-500/30 rounded-lg flex items-center gap-2 text-mint-400 font-sans text-[13px] font-semibold">
+                  <CheckCircle2 size={18} />
+                  <span>Atendimento Concluído</span>
+                </div>
+              );
+            }
+
+            return null;
+          })()}
 
           {/* 2. Enviar/Baixar PDF ao cliente — secundária */}
           <Button

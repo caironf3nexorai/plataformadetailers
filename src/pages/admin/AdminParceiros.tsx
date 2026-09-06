@@ -147,11 +147,13 @@ export const AdminParceiros: React.FC = () => {
         setComissoes(dataC as any[]);
       }
 
-      // 3. Carregar Oficinas (Tenants) com vínculo de parceiro
-      const { data: dataTenants, error: errT } = await supabase
-        .from('tenants')
-        .select('id, nome, cidade, uf')
-        .order('nome', { ascending: true });
+      // 3. Carregar Oficinas (Tenants) com vínculo de parceiro via RPC administrativa
+      const { data: dataTenants, error: errT } = await supabase.rpc('admin_listar_tenants', {
+        p_busca: null,
+        p_plano: null,
+        p_limite: 500,
+        p_offset: 0,
+      });
 
       if (errT) throw errT;
 

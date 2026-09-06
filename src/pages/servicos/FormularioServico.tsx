@@ -452,13 +452,13 @@ export const FormularioServico: React.FC = () => {
             {/* Tom do Chip */}
             <div className="flex flex-col gap-1.5">
               <label className="font-sans text-[13px] text-vapor-400 font-medium">Cor de Destaque (Tom do Chip)</label>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 {(['vapor', 'amber', 'glass', 'mint'] as TomChip[]).map((t) => (
                   <button
                     key={t}
                     type="button"
                     onClick={() => setTom(t)}
-                    className={`flex-1 py-3 px-2.5 rounded border font-display text-[12px] uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
+                    className={`py-3 px-2.5 rounded border font-display text-[12px] uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                       tom === t
                         ? 'border-amber-500 bg-graphite-900 text-amber-500 font-bold'
                         : 'border-graphite-600 bg-graphite-900/40 text-vapor-400 hover:text-vapor-200'

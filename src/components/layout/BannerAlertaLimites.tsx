@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePlano } from '../../hooks/usePlano';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { AlertTriangle, Sparkles, X, ArrowUpRight } from 'lucide-react';
 
@@ -14,21 +15,24 @@ interface AlertaItem {
 }
 
 export const BannerAlertaLimites: React.FC = () => {
+  const { tenant } = useAuth();
   const { planoAtual, nomePlano, verificarUso } = usePlano();
   const [alertas, setAlertas] = useState<AlertaItem[]>([]);
   const [dismissed, setDismissed] = useState(false);
 
   const checarConsumo = async () => {
     try {
+      if (!tenant?.id) return;
+
       // Contadores atuais da oficina
       const [
         { count: countClientes },
         { count: countAgendamentos },
         { count: countExecucoes },
       ] = await Promise.all([
-        supabase.from('clientes').select('*', { count: 'exact', head: true }),
-        supabase.from('orders').select('*', { count: 'exact', head: true }),
-        supabase.from('execucoes').select('*', { count: 'exact', head: true }),
+        supabase.from('clientes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+        supabase.from('agendamentos').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+        supabase.from('execucoes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
       ]);
 
       const lista: AlertaItem[] = [];
@@ -80,7 +84,7 @@ export const BannerAlertaLimites: React.FC = () => {
 
   useEffect(() => {
     checarConsumo();
-  }, [planoAtual]);
+  }, [planoAtual, tenant?.id]);
 
   if (dismissed || alertas.length === 0) return null;
 
