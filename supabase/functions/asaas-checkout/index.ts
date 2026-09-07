@@ -38,7 +38,7 @@ serve(async (req) => {
       });
     }
 
-    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo } = await req.json();
+    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj } = await req.json();
 
     if (!['pro', 'studio'].includes(plano)) {
       return new Response(JSON.stringify({ error: 'Plano inválido para checkout' }), {
@@ -96,28 +96,110 @@ serve(async (req) => {
 
     let asaasCustomerId = assExistente?.asaas_customer_id;
 
-    // 1. Criar cliente no Asaas se não existir
+    // 1. Criar ou Obter cliente no Asaas
     if (!asaasCustomerId) {
-      const rawPhone = String(tenant?.telefone || profile?.telefone || '').replace(/\D/g, '');
-      const rawCpfCnpj = String(profile?.cpf || tenant?.documento || tenant?.cnpj || '').replace(/\D/g, '');
+      // 1.1 Verificar se já existe cliente cadastrado no Asaas para este tenant
+      try {
+        const checkRes = await fetch(`${ASAAS_API_URL}/customers?externalReference=${tenantId}`, {
+          headers: { 'access_token': ASAAS_API_KEY },
+        });
+        if (checkRes.ok) {
+          const checkData = await checkRes.json();
+          if (checkData?.data && checkData.data.length > 0) {
+            asaasCustomerId = checkData.data[0].id;
+          }
+        }
+      } catch (errCheck) {
+        console.warn('Aviso ao consultar cliente existente por externalReference:', errCheck);
+      }
+    }
+
+    if (!asaasCustomerId && user.email) {
+      // 1.2 Verificar se já existe cliente por email
+      try {
+        const checkEmailRes = await fetch(`${ASAAS_API_URL}/customers?email=${encodeURIComponent(user.email)}`, {
+          headers: { 'access_token': ASAAS_API_KEY },
+        });
+        if (checkEmailRes.ok) {
+          const checkEmailData = await checkEmailRes.json();
+          if (checkEmailData?.data && checkEmailData.data.length > 0) {
+            asaasCustomerId = checkEmailData.data[0].id;
+          }
+        }
+      } catch (errEmail) {
+        console.warn('Aviso ao consultar cliente existente por email:', errEmail);
+      }
+    }
+
+    if (!asaasCustomerId) {
+      // 1.3 Validador estrito de telefone brasileiro
+      const getValidPhone = (inputPhone: string): { phone?: string; mobilePhone?: string } => {
+        if (!inputPhone) return {};
+        const clean = String(inputPhone).replace(/\D/g, '');
+        if (clean.length !== 10 && clean.length !== 11) return {};
+
+        const ddd = parseInt(clean.substring(0, 2), 10);
+        const validDdds = [
+          11, 12, 13, 14, 15, 16, 17, 18, 19,
+          21, 22, 24, 27, 28,
+          31, 32, 33, 34, 35, 37, 38,
+          41, 42, 43, 44, 45, 46, 47, 48, 49,
+          51, 53, 54, 55,
+          61, 62, 63, 64, 65, 66, 67, 68, 69,
+          71, 73, 74, 75, 77, 79,
+          81, 82, 83, 84, 85, 86, 87, 88, 89,
+          91, 92, 93, 94, 95, 96, 97, 98, 99,
+        ];
+        if (!validDdds.includes(ddd)) return {};
+
+        const numberPart = clean.substring(2);
+        // Rejeitar sequências ou repetições óbvias (ex: 999999999, 111111111, 000000000)
+        if (/^(\d)\1+$/.test(numberPart)) return {};
+        if (/^(\d)\1+$/.test(clean)) return {};
+        if (numberPart === '123456789' || numberPart === '987654321' || numberPart === '12345678') return {};
+
+        // Celular: 11 dígitos, inicia com 9 e segundo dígito não é 0 ou 1
+        if (clean.length === 11) {
+          if (numberPart[0] !== '9') return {};
+          if (['0', '1'].includes(numberPart[1])) return {};
+          return { mobilePhone: clean };
+        }
+
+        // Fixo: 10 dígitos, primeiro dígito do número é 2, 3, 4 ou 5
+        if (clean.length === 10) {
+          if (!['2', '3', '4', '5'].includes(numberPart[0])) return {};
+          return { phone: clean };
+        }
+
+        return {};
+      };
+
+      const getValidCpfCnpj = (inputDoc: string): string | undefined => {
+        if (!inputDoc) return undefined;
+        const clean = String(inputDoc).replace(/\D/g, '');
+        if (clean.length !== 11 && clean.length !== 14) return undefined;
+        if (/^(\d)\1+$/.test(clean)) return undefined;
+        return clean;
+      };
+
+      const candidatePhone = reqTelefone || tenant?.telefone || profile?.telefone || '';
+      const candidateDoc = reqCpfCnpj || profile?.cpf || tenant?.documento || tenant?.cnpj || '';
+
+      const phoneFields = getValidPhone(candidatePhone);
+      const validDoc = getValidCpfCnpj(candidateDoc);
 
       const customerPayload: Record<string, any> = {
         name: tenant?.nome || profile?.nome || 'Oficina Detailer',
         email: user.email,
         externalReference: tenantId,
+        ...phoneFields,
       };
 
-      if (rawPhone.length === 11) {
-        customerPayload.mobilePhone = rawPhone;
-      } else if (rawPhone.length === 10) {
-        customerPayload.phone = rawPhone;
+      if (validDoc) {
+        customerPayload.cpfCnpj = validDoc;
       }
 
-      if (rawCpfCnpj.length === 11 || rawCpfCnpj.length === 14) {
-        customerPayload.cpfCnpj = rawCpfCnpj;
-      }
-
-      const resCustomer = await fetch(`${ASAAS_API_URL}/customers`, {
+      let resCustomer = await fetch(`${ASAAS_API_URL}/customers`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +208,36 @@ serve(async (req) => {
         body: JSON.stringify(customerPayload),
       });
 
-      const customerData = await resCustomer.json();
+      let customerData = await resCustomer.json();
+
+      // AUTO-RECUPERAÇÃO: se o Asaas recusar telefone ou documento, reenviar sem os campos opcionais que causaram o erro
+      if (!resCustomer.ok && customerData?.errors && Array.isArray(customerData.errors)) {
+        const errorCodes = customerData.errors.map((e: any) => String(e.code || ''));
+        const hasPhoneError = errorCodes.some((c: string) => c.includes('phone') || c.includes('telefone'));
+        const hasDocError = errorCodes.some((c: string) => c.includes('cpf') || c.includes('cnpj'));
+
+        if (hasPhoneError || hasDocError) {
+          console.warn('[asaas-checkout] Retentando criar cliente sem campos opcionais rejeitados:', customerData.errors);
+          if (hasPhoneError) {
+            delete customerPayload.mobilePhone;
+            delete customerPayload.phone;
+          }
+          if (hasDocError) {
+            delete customerPayload.cpfCnpj;
+          }
+
+          resCustomer = await fetch(`${ASAAS_API_URL}/customers`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'access_token': ASAAS_API_KEY,
+            },
+            body: JSON.stringify(customerPayload),
+          });
+          customerData = await resCustomer.json();
+        }
+      }
+
       if (!resCustomer.ok) {
         throw new Error(`Erro ao criar cliente no Asaas: ${JSON.stringify(customerData)}`);
       }
@@ -159,7 +270,40 @@ serve(async (req) => {
 
       subscriptionData = await resSub.json();
       if (!resSub.ok) {
-        throw new Error(`Erro ao atualizar assinatura no Asaas: ${JSON.stringify(subscriptionData)}`);
+        // Se a assinatura antiga não existir mais no Asaas (404 / not_found), criar uma nova
+        if (resSub.status === 404 || subscriptionData?.errors?.[0]?.code === 'not_found') {
+          console.warn('Assinatura anterior não encontrada no Asaas. Criando nova assinatura...');
+          const subPayload: any = {
+            customer: asaasCustomerId,
+            billingType,
+            value: valorReais,
+            nextDueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+            cycle: 'MONTHLY',
+            description: `Plataforma Detailers - Plano ${plano.toUpperCase()} (${tenant?.nome || ''})`,
+            externalReference: tenantId,
+          };
+
+          if (forma_pagamento === 'cartao' && creditCard && creditCardHolderInfo) {
+            subPayload.creditCard = creditCard;
+            subPayload.creditCardHolderInfo = creditCardHolderInfo;
+          }
+
+          const resSubNew = await fetch(`${ASAAS_API_URL}/subscriptions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'access_token': ASAAS_API_KEY,
+            },
+            body: JSON.stringify(subPayload),
+          });
+
+          subscriptionData = await resSubNew.json();
+          if (!resSubNew.ok) {
+            throw new Error(`Erro ao criar assinatura no Asaas: ${JSON.stringify(subscriptionData)}`);
+          }
+        } else {
+          throw new Error(`Erro ao atualizar assinatura no Asaas: ${JSON.stringify(subscriptionData)}`);
+        }
       }
     } else {
       // Criar nova assinatura no Asaas
@@ -206,7 +350,27 @@ serve(async (req) => {
     });
 
     // 4. Salvar/Atualizar tabela local de assinaturas
-    const paymentUrl = subscriptionData.bankInvoiceUrl || subscriptionData.invoiceUrl || '';
+    let paymentUrl = subscriptionData.bankInvoiceUrl || subscriptionData.invoiceUrl || subscriptionData.paymentLink || '';
+
+    // Se a assinatura não trouxe a URL direta da fatura, buscar a primeira cobrança pendente
+    if (!paymentUrl && subscriptionData?.id) {
+      try {
+        const resPayments = await fetch(`${ASAAS_API_URL}/subscriptions/${subscriptionData.id}/payments`, {
+          headers: {
+            'access_token': ASAAS_API_KEY,
+          },
+        });
+        if (resPayments.ok) {
+          const paymentsData = await resPayments.json();
+          const firstPay = paymentsData?.data?.[0];
+          if (firstPay) {
+            paymentUrl = firstPay.invoiceUrl || firstPay.bankInvoiceUrl || '';
+          }
+        }
+      } catch (errPay) {
+        console.warn('Aviso ao consultar fatura da assinatura:', errPay);
+      }
+    }
 
     await supabase.from('assinaturas').upsert({
       tenant_id: tenantId,

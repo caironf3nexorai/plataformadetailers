@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { formatTelefone } from '../../utils/formatters';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -25,6 +26,35 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [telefone, setTelefone] = useState('');
+  const [cpfCnpj, setCpfCnpj] = useState('');
+
+  // Carregar telefone/documento do usuário/oficina ao abrir
+  useEffect(() => {
+    if (!isOpen) return;
+    const carregarDadosUsuario = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('telefone, cpf')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profile?.telefone) {
+          setTelefone(formatTelefone(profile.telefone));
+        }
+        if (profile?.cpf) {
+          setCpfCnpj(profile.cpf);
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar dados do assinante:', e);
+      }
+    };
+    carregarDadosUsuario();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -57,6 +87,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           plano: planoCodigo,
           forma_pagamento: formaPagamento,
           term_version: 'v1.0-2026-08',
+          telefone: telefone ? telefone.replace(/\D/g, '') : undefined,
+          cpfCnpj: cpfCnpj ? cpfCnpj.replace(/\D/g, '') : undefined,
         }),
       });
 
@@ -161,6 +193,34 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     <QrCode size={18} />
                     PIX Recorrente
                   </button>
+                </div>
+              </div>
+
+              {/* Dados do Assinante para NF / Asaas */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-mono font-bold text-vapor-300 uppercase tracking-wider">
+                    WhatsApp (Opcional)
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="(00) 00000-0000"
+                    value={telefone}
+                    onChange={(e) => setTelefone(formatTelefone(e.target.value))}
+                    className="w-full px-3 py-2.5 rounded-xl bg-graphite-950 border border-graphite-700 text-vapor-100 text-xs focus:outline-none focus:border-amber-500 font-sans"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-mono font-bold text-vapor-300 uppercase tracking-wider">
+                    CPF ou CNPJ (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="000.000.000-00"
+                    value={cpfCnpj}
+                    onChange={(e) => setCpfCnpj(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-graphite-950 border border-graphite-700 text-vapor-100 text-xs focus:outline-none focus:border-amber-500 font-sans"
+                  />
                 </div>
               </div>
 
