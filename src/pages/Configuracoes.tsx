@@ -54,7 +54,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       navigate('/arquivos-digitais', { replace: true });
       return;
     }
-    if (abaInicial) {
+    if (abaParam === 'plano' || abaParam === 'assinatura') {
+      setActiveTab('plano');
+    } else if (abaInicial) {
       setActiveTab(abaInicial);
     }
   }, [location.pathname, location.search, abaInicial, navigate]);

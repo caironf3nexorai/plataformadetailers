@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -19,6 +19,7 @@ import {
   Building2,
   X,
   Award,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
@@ -137,6 +138,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
       titulo: 'GESTÃO & SISTEMA',
       itens: [
         { path: '/configuracoes', label: 'Minha Oficina', icon: Building2, visible: true },
+        { path: '/planos', label: 'Planos & Assinatura', icon: Sparkles, visible: !isOperador },
       ],
     },
   ];
@@ -198,7 +200,25 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
 
           {/* Badges de Plano e Cargo */}
           <div className="flex items-center justify-between gap-2">
-            <Badge tone="amber">Plano {nomePlano}</Badge>
+            <Link
+              to="/planos"
+              onClick={onClose}
+              title="Clique para ver os planos e fazer upgrade"
+              className="group inline-flex items-center focus:outline-none"
+            >
+              <Badge
+                tone="amber"
+                className="cursor-pointer transition-all duration-200 group-hover:bg-amber-500/25 group-hover:border-amber-500/60 group-hover:scale-[1.03] group-active:scale-[0.98] flex items-center gap-1.5 shadow-sm"
+              >
+                <span>Plano {nomePlano}</span>
+                {nomePlano?.toLowerCase() === 'free' && (
+                  <span className="font-mono text-[9px] bg-amber-500 text-graphite-950 font-extrabold px-1 py-0.2 rounded uppercase tracking-tighter">
+                    UPGRADE
+                  </span>
+                )}
+                <Sparkles size={11} className="text-amber-400 opacity-70 group-hover:opacity-100 transition-opacity" />
+              </Badge>
+            </Link>
             {membership && (
               <span className="font-mono text-[10px] text-amber-400/90 font-bold uppercase tracking-wider px-2 py-0.5 bg-graphite-800 border border-graphite-700 rounded">
                 {membership.role}
