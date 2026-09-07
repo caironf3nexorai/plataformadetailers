@@ -18,6 +18,17 @@ export const AbaAssinatura: React.FC = () => {
   const [showConfirmCancelar, setShowConfirmCancelar] = useState(false);
   const [assinatura, setAssinatura] = useState<any>(null);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
+    free: 0,
+    pro: 6700,
+    studio: 14700,
+  });
+
+  const formatarPrecoMensal = (centavos: number) => {
+    const reais = centavos / 100;
+    return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
   const [selectedPlano, setSelectedPlano] = useState<{
     codigo: 'pro' | 'studio';
     nome: string;
@@ -34,6 +45,18 @@ export const AbaAssinatura: React.FC = () => {
       const { data, error } = await supabase.rpc('obter_assinatura_tenant');
       if (error) throw error;
       setAssinatura(data);
+
+      // Carrega preços atualizados dos planos
+      const { data: plansData } = await supabase
+        .from('plans')
+        .select('codigo, preco_centavos');
+      if (plansData && plansData.length > 0) {
+        const mapa: Record<string, number> = {};
+        plansData.forEach((p) => {
+          mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+        });
+        setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+      }
     } catch (err: any) {
       console.error('Erro ao carregar assinatura:', err);
     } finally {
@@ -131,7 +154,9 @@ export const AbaAssinatura: React.FC = () => {
               {planoSigla}
             </span>
             <span className="text-xs text-vapor-400">
-              {planoSigla === 'FREE' ? 'R$ 0,00 / mês' : planoSigla === 'PRO' ? 'R$ 67,00 / mês' : 'R$ 147,00 / mês'}
+              {planoSigla === 'FREE'
+                ? 'R$ 0,00 / mês'
+                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? (planoSigla === 'PRO' ? 6700 : 14700))} / mês`}
             </span>
           </div>
 
@@ -166,7 +191,8 @@ export const AbaAssinatura: React.FC = () => {
 
             <Button
               onClick={() => {
-                setSelectedPlano({ codigo: 'pro', nome: 'Pro', preco: 'R$ 67,00' });
+                const precoPro = formatarPrecoMensal(precosCentavos['pro'] ?? 6700);
+                setSelectedPlano({ codigo: 'pro', nome: 'Pro', preco: precoPro });
                 setCheckoutModalOpen(true);
               }}
               variant="primary"

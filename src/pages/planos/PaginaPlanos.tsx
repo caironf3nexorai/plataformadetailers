@@ -1,15 +1,67 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Check, X, Sparkles, ShieldCheck, Zap, CreditCard } from 'lucide-react';
 import { usePermissao } from '../../hooks/usePermissao';
 import { useAuth } from '../../contexts/AuthContext';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
+import { supabase } from '../../lib/supabase';
 
 export const PaginaPlanos: React.FC = () => {
   const { isOperador } = usePermissao();
   const { tenant } = useAuth();
 
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
+    free: 0,
+    pro: 6700,
+    studio: 14700,
+  });
+
+  const formatarPrecoCard = (centavos: number) => {
+    const reais = centavos / 100;
+    if (reais === 0) return 'R$ 0';
+    if (reais % 1 === 0) return `R$ ${reais}`;
+    return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const formatarPrecoMensal = (centavos: number) => {
+    const reais = centavos / 100;
+    return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  useEffect(() => {
+    async function carregarPrecos() {
+      try {
+        // 1. Tenta carregar pela RPC obter_planos_publicos se disponível
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('obter_planos_publicos');
+        if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+          const mapa: Record<string, number> = {};
+          rpcData.forEach((p: any) => {
+            mapa[String(p.codigo).toLowerCase()] = p.preco_centavos;
+          });
+          setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+          return;
+        }
+
+        // 2. Fallback: select direto na tabela plans
+        const { data: plansData } = await supabase
+          .from('plans')
+          .select('codigo, preco_centavos, ativo');
+        if (plansData && plansData.length > 0) {
+          const mapa: Record<string, number> = {};
+          plansData.forEach((p) => {
+            mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+          });
+          setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+        }
+      } catch (err) {
+        console.warn('[PaginaPlanos] Erro ao carregar preços dinâmicos:', err);
+      }
+    }
+
+    carregarPrecos();
+  }, []);
+
   const [selectedPlano, setSelectedPlano] = useState<{
     codigo: 'pro' | 'studio';
     nome: string;
@@ -17,7 +69,7 @@ export const PaginaPlanos: React.FC = () => {
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: 'R$ 67',
+    preco: formatarPrecoMensal(precosCentavos['pro'] ?? 6700),
   });
 
   // Restrição estrita: Operadores não têm acesso à página de planos
@@ -33,8 +85,8 @@ export const PaginaPlanos: React.FC = () => {
       codigo: 'free',
       nome: 'Free',
       descricao: 'Para quem está começando e quer substituir o caderno com segurança.',
-      preco: 'R$ 0',
-      precoMensal: 'R$ 0,00',
+      preco: formatarPrecoCard(precosCentavos['free'] ?? 0),
+      precoMensal: formatarPrecoMensal(precosCentavos['free'] ?? 0),
       periodo: '/mês',
       destaque: false,
       limites: [
@@ -62,8 +114,8 @@ export const PaginaPlanos: React.FC = () => {
       codigo: 'pro',
       nome: 'Pro',
       descricao: 'Ideal para oficinas em crescimento que buscam mais clientes e lucro real.',
-      preco: 'R$ 67',
-      precoMensal: 'R$ 67,00',
+      preco: formatarPrecoCard(precosCentavos['pro'] ?? 6700),
+      precoMensal: formatarPrecoMensal(precosCentavos['pro'] ?? 6700),
       periodo: '/mês',
       destaque: true,
       limites: [
@@ -91,8 +143,8 @@ export const PaginaPlanos: React.FC = () => {
       codigo: 'studio',
       nome: 'Studio',
       descricao: 'Para operações consolidadas e equipes de alta performance.',
-      preco: 'R$ 147',
-      precoMensal: 'R$ 147,00',
+      preco: formatarPrecoCard(precosCentavos['studio'] ?? 14700),
+      precoMensal: formatarPrecoMensal(precosCentavos['studio'] ?? 14700),
       periodo: '/mês',
       destaque: false,
       limites: [
