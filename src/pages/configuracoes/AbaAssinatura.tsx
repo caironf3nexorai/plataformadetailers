@@ -5,12 +5,14 @@ import { Button } from '../../components/ui/Button';
 import { ShieldCheck, Calendar, CreditCard, AlertTriangle, ExternalLink, RefreshCw, XCircle, CheckCircle2, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { useNavigate } from 'react-router-dom';
 
 export const AbaAssinatura: React.FC = () => {
   const { showSuccess, showError } = useToast();
+  const { refetchTenantData } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -355,9 +357,10 @@ export const AbaAssinatura: React.FC = () => {
         planoCodigo={selectedPlano.codigo}
         planoNome={selectedPlano.nome}
         precoMensal={selectedPlano.preco}
-        onSuccess={() => {
+        onSuccess={async () => {
           setCheckoutModalOpen(false);
-          carregarAssinatura();
+          await carregarAssinatura();
+          await refetchTenantData();
         }}
       />
 

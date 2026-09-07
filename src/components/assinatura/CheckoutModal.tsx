@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatTelefone, formatCpfCnpj } from '../../utils/formatters';
 
 interface CheckoutModalProps {
@@ -22,6 +23,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onSuccess,
 }) => {
   const { showSuccess, showError } = useToast();
+  const { tenant, refetchTenantData } = useAuth();
   const [formaPagamento, setFormaPagamento] = useState<'cartao' | 'pix'>('cartao');
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,10 +32,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [copiado, setCopiado] = useState(false);
   const [telefone, setTelefone] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
+  const [pagamentoConfirmado, setPagamentoConfirmado] = useState(false);
 
   // Carregar telefone/documento do usuário/oficina ao abrir
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setPagamentoConfirmado(false);
+      setPixData(null);
+      setPaymentUrl(null);
+      setLoading(false);
+      return;
+    }
+
     const carregarDadosUsuario = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -58,6 +68,42 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     carregarDadosUsuario();
   }, [isOpen]);
 
+  // Polling em tempo real: detecta confirmação do pagamento no banco via webhook do Asaas
+  useEffect(() => {
+    if (!isOpen || (!pixData && !paymentUrl) || pagamentoConfirmado || !tenant?.id) {
+      return;
+    }
+
+    const intervalId = setInterval(async () => {
+      try {
+        const { data: assin } = await supabase
+          .from('assinaturas')
+          .select('status, plano')
+          .eq('tenant_id', tenant.id)
+          .maybeSingle();
+
+        const { data: ten } = await supabase
+          .from('tenants')
+          .select('plano')
+          .eq('id', tenant.id)
+          .maybeSingle();
+
+        const assinaturaAtiva = assin?.status === 'ativa' && assin?.plano === planoCodigo;
+        const tenantUpgrade = ten?.plano === planoCodigo;
+
+        if (assinaturaAtiva || tenantUpgrade) {
+          setPagamentoConfirmado(true);
+          await refetchTenantData();
+          showSuccess(`🎉 Pagamento confirmado! Seu plano ${planoNome} foi ativado com sucesso!`);
+        }
+      } catch (err) {
+        console.warn('Erro ao verificar status do pagamento:', err);
+      }
+    }, 3500);
+
+    return () => clearInterval(intervalId);
+  }, [isOpen, pixData, paymentUrl, pagamentoConfirmado, tenant?.id, planoCodigo, planoNome, refetchTenantData, showSuccess]);
+
   if (!isOpen) return null;
 
   const copiarPix = () => {
@@ -69,8 +115,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
-  const handleFechar = () => {
-    if (pixData || paymentUrl) {
+  const handleFechar = async () => {
+    if (pixData || paymentUrl || pagamentoConfirmado) {
+      try {
+        await refetchTenantData();
+      } catch (e) {
+        console.warn('Erro ao atualizar dados do tenant:', e);
+      }
       if (onSuccess) onSuccess();
     }
     onClose();
@@ -169,7 +220,44 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         {/* Corpo do Modal */}
         <div className="p-6 flex flex-col gap-6 overflow-y-auto">
-          {pixData || paymentUrl ? (
+          {pagamentoConfirmado ? (
+            <div className="flex flex-col items-center text-center gap-5 py-6">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-500 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/20">
+                <CheckCircle2 size={36} className="animate-bounce" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <h4 className="text-xl font-black text-vapor-100 uppercase tracking-wide">
+                  🎉 Pagamento Confirmado!
+                </h4>
+                <p className="text-sm text-vapor-300 max-w-sm">
+                  Seu upgrade para o <strong>Plano {planoNome}</strong> foi concluído com sucesso. Todos os novos recursos já foram liberados para sua oficina!
+                </p>
+              </div>
+
+              <div className="w-full bg-graphite-950 p-4 rounded-xl border border-emerald-500/30 flex items-center justify-between text-left">
+                <div>
+                  <span className="text-xs text-vapor-400 font-mono block">Status da Assinatura</span>
+                  <span className="text-sm font-bold text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    Plano {planoNome} Ativo
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs text-vapor-400 font-mono block">Recorrência</span>
+                  <span className="text-sm font-bold text-vapor-200">{precoMensal} / mês</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleFechar}
+                className="w-full py-3.5 px-6 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-xl shadow-emerald-500/30"
+              >
+                Acessar Plataforma Detailers
+              </button>
+            </div>
+          ) : pixData || paymentUrl ? (
             <div className="flex flex-col items-center text-center gap-5 py-2">
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
                 <CheckCircle2 size={28} />
@@ -184,6 +272,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     ? `Escaneie o QR Code abaixo ou use o Pix Copia e Cola para pagar ${precoMensal}.`
                     : 'Sua assinatura foi registrada. Clique no botão abaixo para concluir o pagamento ou cadastrar o cartão no ambiente seguro do Asaas.'}
                 </p>
+              </div>
+
+              {/* Status de escuta em tempo real */}
+              <div className="flex items-center justify-center gap-2 text-xs text-amber-400/90 font-mono bg-amber-500/10 border border-amber-500/20 py-2.5 px-3 rounded-xl w-full">
+                <Loader2 size={14} className="animate-spin text-amber-400 shrink-0" />
+                <span>Aguardando pagamento... A ativação é automática na hora!</span>
               </div>
 
               {pixData?.encodedImage && (

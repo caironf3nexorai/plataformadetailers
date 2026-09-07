@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase';
 
 export const PaginaPlanos: React.FC = () => {
   const { isOperador } = usePermissao();
-  const { tenant } = useAuth();
+  const { tenant, refetchTenantData } = useAuth();
 
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
@@ -325,7 +325,10 @@ export const PaginaPlanos: React.FC = () => {
         planoCodigo={selectedPlano.codigo}
         planoNome={selectedPlano.nome}
         precoMensal={selectedPlano.preco}
-        onSuccess={() => setCheckoutModalOpen(false)}
+        onSuccess={async () => {
+          setCheckoutModalOpen(false);
+          await refetchTenantData();
+        }}
       />
     </div>
   );
