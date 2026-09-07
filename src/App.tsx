@@ -1,19 +1,20 @@
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { NotificacoesProvider } from './contexts/NotificacoesContext';
 import { RotaProtegida } from './components/auth/RotaProtegida';
 import { AppShell } from './components/layout/AppShell';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // Páginas Públicas (Carregamento Assíncrono sob Demanda)
-const CalculadoraPublica = lazy(() => import('./pages/CalculadoraPublica').then(m => ({ default: m.CalculadoraPublica })));
-const CatalogoPublico = lazy(() => import('./pages/CatalogoPublico').then(m => ({ default: m.CatalogoPublico })));
-const FluxoAgendamentoOnline = lazy(() => import('./pages/FluxoAgendamentoOnline').then(m => ({ default: m.FluxoAgendamentoOnline })));
-const PoliticaPrivacidade = lazy(() => import('./pages/public/PoliticaPrivacidade').then(m => ({ default: m.PoliticaPrivacidade })));
-const TermosUso = lazy(() => import('./pages/public/TermosUso').then(m => ({ default: m.TermosUso })));
-const PaginaConvite = lazy(() => import('./pages/public/PaginaConvite').then(m => ({ default: m.PaginaConvite })));
-const PaginaParceiro = lazy(() => import('./pages/public/PaginaParceiro').then(m => ({ default: m.PaginaParceiro })));
+const CalculadoraPublica = lazyWithRetry(() => import('./pages/CalculadoraPublica').then(m => ({ default: m.CalculadoraPublica })));
+const CatalogoPublico = lazyWithRetry(() => import('./pages/CatalogoPublico').then(m => ({ default: m.CatalogoPublico })));
+const FluxoAgendamentoOnline = lazyWithRetry(() => import('./pages/FluxoAgendamentoOnline').then(m => ({ default: m.FluxoAgendamentoOnline })));
+const PoliticaPrivacidade = lazyWithRetry(() => import('./pages/public/PoliticaPrivacidade').then(m => ({ default: m.PoliticaPrivacidade })));
+const TermosUso = lazyWithRetry(() => import('./pages/public/TermosUso').then(m => ({ default: m.TermosUso })));
+const PaginaConvite = lazyWithRetry(() => import('./pages/public/PaginaConvite').then(m => ({ default: m.PaginaConvite })));
+const PaginaParceiro = lazyWithRetry(() => import('./pages/public/PaginaParceiro').then(m => ({ default: m.PaginaParceiro })));
 
 // Páginas de Autenticação
 import { Entrar } from './pages/auth/Entrar';
@@ -28,50 +29,50 @@ import { Agenda } from './pages/Agenda';
 import { Clientes } from './pages/Clientes';
 
 // Páginas Internas Especializadas (Carregamento Tardio / Lazy)
-const DetalheCliente = lazy(() => import('./pages/clientes/DetalheCliente').then(m => ({ default: m.DetalheCliente })));
-const DetalheVeiculo = lazy(() => import('./pages/clientes/DetalheVeiculo').then(m => ({ default: m.DetalheVeiculo })));
-const Orcamentos = lazy(() => import('./pages/Orcamentos').then(m => ({ default: m.Orcamentos })));
-const DetalheOrcamento = lazy(() => import('./pages/orcamentos/DetalheOrcamento').then(m => ({ default: m.DetalheOrcamento })));
-const OrcamentoPublico = lazy(() => import('./pages/OrcamentoPublico').then(m => ({ default: m.OrcamentoPublico })));
-const Estoque = lazy(() => import('./pages/Estoque').then(m => ({ default: m.Estoque })));
-const Financeiro = lazy(() => import('./pages/Financeiro').then(m => ({ default: m.Financeiro })));
-const ContasReceber = lazy(() => import('./pages/financeiro/ContasReceber').then(m => ({ default: m.ContasReceber })));
-const ConfigFormasPagamento = lazy(() => import('./pages/financeiro/ConfigFormasPagamento').then(m => ({ default: m.ConfigFormasPagamento })));
-const Configuracoes = lazy(() => import('./pages/Configuracoes').then(m => ({ default: m.Configuracoes })));
-const Treinamentos = lazy(() => import('./pages/Treinamentos').then(m => ({ default: m.Treinamentos })));
-const ArquivosDigitaisPage = lazy(() => import('./pages/ArquivosDigitaisPage').then(m => ({ default: m.ArquivosDigitaisPage })));
-const IndiqueEGanhe = lazy(() => import('./pages/IndiqueEGanhe').then(m => ({ default: m.IndiqueEGanhe })));
-const DiluicaoInterna = lazy(() => import('./pages/DiluicaoInterna').then(m => ({ default: m.DiluicaoInterna })));
-const PaginaPlanos = lazy(() => import('./pages/planos/PaginaPlanos').then(m => ({ default: m.PaginaPlanos })));
+const DetalheCliente = lazyWithRetry(() => import('./pages/clientes/DetalheCliente').then(m => ({ default: m.DetalheCliente })));
+const DetalheVeiculo = lazyWithRetry(() => import('./pages/clientes/DetalheVeiculo').then(m => ({ default: m.DetalheVeiculo })));
+const Orcamentos = lazyWithRetry(() => import('./pages/Orcamentos').then(m => ({ default: m.Orcamentos })));
+const DetalheOrcamento = lazyWithRetry(() => import('./pages/orcamentos/DetalheOrcamento').then(m => ({ default: m.DetalheOrcamento })));
+const OrcamentoPublico = lazyWithRetry(() => import('./pages/OrcamentoPublico').then(m => ({ default: m.OrcamentoPublico })));
+const Estoque = lazyWithRetry(() => import('./pages/Estoque').then(m => ({ default: m.Estoque })));
+const Financeiro = lazyWithRetry(() => import('./pages/Financeiro').then(m => ({ default: m.Financeiro })));
+const ContasReceber = lazyWithRetry(() => import('./pages/financeiro/ContasReceber').then(m => ({ default: m.ContasReceber })));
+const ConfigFormasPagamento = lazyWithRetry(() => import('./pages/financeiro/ConfigFormasPagamento').then(m => ({ default: m.ConfigFormasPagamento })));
+const Configuracoes = lazyWithRetry(() => import('./pages/Configuracoes').then(m => ({ default: m.Configuracoes })));
+const Treinamentos = lazyWithRetry(() => import('./pages/Treinamentos').then(m => ({ default: m.Treinamentos })));
+const ArquivosDigitaisPage = lazyWithRetry(() => import('./pages/ArquivosDigitaisPage').then(m => ({ default: m.ArquivosDigitaisPage })));
+const IndiqueEGanhe = lazyWithRetry(() => import('./pages/IndiqueEGanhe').then(m => ({ default: m.IndiqueEGanhe })));
+const DiluicaoInterna = lazyWithRetry(() => import('./pages/DiluicaoInterna').then(m => ({ default: m.DiluicaoInterna })));
+const PaginaPlanos = lazyWithRetry(() => import('./pages/planos/PaginaPlanos').then(m => ({ default: m.PaginaPlanos })));
 
 // Páginas de Serviços & Operação (Lazy)
-const Servicos = lazy(() => import('./pages/Servicos').then(m => ({ default: m.Servicos })));
-const FormularioServico = lazy(() => import('./pages/servicos/FormularioServico').then(m => ({ default: m.FormularioServico })));
-const MatrizPrecos = lazy(() => import('./pages/servicos/MatrizPrecos').then(m => ({ default: m.MatrizPrecos })));
-const Precificacao = lazy(() => import('./pages/servicos/Precificacao').then(m => ({ default: m.Precificacao })));
-const FormularioCheckin = lazy(() => import('./pages/checkin/FormularioCheckin').then(m => ({ default: m.FormularioCheckin })));
-const VisualizarCheckin = lazy(() => import('./pages/checkin/VisualizarCheckin').then(m => ({ default: m.VisualizarCheckin })));
-const ExecucaoPage = lazy(() => import('./pages/Execucao').then(m => ({ default: m.ExecucaoPage })));
-const VisualizarAtendimento = lazy(() => import('./pages/VisualizarAtendimento').then(m => ({ default: m.VisualizarAtendimento })));
-const VistoriaPublica = lazy(() => import('./pages/VistoriaPublica').then(m => ({ default: m.VistoriaPublica })));
+const Servicos = lazyWithRetry(() => import('./pages/Servicos').then(m => ({ default: m.Servicos })));
+const FormularioServico = lazyWithRetry(() => import('./pages/servicos/FormularioServico').then(m => ({ default: m.FormularioServico })));
+const MatrizPrecos = lazyWithRetry(() => import('./pages/servicos/MatrizPrecos').then(m => ({ default: m.MatrizPrecos })));
+const Precificacao = lazyWithRetry(() => import('./pages/servicos/Precificacao').then(m => ({ default: m.Precificacao })));
+const FormularioCheckin = lazyWithRetry(() => import('./pages/checkin/FormularioCheckin').then(m => ({ default: m.FormularioCheckin })));
+const VisualizarCheckin = lazyWithRetry(() => import('./pages/checkin/VisualizarCheckin').then(m => ({ default: m.VisualizarCheckin })));
+const ExecucaoPage = lazyWithRetry(() => import('./pages/Execucao').then(m => ({ default: m.ExecucaoPage })));
+const VisualizarAtendimento = lazyWithRetry(() => import('./pages/VisualizarAtendimento').then(m => ({ default: m.VisualizarAtendimento })));
+const VistoriaPublica = lazyWithRetry(() => import('./pages/VistoriaPublica').then(m => ({ default: m.VistoriaPublica })));
 
 // Carregamento Tardio (Lazy Loading) do Módulo Admin da Plataforma
-const AdminGuard = lazy(() => import('./components/admin/AdminGuard').then(m => ({ default: m.AdminGuard })));
-const AdminErrorBoundary = lazy(() => import('./components/admin/AdminErrorBoundary').then(m => ({ default: m.AdminErrorBoundary })));
-const AdminLayout = lazy(() => import('./components/admin/AdminLayout').then(m => ({ default: m.AdminLayout })));
-const AdminOficinas = lazy(() => import('./pages/admin/AdminOficinas').then(m => ({ default: m.AdminOficinas })));
-const AdminAssinaturas = lazy(() => import('./pages/admin/AdminAssinaturas').then(m => ({ default: m.AdminAssinaturas })));
-const AdminPlanos = lazy(() => import('./pages/admin/AdminPlanos').then(m => ({ default: m.AdminPlanos })));
-const AdminPermissoes = lazy(() => import('./pages/admin/AdminPermissoes').then(m => ({ default: m.AdminPermissoes })));
-const AdminFeedbacks = lazy(() => import('./pages/admin/AdminFeedbacks').then(m => ({ default: m.AdminFeedbacks })));
-const AdminStorage = lazy(() => import('./pages/admin/AdminStorage').then(m => ({ default: m.AdminStorage })));
-const AdminAdmins = lazy(() => import('./pages/admin/AdminAdmins').then(m => ({ default: m.AdminAdmins })));
-const AdminIndicacoes = lazy(() => import('./pages/admin/AdminIndicacoes').then(m => ({ default: m.AdminIndicacoes })));
-const AdminParceiros = lazy(() => import('./pages/admin/AdminParceiros').then(m => ({ default: m.AdminParceiros })));
-const AdminPrecificacaoReferencia = lazy(() => import('./pages/admin/AdminPrecificacaoReferencia').then(m => ({ default: m.AdminPrecificacaoReferencia })));
-const AdminTreinamentos = lazy(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
-const LoginParceiro = lazy(() => import('./pages/parceiro/LoginParceiro').then(m => ({ default: m.LoginParceiro })));
-const PainelParceiro = lazy(() => import('./pages/parceiro/PainelParceiro').then(m => ({ default: m.PainelParceiro })));
+const AdminGuard = lazyWithRetry(() => import('./components/admin/AdminGuard').then(m => ({ default: m.AdminGuard })));
+const AdminErrorBoundary = lazyWithRetry(() => import('./components/admin/AdminErrorBoundary').then(m => ({ default: m.AdminErrorBoundary })));
+const AdminLayout = lazyWithRetry(() => import('./components/admin/AdminLayout').then(m => ({ default: m.AdminLayout })));
+const AdminOficinas = lazyWithRetry(() => import('./pages/admin/AdminOficinas').then(m => ({ default: m.AdminOficinas })));
+const AdminAssinaturas = lazyWithRetry(() => import('./pages/admin/AdminAssinaturas').then(m => ({ default: m.AdminAssinaturas })));
+const AdminPlanos = lazyWithRetry(() => import('./pages/admin/AdminPlanos').then(m => ({ default: m.AdminPlanos })));
+const AdminPermissoes = lazyWithRetry(() => import('./pages/admin/AdminPermissoes').then(m => ({ default: m.AdminPermissoes })));
+const AdminFeedbacks = lazyWithRetry(() => import('./pages/admin/AdminFeedbacks').then(m => ({ default: m.AdminFeedbacks })));
+const AdminStorage = lazyWithRetry(() => import('./pages/admin/AdminStorage').then(m => ({ default: m.AdminStorage })));
+const AdminAdmins = lazyWithRetry(() => import('./pages/admin/AdminAdmins').then(m => ({ default: m.AdminAdmins })));
+const AdminIndicacoes = lazyWithRetry(() => import('./pages/admin/AdminIndicacoes').then(m => ({ default: m.AdminIndicacoes })));
+const AdminParceiros = lazyWithRetry(() => import('./pages/admin/AdminParceiros').then(m => ({ default: m.AdminParceiros })));
+const AdminPrecificacaoReferencia = lazyWithRetry(() => import('./pages/admin/AdminPrecificacaoReferencia').then(m => ({ default: m.AdminPrecificacaoReferencia })));
+const AdminTreinamentos = lazyWithRetry(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
+const LoginParceiro = lazyWithRetry(() => import('./pages/parceiro/LoginParceiro').then(m => ({ default: m.LoginParceiro })));
+const PainelParceiro = lazyWithRetry(() => import('./pages/parceiro/PainelParceiro').then(m => ({ default: m.PainelParceiro })));
 
 
 const PaginaCarregando = () => (
