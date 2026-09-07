@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X } from 'lucide-react';
+import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X, Copy, Check } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { formatTelefone, formatCpfCnpj } from '../../utils/formatters';
@@ -26,6 +26,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
+  const [pixData, setPixData] = useState<{ encodedImage?: string; payload?: string; expirationDate?: string } | null>(null);
+  const [copiado, setCopiado] = useState(false);
   const [telefone, setTelefone] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
 
@@ -58,6 +60,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   if (!isOpen) return null;
 
+  const copiarPix = () => {
+    if (pixData?.payload) {
+      navigator.clipboard.writeText(pixData.payload);
+      setCopiado(true);
+      showSuccess('Código Pix Copia e Cola copiado com sucesso!');
+      setTimeout(() => setCopiado(false), 3000);
+    }
+  };
+
+  const handleFechar = () => {
+    if (pixData || paymentUrl) {
+      if (onSuccess) onSuccess();
+    }
+    onClose();
+  };
+
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -74,6 +92,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     setLoading(true);
     setPaymentUrl(null);
+    setPixData(null);
 
     try {
       // 1. Obter sessão do usuário
@@ -104,13 +123,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         throw new Error(result.error || 'Falha ao processar checkout');
       }
 
+      // Se retornou dados do Pix
+      if (result.pix) {
+        setPixData(result.pix);
+      }
+
       // Se retornou link de pagamento
       if (result.paymentUrl) {
         setPaymentUrl(result.paymentUrl);
       }
 
       showSuccess(`Assinatura do plano ${planoNome} gerada com sucesso!`);
-      if (onSuccess) onSuccess();
     } catch (err: any) {
       showError(err.message || 'Erro ao comunicar com o gateway de pagamento');
     } finally {
@@ -137,7 +160,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleFechar}
             className="text-vapor-400 hover:text-vapor-100 p-1.5 rounded-lg hover:bg-graphite-800 transition-colors"
           >
             <X size={18} />
@@ -146,26 +169,90 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         {/* Corpo do Modal */}
         <div className="p-6 flex flex-col gap-6 overflow-y-auto">
-          {paymentUrl ? (
-            <div className="flex flex-col items-center text-center gap-4 py-4">
-              <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
-                <CheckCircle2 size={32} />
+          {pixData || paymentUrl ? (
+            <div className="flex flex-col items-center text-center gap-5 py-2">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
+                <CheckCircle2 size={28} />
               </div>
+
               <div className="flex flex-col gap-1">
-                <h4 className="text-lg font-bold text-vapor-100">Assinatura Solicitada!</h4>
+                <h4 className="text-lg font-bold text-vapor-100">
+                  {pixData ? 'Pague via Pix para Ativar' : 'Assinatura Registrada!'}
+                </h4>
                 <p className="text-xs text-vapor-300 max-w-sm">
-                  Sua assinatura foi registrada. Clique no botão abaixo para concluir o pagamento ou cadastrar o cartão no ambiente seguro do Asaas.
+                  {pixData
+                    ? `Escaneie o QR Code abaixo ou use o Pix Copia e Cola para pagar ${precoMensal}.`
+                    : 'Sua assinatura foi registrada. Clique no botão abaixo para concluir o pagamento ou cadastrar o cartão no ambiente seguro do Asaas.'}
                 </p>
               </div>
-              <a
-                href={paymentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/20"
-              >
-                Pagar / Cadastrar Cartão no Asaas
-                <ExternalLink size={16} />
-              </a>
+
+              {pixData?.encodedImage && (
+                <div className="p-3 bg-white rounded-2xl shadow-xl flex items-center justify-center">
+                  <img
+                    src={`data:image/png;base64,${pixData.encodedImage}`}
+                    alt="QR Code Pix Asaas"
+                    className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                  />
+                </div>
+              )}
+
+              {pixData?.payload && (
+                <div className="w-full flex flex-col gap-2">
+                  <div className="flex items-center gap-2 bg-graphite-950 p-2.5 rounded-xl border border-graphite-800">
+                    <input
+                      type="text"
+                      readOnly
+                      value={pixData.payload}
+                      className="bg-transparent text-vapor-300 font-mono text-xs flex-1 outline-none truncate selection:bg-amber-500 selection:text-graphite-950"
+                    />
+                    <button
+                      type="button"
+                      onClick={copiarPix}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                        copiado
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-amber-500 hover:bg-amber-400 text-graphite-950'
+                      }`}
+                    >
+                      {copiado ? (
+                        <>
+                          <Check size={14} />
+                          Copiado!
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={14} />
+                          Copiar Código Pix
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-vapor-400">
+                    Abra o app do seu banco ➔ Pix ➔ <strong>Pix Copia e Cola</strong> e confirme o pagamento.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full mt-2">
+                {paymentUrl && (
+                  <a
+                    href={paymentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:flex-1 py-3 px-4 bg-graphite-800 hover:bg-graphite-700 border border-graphite-700 text-vapor-200 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all"
+                  >
+                    Abrir Fatura no Asaas
+                    <ExternalLink size={14} />
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={handleFechar}
+                  className="w-full sm:flex-1 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  Concluir / Já Realizei o Pagamento
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleCheckout} className="flex flex-col gap-6">

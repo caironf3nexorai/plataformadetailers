@@ -375,9 +375,10 @@ serve(async (req) => {
 
     // 4. Salvar/Atualizar tabela local de assinaturas
     let paymentUrl = subscriptionData.bankInvoiceUrl || subscriptionData.invoiceUrl || subscriptionData.paymentLink || '';
+    let pixData: { encodedImage?: string; payload?: string; expirationDate?: string } | null = null;
 
-    // Se a assinatura não trouxe a URL direta da fatura, buscar a primeira cobrança pendente
-    if (!paymentUrl && subscriptionData?.id) {
+    // Buscar pagamentos gerados pela assinatura para resgatar URL e QR Code Pix
+    if (subscriptionData?.id) {
       try {
         const resPayments = await fetch(`${ASAAS_API_URL}/subscriptions/${subscriptionData.id}/payments`, {
           headers: {
@@ -388,7 +389,30 @@ serve(async (req) => {
           const paymentsData = await resPayments.json();
           const firstPay = paymentsData?.data?.[0];
           if (firstPay) {
-            paymentUrl = firstPay.invoiceUrl || firstPay.bankInvoiceUrl || '';
+            if (!paymentUrl) {
+              paymentUrl = firstPay.invoiceUrl || firstPay.bankInvoiceUrl || '';
+            }
+
+            // Se for PIX, buscar QR Code e Copia e Cola diretamente da cobrança gerada
+            if (forma_pagamento === 'pix' || firstPay.billingType === 'PIX') {
+              try {
+                const resPix = await fetch(`${ASAAS_API_URL}/payments/${firstPay.id}/pixQrCode`, {
+                  headers: { 'access_token': ASAAS_API_KEY },
+                });
+                if (resPix.ok) {
+                  const pixJson = await resPix.json();
+                  if (pixJson?.encodedImage || pixJson?.payload) {
+                    pixData = {
+                      encodedImage: pixJson.encodedImage,
+                      payload: pixJson.payload,
+                      expirationDate: pixJson.expirationDate,
+                    };
+                  }
+                }
+              } catch (ePix) {
+                console.warn('Aviso ao consultar QR Code Pix:', ePix);
+              }
+            }
           }
         }
       } catch (errPay) {
@@ -413,6 +437,7 @@ serve(async (req) => {
         subscriptionId: subscriptionData.id,
         paymentUrl,
         status: subscriptionData.status,
+        pix: pixData,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
