@@ -7,15 +7,19 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { useNavigate } from 'react-router-dom';
 import { formatTelefone, formatPlaca } from '../../utils/formatters';
-import { AlertTriangle, Car, Check, UserCheck, FileText } from 'lucide-react';
+import { AlertTriangle, Car, Check, UserCheck, FileText, Calendar } from 'lucide-react';
 import { AlertaErro } from '../ui/AlertaErro';
+
+export type ProximaAcaoPosCadastro = 'nenhuma' | 'orcamento' | 'agendamento';
 
 interface CadastroRapidoModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (clienteId: string, veiculoId?: string) => void;
   onCriarOrcamento?: (orcamentoId: string) => void;
+  onIrParaAgendamento?: (clienteId: string, veiculoId?: string) => void;
   iniciarComOrcamento?: boolean;
+  iniciarComAgendamento?: boolean;
 }
 
 export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
@@ -23,13 +27,19 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
   onClose,
   onSuccess,
   onCriarOrcamento,
+  onIrParaAgendamento,
   iniciarComOrcamento = false,
+  iniciarComAgendamento = false,
 }) => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
-  const [criarOrcamentoAgora, setCriarOrcamentoAgora] = useState(iniciarComOrcamento);
+  const [proximaAcao, setProximaAcao] = useState<ProximaAcaoPosCadastro>(() => {
+    if (iniciarComOrcamento) return 'orcamento';
+    if (iniciarComAgendamento) return 'agendamento';
+    return 'nenhuma';
+  });
   
   // Bloco de veículo
   const [incluirVeiculo, setIncluirVeiculo] = useState(false);
@@ -59,7 +69,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
     setCor('');
     setErrorMsg(null);
     setExistingVehicle(null);
-    setCriarOrcamentoAgora(iniciarComOrcamento);
+    setProximaAcao(iniciarComOrcamento ? 'orcamento' : (iniciarComAgendamento ? 'agendamento' : 'nenhuma'));
 
     // Carrega categorias de veículo ativas do tenant logado (sem repetições)
     const fetchCategorias = async () => {
@@ -170,7 +180,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
 
         onSuccess(cId, vId);
 
-        if (criarOrcamentoAgora && cId) {
+        if (proximaAcao === 'orcamento' && cId) {
           const { data: newOrcId, error: orcErr } = await supabase.rpc('criar_orcamento', {
             p_cliente: cId,
             p_veiculo: vId || null,
@@ -187,6 +197,24 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
             }
             return;
           }
+        } else if (proximaAcao === 'agendamento' && cId) {
+          onClose();
+          if (onIrParaAgendamento) {
+            onIrParaAgendamento(cId, vId);
+          } else {
+            const params = new URLSearchParams();
+            params.set('novoAgendamento', 'true');
+            params.set('clienteId', cId);
+            if (vId) params.set('veiculoId', vId);
+            navigate(`/agenda?${params.toString()}`, {
+              state: {
+                openNovoAgendamento: true,
+                clienteId: cId,
+                veiculoId: vId,
+              },
+            });
+          }
+          return;
         }
 
         onClose();
@@ -350,20 +378,58 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
           </div>
         )}
 
-        {/* OPÇÃO DE CRIAR ORÇAMENTO IMEDIATO */}
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
-          <label className="flex items-center gap-2.5 text-xs font-sans text-vapor-200 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={criarOrcamentoAgora}
-              onChange={(e) => setCriarOrcamentoAgora(e.target.checked)}
-              className="w-4 h-4 rounded bg-graphite-900 border-graphite-700 text-amber-500 focus:ring-0"
-            />
-            <span className="font-semibold text-amber-300">
-              Salvar e Abrir Orçamento Imediatamente
-            </span>
-          </label>
-          <FileText size={16} className="text-amber-400 shrink-0" />
+        {/* OPÇÃO DE DESTINO PÓS CADASTRO: ORÇAMENTO OU AGENDAMENTO */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-graphite-700">
+          <span className="font-sans text-[12px] text-vapor-400 font-medium">
+            Ao salvar o cadastro, deseja ir para:
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Checkbox / Opção Orçamento */}
+            <div
+              onClick={() => setProximaAcao((prev) => (prev === 'orcamento' ? 'nenhuma' : 'orcamento'))}
+              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer select-none transition-all ${
+                proximaAcao === 'orcamento'
+                  ? 'bg-amber-500/15 border-amber-500 text-amber-300 shadow-sm'
+                  : 'bg-graphite-900/60 border-graphite-700/80 hover:border-graphite-600 text-vapor-300'
+              }`}
+            >
+              <label className="flex items-center gap-2.5 text-xs font-sans cursor-pointer pointer-events-none">
+                <input
+                  type="checkbox"
+                  checked={proximaAcao === 'orcamento'}
+                  onChange={() => {}}
+                  className="w-4 h-4 rounded bg-graphite-900 border-graphite-700 text-amber-500 focus:ring-0"
+                />
+                <span className={`font-semibold ${proximaAcao === 'orcamento' ? 'text-amber-300' : 'text-vapor-200'}`}>
+                  Ir para Orçamento
+                </span>
+              </label>
+              <FileText size={16} className={proximaAcao === 'orcamento' ? 'text-amber-400' : 'text-vapor-400'} />
+            </div>
+
+            {/* Checkbox / Opção Agendamento */}
+            <div
+              onClick={() => setProximaAcao((prev) => (prev === 'agendamento' ? 'nenhuma' : 'agendamento'))}
+              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer select-none transition-all ${
+                proximaAcao === 'agendamento'
+                  ? 'bg-amber-500/15 border-amber-500 text-amber-300 shadow-sm'
+                  : 'bg-graphite-900/60 border-graphite-700/80 hover:border-graphite-600 text-vapor-300'
+              }`}
+            >
+              <label className="flex items-center gap-2.5 text-xs font-sans cursor-pointer pointer-events-none">
+                <input
+                  type="checkbox"
+                  checked={proximaAcao === 'agendamento'}
+                  onChange={() => {}}
+                  className="w-4 h-4 rounded bg-graphite-900 border-graphite-700 text-amber-500 focus:ring-0"
+                />
+                <span className={`font-semibold ${proximaAcao === 'agendamento' ? 'text-amber-300' : 'text-vapor-200'}`}>
+                  Ir para Agendamento
+                </span>
+              </label>
+              <Calendar size={16} className={proximaAcao === 'agendamento' ? 'text-amber-400' : 'text-vapor-400'} />
+            </div>
+          </div>
         </div>
 
         {/* Botões de Ação */}
@@ -387,7 +453,13 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
             ) : (
               <>
                 <Check size={18} />
-                <span>{criarOrcamentoAgora ? 'Salvar & Criar Orçamento' : 'Salvar Cadastro'}</span>
+                <span>
+                  {proximaAcao === 'orcamento'
+                    ? 'Salvar & Criar Orçamento'
+                    : proximaAcao === 'agendamento'
+                    ? 'Salvar & Ir para Agendamento'
+                    : 'Salvar Cadastro'}
+                </span>
               </>
             )}
           </Button>

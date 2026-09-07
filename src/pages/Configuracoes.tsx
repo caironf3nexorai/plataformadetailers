@@ -23,7 +23,7 @@ import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
 import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FileText, Target, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { validateImageFile, getFotoPublicUrl } from '../utils/imagens';
+import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 
 interface ConfiguracoesProps {
   abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos';
@@ -206,14 +206,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     setLogoError(null);
     setLogoSemAlfa(false);
 
-    if (file.size > 2 * 1024 * 1024) {
-      setLogoError('A imagem deve ter no máximo 2MB.');
-      return;
-    }
-
-    const { valid, ext, error } = validateImageFile(file);
-    if (!valid || !ext) {
-      setLogoError(error || 'Formato inválido.');
+    const { valid, error } = validateImageFile(file);
+    if (!valid) {
+      setLogoError(error || 'Formato inválido. Use JPG, PNG ou WEBP.');
       return;
     }
 
@@ -221,13 +216,18 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
     try {
       const hasAlpha = await checkImageHasAlpha(file);
-      if (!hasAlpha && ext !== 'png') {
-        setLogoSemAlfa(true);
-      } else if (!hasAlpha) {
+      if (!hasAlpha) {
         setLogoSemAlfa(true);
       }
 
-      const newPath = `${tenant.id}/oficina/logo.${ext}`;
+      // Comprime mantendo transparência se for PNG
+      const { file: compressedFile, ext: finalExt } = await comprimirImagemCatalogo(file, {
+        maxDimension: 1200,
+        targetMaxBytes: 250 * 1024,
+        preservePngTransparency: true,
+      });
+
+      const newPath = `${tenant.id}/oficina/logo.${finalExt}`;
 
       if (tenant.logo_path && tenant.logo_path !== newPath) {
         await supabase.storage.from('catalogo').remove([tenant.logo_path]);
@@ -235,7 +235,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       const { error: uploadError } = await supabase.storage
         .from('catalogo')
-        .upload(newPath, file, { upsert: true });
+        .upload(newPath, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -249,7 +249,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       await refetchTenantData();
     } catch (err: any) {
       console.error('[Logo Upload Error]:', err);
-      setLogoError(err.message || 'Erro ao fazer upload da logo.');
+      setLogoError(err.message || 'Erro ao processar e enviar a logo.');
     } finally {
       setUploadingLogo(false);
     }
@@ -318,21 +318,22 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     const file = e.target.files[0];
     setCapaError(null);
 
-    if (file.size > 2 * 1024 * 1024) {
-      setCapaError('A imagem deve ter no máximo 2MB.');
-      return;
-    }
-
-    const { valid, ext, error } = validateImageFile(file);
-    if (!valid || !ext) {
-      setCapaError(error || 'Formato inválido.');
+    const { valid, error } = validateImageFile(file);
+    if (!valid) {
+      setCapaError(error || 'Formato inválido. Use JPG, PNG ou WEBP.');
       return;
     }
 
     setUploadingCapa(true);
 
     try {
-      const newPath = `${tenant.id}/oficina/capa.${ext}`;
+      // Comprime no cliente para o menor tamanho possível (< 220KB)
+      const { file: compressedFile, ext: finalExt } = await comprimirImagemCatalogo(file, {
+        maxDimension: 1280,
+        targetMaxBytes: 200 * 1024,
+      });
+
+      const newPath = `${tenant.id}/oficina/capa.${finalExt}`;
 
       if (tenant.capa_path && tenant.capa_path !== newPath) {
         await supabase.storage.from('catalogo').remove([tenant.capa_path]);
@@ -340,7 +341,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       const { error: uploadError } = await supabase.storage
         .from('catalogo')
-        .upload(newPath, file, { upsert: true });
+        .upload(newPath, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -354,7 +355,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       await refetchTenantData();
     } catch (err: any) {
       console.error('[Capa Upload Error]:', err);
-      setCapaError(err.message || 'Erro ao fazer upload da capa.');
+      setCapaError(err.message || 'Erro ao processar e enviar a capa.');
     } finally {
       setUploadingCapa(false);
     }
@@ -735,7 +736,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                     {uploadingLogo ? 'Enviando logo...' : 'Fazer upload da logo da oficina'}
                   </span>
                   <span className="font-sans text-[10px] text-vapor-500">
-                    Recomendado: PNG com fundo transparente (Até 2MB)
+                    Recomendado: PNG com fundo transparente (Compressão automática inteligente)
                   </span>
                   <input
                     type="file"
@@ -790,7 +791,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                     {uploadingCapa ? 'Enviando foto...' : 'Fazer upload da capa do catálogo'}
                   </span>
                   <span className="font-sans text-[10px] text-vapor-500">
-                    PNG, JPG ou WEBP de até 2MB
+                    PNG, JPG ou WEBP (Comprimido automaticamente para máxima economia de storage)
                   </span>
                   <input
                     type="file"

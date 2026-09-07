@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 import { User, Car, Wrench, Plus, ChevronDown, Check, RotateCcw } from 'lucide-react';
 import { SeletorServicos, type ItemSelecionado } from '../servicos/SeletorServicos';
 import { AlertaErro } from '../ui/AlertaErro';
+import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
 
 interface ModalEntradaAvulsaProps {
   isOpen: boolean;
@@ -50,6 +51,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false);
+  const [showModalServicoRapido, setShowModalServicoRapido] = useState(false);
 
   const DRAFT_KEY = tenant ? `nuvemwash_draft_entrada_avulsa_${tenant.id}` : null;
 
@@ -75,6 +77,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     setNovoVeiculoModelo('');
     setNovoVeiculoPlaca('');
     setNovoVeiculoCor('');
+    setShowModalServicoRapido(false);
     setRascunhoRestaurado(false);
     setError(null);
   };
@@ -292,6 +295,55 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     }
   };
 
+  // Callback de Criação Rápida de Serviço sem sair da Entrada
+  const handleNovoServicoCriado = async (novoServico: any) => {
+    if (!tenant) return;
+    try {
+      // Busca o serviço recém cadastrado com os preços de todas as categorias
+      const { data: srvFull } = await supabase
+        .from('servicos')
+        .select('*, servico_precos(*)')
+        .eq('id', novoServico.id)
+        .eq('tenant_id', tenant.id)
+        .single();
+
+      const servicoParaAdicionar = srvFull || novoServico;
+
+      // Adiciona na lista geral de serviços para já ficar disponível no catálogo
+      setServicos((prev) => {
+        const existe = prev.some((s) => s.id === servicoParaAdicionar.id);
+        if (existe) {
+          return prev.map((s) => (s.id === servicoParaAdicionar.id ? servicoParaAdicionar : s));
+        }
+        return [servicoParaAdicionar, ...prev];
+      });
+
+      // Calcula o preço do novo serviço para a categoria atual e já o seleciona
+      const matchPreco = servicoParaAdicionar.servico_precos?.find(
+        (p: any) => p.categoria_id === selectedCategoriaObj?.id
+      );
+      const precoBase = matchPreco?.preco_base !== undefined && matchPreco?.preco_base !== null
+        ? Number(matchPreco.preco_base)
+        : Number(servicoParaAdicionar.preco_base || 0);
+
+      setSelectedItens((prev) => {
+        const jaSelecionado = prev.some((i) => i.servico_id === servicoParaAdicionar.id);
+        if (jaSelecionado) return prev;
+        return [
+          ...prev,
+          {
+            servico_id: servicoParaAdicionar.id,
+            combo_id: null,
+            servico: servicoParaAdicionar,
+            preco: precoBase,
+          },
+        ];
+      });
+    } catch (err: any) {
+      console.error('[ModalEntradaAvulsa] Erro ao integrar novo serviço:', err);
+    }
+  };
+
   // Confirmar Cliente Rápido em memória (salva apenas no registro da entrada)
   const handleCriarCliente = () => {
     if (!novoClienteNome.trim()) return;
@@ -417,7 +469,8 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Entrada de Veículo no Pátio (Balcão)">
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title="Entrada de Veículo no Pátio (Balcão)">
       <div className="flex flex-col gap-4">
         {/* Barra Superior com Stepper e Botão Limpar e Recomeçar */}
         <div className="flex items-center justify-between pb-1">
@@ -659,6 +712,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
               onToggleServico={handleToggleServico}
               onToggleCombo={handleToggleCombo}
               onCloseModal={onClose}
+              onAbrirNovoServico={() => setShowModalServicoRapido(true)}
             />
 
             {/* Lista de Valores Editáveis para Serviços Selecionados */}
@@ -724,5 +778,15 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
         )}
       </div>
     </Modal>
+
+    {/* Modal de Criação Rápida de Serviço sem perder os dados da entrada */}
+    <ModalServicoRapido
+      isOpen={showModalServicoRapido}
+      onClose={() => setShowModalServicoRapido(false)}
+      onSuccess={handleNovoServicoCriado}
+      categoriaVeiculoId={selectedCategoriaObj?.id}
+      categoriaVeiculoNome={selectedCategoriaObj?.nome}
+    />
+    </>
   );
 };

@@ -3,6 +3,7 @@ import { formatarData, formatarHora } from './datas';
 import { formatarMoeda, formatarCodigoProposta } from './formatters';
 import { fetchImageAsBase64, obterAssinaturaBase64, getEvidenciaSignedUrl } from './evidencias';
 import { cabecalhoDocumento, rodapeDocumento, hexToRgb } from './pdf';
+import { formatarDuracao } from './agenda';
 import type { TipoNivelOrcamento } from '../types/orcamento';
 
 export interface PDFOrcamentoItemData {
@@ -33,6 +34,7 @@ export interface PDFOrcamentoData {
   validade_dias?: number;
   data_validade_limite?: string | null;
   observacoes?: string | null;
+  modo_orcamento?: 'simples' | '3_niveis' | string | null;
   
   // Cliente & Veículo
   clienteNome: string;
@@ -285,11 +287,18 @@ export async function gerarPDFOrcamento(
 
   // 3. Níveis de Proposta (Cartões Unificados e Estruturados)
   onProgress?.('Renderizando opções de proposta...');
-  const niveisParaExibir = data.niveis && data.niveis.length > 0 ? data.niveis : [];
+  const isModoSimples = data.modo_orcamento === 'simples' || data.niveis.length === 1;
+  const niveisParaExibir = isModoSimples
+    ? (data.niveis && data.niveis.filter((n) => n.nivel === 'essencial').length > 0
+        ? data.niveis.filter((n) => n.nivel === 'essencial')
+        : (data.niveis && data.niveis.length > 0 ? [data.niveis[0]] : []))
+    : (data.niveis && data.niveis.length > 0 ? data.niveis : []);
 
   for (let idx = 0; idx < niveisParaExibir.length; idx++) {
     const nivel = niveisParaExibir[idx];
-    const isAprovado = data.nivel_aprovado === nivel.nivel;
+    const isAprovado = isModoSimples
+      ? (data.status === 'aprovado' || data.status === 'em_andamento' || data.status === 'concluido' || data.nivel_aprovado === nivel.nivel)
+      : (data.nivel_aprovado === nivel.nivel);
     const itens = nivel.itens || [];
 
     const headerHeight = 9.5;
@@ -324,8 +333,13 @@ export async function gerarPDFOrcamento(
     doc.setTextColor(isAprovado ? 16 : corDestaquePreco[0], isAprovado ? 185 : corDestaquePreco[1], isAprovado ? 129 : corDestaquePreco[2]);
     doc.setFontSize(9.5);
     doc.setFont('helvetica', 'bold');
-    const aprovadoBadge = isAprovado ? '✓ [OPÇÃO APROVADA] ' : '';
-    doc.text(`${aprovadoBadge}${nivel.titulo.toUpperCase()}`, pageMargin + 5, y + 6.2);
+    const duracaoNivel = nivel.duracao_total || (itens || []).reduce((acc, it) => acc + (it.duracao_minutos || 0), 0);
+    const duracaoTextoNivel = duracaoNivel > 0 ? ` • ${formatarDuracao(duracaoNivel)}` : '';
+    const aprovadoBadge = isAprovado ? (isModoSimples ? '✓ [PROPOSTA APROVADA] ' : '✓ [OPÇÃO APROVADA] ') : '';
+    const tituloNivelTexto = isModoSimples && (!nivel.titulo || nivel.titulo.toLowerCase() === 'essencial')
+      ? 'PROPOSTA DE SERVIÇOS'
+      : nivel.titulo.toUpperCase();
+    doc.text(`${aprovadoBadge}${tituloNivelTexto}${duracaoTextoNivel}`, pageMargin + 5, y + 6.2);
 
     // Preço Total do Nível
     doc.setFontSize(10.5);
@@ -358,11 +372,21 @@ export async function gerarPDFOrcamento(
         doc.setLineWidth(0.15);
         doc.line(pageMargin + 4, currentCardY, rightMarginX - 4, currentCardY);
 
-        // Nome do serviço
+        // Nome do serviço e duração estimada
+        const duracaoItemTxt = item.duracao_minutos && item.duracao_minutos > 0 ? ` [${formatarDuracao(item.duracao_minutos)}]` : '';
+        let textoServico = `• ${item.servico_nome}${duracaoItemTxt}`;
+        const maxLarguraTexto = usableWidth - 40;
+        if (doc.getTextWidth(textoServico) > maxLarguraTexto) {
+          while (doc.getTextWidth(textoServico + '...') > maxLarguraTexto && textoServico.length > 5) {
+            textoServico = textoServico.slice(0, -1);
+          }
+          textoServico = textoServico + '...';
+        }
+
         doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
-        doc.text(`• ${item.servico_nome}`, pageMargin + 5, currentCardY + 4.2);
+        doc.text(textoServico, pageMargin + 5, currentCardY + 4.2);
 
         // Preço do serviço
         if (typeof item.preco === 'number') {

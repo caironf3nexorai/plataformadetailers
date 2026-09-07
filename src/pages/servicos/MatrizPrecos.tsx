@@ -16,6 +16,12 @@ import {
   DollarSign,
   Pencil
 } from 'lucide-react';
+import {
+  type UnidadeDuracao,
+  converterParaMinutos,
+  converterDeMinutos,
+  OPCOES_UNIDADE_DURACAO
+} from '../../utils/duracao';
 
 interface CeldaMatriz {
   preco_base: string; // Mantido como string para digitação direta
@@ -32,6 +38,7 @@ export const MatrizPrecos: React.FC = () => {
   
   // Tab ativa: 'preco' | 'duracao'
   const [activeTab, setActiveTab] = useState<'preco' | 'duracao'>('preco');
+  const [unidadeMatriz, setUnidadeMatriz] = useState<UnidadeDuracao>('min');
   
   // Estado da matriz: [servico_id][categoria_id] -> CeldaMatriz
   const [matriz, setMatriz] = useState<Record<string, Record<string, CeldaMatriz>>>({});
@@ -71,10 +78,11 @@ export const MatrizPrecos: React.FC = () => {
       if (sErr) throw sErr;
       setServices(servs as Servico[]);
 
-      // 3. Busca todos os preços cadastrados
+      // 3. Busca todos os preços cadastrados do tenant
       const { data: prices, error: pErr } = await supabase
         .from('servico_precos')
-        .select('*');
+        .select('*')
+        .eq('tenant_id', tenant.id);
 
       if (pErr) throw pErr;
 
@@ -133,6 +141,11 @@ export const MatrizPrecos: React.FC = () => {
     });
   };
 
+  const handleDuracaoCellChange = (servicoId: string, categoriaId: string, val: number | string) => {
+    const minutos = converterParaMinutos(Number(val) || 0, unidadeMatriz);
+    handleCellChange(servicoId, categoriaId, 'duracao_minutos', minutos);
+  };
+
   // Verifica se há alguma alteração pendente
   const hasUnsavedChanges = Object.values(modified).some((s) => Object.values(s).some((val) => val));
 
@@ -155,7 +168,8 @@ export const MatrizPrecos: React.FC = () => {
             categoria_id: c.id,
             preco_base: cell.preco_base === '' ? null : Number(cell.preco_base.replace(',', '.')),
             duracao_minutos: cell.duracao_minutos,
-            duracao_confirmada: cell.duracao_confirmada,
+            unidade_duracao: unidadeMatriz,
+            duracao_confirmada: true,
           };
         });
 
@@ -311,10 +325,31 @@ export const MatrizPrecos: React.FC = () => {
         </button>
       </div>
 
-      {/* Texto de Apoio da Tab de Duração */}
+      {/* Texto de Apoio e Seletor de Unidade da Tab de Duração */}
       {activeTab === 'duracao' && (
-        <div className="p-4 bg-graphite-900 border border-graphite-700 rounded-md text-[13px] text-vapor-300 leading-relaxed max-w-3xl">
-          💡 <strong>Como cadastrar a duração:</strong> Use o seu tempo real, do início ao fim, incluindo secagem e acabamento. É esse número que define os horários livres que o cliente vai ver na agenda.
+        <div className="p-4 bg-graphite-900 border border-graphite-700 rounded-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[13px] text-vapor-300 leading-relaxed">
+          <div className="flex-1">
+            💡 <strong>Como cadastrar a duração:</strong> Use o seu tempo real, do início ao fim, incluindo secagem e acabamento. É esse número que define os horários livres que o cliente vai ver na agenda.
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto bg-graphite-950 px-3 py-1.5 rounded-lg border border-graphite-800">
+            <span className="text-[11px] uppercase tracking-wider text-vapor-400 font-bold">Exibir em:</span>
+            <div className="inline-flex bg-graphite-900 border border-graphite-700 rounded p-0.5">
+              {OPCOES_UNIDADE_DURACAO.map((opt) => (
+                <button
+                  key={opt.valor}
+                  type="button"
+                  onClick={() => setUnidadeMatriz(opt.valor)}
+                  className={`px-2.5 py-1 text-[11px] rounded font-bold transition-all ${
+                    unidadeMatriz === opt.valor
+                      ? 'bg-amber-500 text-graphite-950 shadow-sm'
+                      : 'text-vapor-400 hover:text-vapor-200'
+                  }`}
+                >
+                  {opt.rotulo}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -376,13 +411,12 @@ export const MatrizPrecos: React.FC = () => {
                         ) : (
                           <CampoNumerico
                             id={`input-duracao-${servIdx}-${catIdx}`}
-                            value={cell.duracao_minutos}
-                            onChange={(val) => handleCellChange(serv.id, cat.id, 'duracao_minutos', val || 0)}
+                            value={converterDeMinutos(cell.duracao_minutos, unidadeMatriz)}
+                            onChange={(val) => handleDuracaoCellChange(serv.id, cat.id, val || 0)}
                             onKeyDown={(e) => handleKeyDown(e, servIdx, catIdx)}
-                            suffix="min"
-                            integerOnly
+                            suffix={unidadeMatriz === 'horas' ? 'h' : unidadeMatriz === 'dias' ? 'd' : 'min'}
                             align="center"
-                            placeholder="60"
+                            placeholder="0"
                             wrapperClassName={`w-full max-w-[110px] mx-auto ${
                               !cell.duracao_confirmada
                                 ? 'border-amber-500 bg-amber-500/5 font-semibold text-amber-500'
@@ -449,12 +483,11 @@ export const MatrizPrecos: React.FC = () => {
                             />
                           ) : (
                             <CampoNumerico
-                              value={cell.duracao_minutos}
-                              onChange={(val) => handleCellChange(serv.id, cat.id, 'duracao_minutos', val || 0)}
-                              suffix="min"
-                              integerOnly
+                              value={converterDeMinutos(cell.duracao_minutos, unidadeMatriz)}
+                              onChange={(val) => handleDuracaoCellChange(serv.id, cat.id, val || 0)}
+                              suffix={unidadeMatriz === 'horas' ? 'h' : unidadeMatriz === 'dias' ? 'd' : 'min'}
                               align="center"
-                              placeholder="60"
+                              placeholder="0"
                               wrapperClassName={`flex-1 ${
                                 !cell.duracao_confirmada ? 'border-amber-500 bg-amber-500/5 font-semibold text-amber-500' : ''
                               }`}

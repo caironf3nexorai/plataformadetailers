@@ -46,6 +46,7 @@ import type { Servico } from '../../types/servicos';
 import type { TermoGarantia } from '../../types/termos';
 import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
+import { formatarDuracao } from '../../utils/agenda';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../../utils/pdfOrcamento';
 import { getFotoPublicUrl } from '../../utils/imagens';
 import { uploadOrcamentoFoto, getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
@@ -467,6 +468,11 @@ export const DetalheOrcamento: React.FC = () => {
         });
       }
 
+      if ((quote as any)?.modo_orcamento === 'simples') {
+        newItens.recomendado = new Set();
+        newItens.completo = new Set();
+      }
+
       setTitulosNiveis(newTitulos);
       setDescricoesNiveis(newDescricoes);
       setItensNivel(newItens);
@@ -519,24 +525,28 @@ export const DetalheOrcamento: React.FC = () => {
         const niveisList = orcamento.niveis || [];
         const precosEfetivos = currentCustomPrecos || customPrecos;
 
+        const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+
         for (const nivelKey of ['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]) {
           const nivelRecord = niveisList.find((n) => n.nivel === nivelKey);
           if (nivelRecord) {
-            const servicosIds = Array.from(currentItens[nivelKey]);
+            const servicosIds = isSimples && nivelKey !== 'essencial' ? [] : Array.from(currentItens[nivelKey]);
             const payloadItens = servicosIds.map((sId) => {
               const cPrice = precosEfetivos[`${nivelKey}_${sId}`];
+              const sCatalogo = servicosCatalogo.find((s) => s.id === sId);
               return {
                 servico_id: sId,
                 combo_id: null,
                 preco: cPrice !== undefined ? cPrice : null,
+                duracao_minutos: sCatalogo?.duracaoMatriz || 60,
               };
             });
 
             const { error } = await supabase.rpc('salvar_nivel_orcamento', {
               p_nivel: nivelRecord.id,
               p_itens: payloadItens,
-              p_titulo: currentTitulos[nivelKey],
-              p_descricao: currentDescricoes[nivelKey],
+              p_titulo: isSimples && nivelKey !== 'essencial' ? '' : currentTitulos[nivelKey],
+              p_descricao: isSimples && nivelKey !== 'essencial' ? '' : currentDescricoes[nivelKey],
             });
 
             if (error) throw error;
@@ -600,10 +610,11 @@ export const DetalheOrcamento: React.FC = () => {
 
   // TOGGLE SERVIÇO COM HERANÇA E DISPARO DE AUTOSAVE
   const handleToggleServico = (nivel: TipoNivelOrcamento, servicoId: string) => {
+    const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
     const copy = {
       essencial: new Set(itensNivel.essencial),
-      recomendado: new Set(itensNivel.recomendado),
-      completo: new Set(itensNivel.completo),
+      recomendado: new Set(isSimples ? [] : itensNivel.recomendado),
+      completo: new Set(isSimples ? [] : itensNivel.completo),
     };
 
     const isCurrentlyChecked = copy[nivel].has(servicoId);
@@ -612,11 +623,13 @@ export const DetalheOrcamento: React.FC = () => {
       copy[nivel].delete(servicoId);
     } else {
       copy[nivel].add(servicoId);
-      if (nivel === 'essencial') {
-        copy.recomendado.add(servicoId);
-        copy.completo.add(servicoId);
-      } else if (nivel === 'recomendado') {
-        copy.completo.add(servicoId);
+      if (!isSimples) {
+        if (nivel === 'essencial') {
+          copy.recomendado.add(servicoId);
+          copy.completo.add(servicoId);
+        } else if (nivel === 'recomendado') {
+          copy.completo.add(servicoId);
+        }
       }
     }
 
@@ -1135,16 +1148,21 @@ export const DetalheOrcamento: React.FC = () => {
     if (!orcamento || !tenant) return;
     setGerandoPDF(true);
     try {
-      const niveisFormatados: PDFOrcamentoNivelData[] = (orcamento.niveis || []).map((n) => {
+      const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+      const niveisFiltrados = (orcamento.niveis || []).filter((n) => !isSimples || n.nivel === 'essencial');
+      const niveisFormatados: PDFOrcamentoNivelData[] = niveisFiltrados.map((n) => {
         const calc = calcularTotaisNivel(n.nivel);
+        const tituloNivel = isSimples
+          ? (titulosNiveis['essencial'] && titulosNiveis['essencial'].toLowerCase() !== 'essencial' ? titulosNiveis['essencial'] : 'Proposta de Serviços')
+          : (titulosNiveis[n.nivel] || n.titulo || n.nivel);
         return {
           nivel: n.nivel,
-          titulo: titulosNiveis[n.nivel] || n.titulo || n.nivel,
+          titulo: tituloNivel,
           descricao: descricoesNiveis[n.nivel] || n.descricao,
           valor_total: calc.valorComDesconto,
           valor_original: calc.valorTotal,
           duracao_total: calc.duracaoTotal,
-          destaque: n.destaque,
+          destaque: isSimples ? false : n.destaque,
           itens: Array.from(itensNivel[n.nivel]).map((sId) => {
             const s = servicosCatalogo.find((serv) => serv.id === sId);
             const cPrice = customPrecos[`${n.nivel}_${sId}`];
@@ -1178,6 +1196,7 @@ export const DetalheOrcamento: React.FC = () => {
           numero: orcamento.numero,
           numero_os: orcamento.numero_os,
           status: orcamento.status,
+          modo_orcamento: (orcamento as any)?.modo_orcamento || '3_niveis',
           nivel_aprovado: orcamento.nivel_aprovado,
           enviado_em: orcamento.enviado_em,
           validade_dias: diasVal,
@@ -1931,6 +1950,17 @@ export const DetalheOrcamento: React.FC = () => {
             const novoModo = (orcamento as any)?.modo_orcamento === 'simples' ? '3_niveis' : 'simples';
             await supabase.from('orcamentos').update({ modo_orcamento: novoModo }).eq('id', orcamento.id);
             setOrcamento((prev) => prev ? { ...prev, modo_orcamento: novoModo } : null);
+
+            if (novoModo === 'simples') {
+              setActiveTabMobile('essencial');
+              const copy = {
+                essencial: new Set(itensNivel.essencial),
+                recomendado: new Set<string>(),
+                completo: new Set<string>(),
+              };
+              setItensNivel(copy);
+              triggerAutoSave(copy, titulosNiveis, descricoesNiveis, observacoes, customPrecos);
+            }
             showSuccess(novoModo === 'simples' ? 'Alternado para Orçamento Simples' : 'Alternado para Orçamento em 3 Níveis');
           }}
           className="text-xs font-bold text-vapor-300 hover:text-amber-400 underline transition-colors"
@@ -2034,12 +2064,7 @@ export const DetalheOrcamento: React.FC = () => {
                       <div className="flex items-center gap-1.5 text-vapor-300 font-mono text-[12px]">
                         <Clock size={14} className="text-vapor-400 shrink-0" />
                         <span>
-                          {totais[nivelKey].duracaoTotal < 60
-                            ? `${totais[nivelKey].duracaoTotal} min`
-                            : `${Math.floor(totais[nivelKey].duracaoTotal / 60)}h${totais[nivelKey].duracaoTotal % 60
-                              ? `${totais[nivelKey].duracaoTotal % 60}min`
-                              : ''
-                            }`}
+                          {formatarDuracao(totais[nivelKey].duracaoTotal)}
                         </span>
                       </div>
 
@@ -2166,7 +2191,7 @@ export const DetalheOrcamento: React.FC = () => {
                                   <div className="flex items-center justify-between w-full pt-1.5 border-t border-graphite-800/50 text-[11px] font-mono gap-2">
                                     <span className="text-vapor-400 flex items-center gap-1 shrink-0">
                                       <Clock size={11} className="text-vapor-500" />
-                                      {serv.duracaoMatriz} min
+                                      {formatarDuracao(serv.duracaoMatriz)}
                                     </span>
 
                                     {isChecked ? (
@@ -2249,34 +2274,34 @@ export const DetalheOrcamento: React.FC = () => {
       </Card>
 
       {/* PAINEL FIXO DE COMPARAÇÃO NO RODAPÉ */}
-      <div className="fixed bottom-0 left-0 xl:left-[240px] right-0 bg-graphite-800/95 backdrop-blur-md border-t border-graphite-700 p-3 sm:p-4 z-30 shadow-2xl">
+      <div className="fixed bottom-panel-orcamento left-0 lg:left-[240px] right-0 bg-graphite-800/95 backdrop-blur-md border-t border-graphite-700 p-3 sm:p-4 z-30 shadow-2xl">
         <div className="max-w-6xl mx-auto flex flex-col gap-3">
 
           {/* BARRA COMPACTA MOBILE E TABLET (< 1280px) */}
           <div className="flex xl:hidden items-center justify-between gap-2">
             <div className="flex flex-col">
               <span className="font-mono text-[10px] text-vapor-400 uppercase font-semibold">
-                Nível Ativo ({activeTabMobile.toUpperCase()})
+                {(orcamento as any)?.modo_orcamento === 'simples' ? 'Proposta Única' : `Nível Ativo (${activeTabMobile.toUpperCase()})`}
               </span>
               <div className="flex items-center gap-2">
-                {totais[activeTabMobile].itensCount === 0 ? (
+                {totais.essencial.itensCount === 0 ? (
                   <span className="font-sans text-[12px] text-vapor-500 italic">
                     Nenhum serviço selecionado
                   </span>
                 ) : (
                   <>
                     <span className="font-mono text-[15px] font-bold text-amber-400">
-                      {totais[activeTabMobile].itensSemPrecoCount === totais[activeTabMobile].itensCount
+                      {totais.essencial.itensSemPrecoCount === totais.essencial.itensCount
                         ? 'Preço a definir'
-                        : formatarMoeda(totais[activeTabMobile].valorComDesconto)}
+                        : formatarMoeda(totais.essencial.valorComDesconto)}
                     </span>
-                    {totais[activeTabMobile].valorComDesconto < totais[activeTabMobile].valorTotal && (
+                    {totais.essencial.valorComDesconto < totais.essencial.valorTotal && (
                       <span className="font-mono text-[11px] text-vapor-500 line-through">
-                        {formatarMoeda(totais[activeTabMobile].valorTotal)}
+                        {formatarMoeda(totais.essencial.valorTotal)}
                       </span>
                     )}
                     <span className="font-mono text-[11px] text-vapor-400">
-                      • {totais[activeTabMobile].duracaoTotal} min
+                      • {formatarDuracao(totais.essencial.duracaoTotal)}
                     </span>
                   </>
                 )}
@@ -2285,14 +2310,28 @@ export const DetalheOrcamento: React.FC = () => {
 
             <div className="flex items-center gap-2">
               <Button
-                tone="graphite"
+                tone="amber"
                 size="sm"
-                onClick={() => setExpandComparacaoMobile(!expandComparacaoMobile)}
+                onClick={handleSalvarManual}
+                loading={saveStatus === 'salvando'}
                 className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 min-h-[44px]"
+                title="Salvar Orçamento"
               >
-                <span>{expandComparacaoMobile ? 'Ocultar' : 'Comparar 3 Níveis'}</span>
-                {expandComparacaoMobile ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                <Save size={14} />
+                <span className="hidden sm:inline">Salvar</span>
               </Button>
+
+              {(orcamento as any)?.modo_orcamento !== 'simples' && (
+                <Button
+                  tone="graphite"
+                  size="sm"
+                  onClick={() => setExpandComparacaoMobile(!expandComparacaoMobile)}
+                  className="flex items-center gap-1 text-[11px] px-2.5 py-1.5 min-h-[44px]"
+                >
+                  <span>{expandComparacaoMobile ? 'Ocultar' : 'Comparar'}</span>
+                  {expandComparacaoMobile ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                </Button>
+              )}
 
               <Button
                 tone="emerald"
@@ -2306,64 +2345,99 @@ export const DetalheOrcamento: React.FC = () => {
             </div>
           </div>
 
-          {/* GRID DE COMPARAÇÃO DOS 3 NÍVEIS (VISÍVEL NO DESKTOP >= 1280px OU EXPANDIDO ABAIXO) */}
-          <div className={`flex-col xl:flex-row xl:items-center justify-between gap-4 ${expandComparacaoMobile ? 'flex' : 'hidden xl:flex'}`}>
-            <div className="grid grid-cols-3 gap-2 sm:gap-4 flex-1">
-              {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nKey) => {
-                const isNivelDestaque = nKey === 'recomendado';
-                const t = totais[nKey];
-                const semPreco = t.itensSemPrecoCount > 0;
-                const todosSemPreco = t.itensCount > 0 && t.itensSemPrecoCount === t.itensCount;
+          {/* GRID DE TOTAIS (NO MODO SIMPLES MOSTRA APENAS O TOTAL DA PROPOSTA, NO MODO 3 NÍVEIS MOSTRA A COMPARAÇÃO) */}
+          <div className={`flex-col xl:flex-row xl:items-center justify-between gap-4 ${(orcamento as any)?.modo_orcamento === 'simples' ? 'hidden xl:flex' : (expandComparacaoMobile ? 'flex' : 'hidden xl:flex')}`}>
+            {(orcamento as any)?.modo_orcamento === 'simples' ? (
+              <div className="flex items-center justify-between gap-4 p-3 bg-graphite-900 border border-amber-500/30 rounded-xl flex-1 shadow-sm">
+                <div className="flex flex-col">
+                  <span className="font-mono text-[10px] uppercase font-bold text-amber-400 tracking-wider">
+                    Orçamento Simples (Proposta de Nível Único)
+                  </span>
+                  <span className="font-sans text-[12px] text-vapor-300">
+                    {totais.essencial.itensCount} serviço{totais.essencial.itensCount !== 1 ? 's' : ''} incluso{totais.essencial.itensCount !== 1 ? 's' : ''}
+                  </span>
+                </div>
 
-                return (
-                  <div
-                    key={nKey}
-                    onClick={() => setActiveTabMobile(nKey)}
-                    className={`flex flex-col items-start p-2 sm:px-3.5 sm:py-2.5 rounded-lg border transition-all cursor-pointer min-h-[52px] ${isNivelDestaque
-                        ? 'bg-amber-500/10 border-amber-500/50 text-vapor-100 shadow-sm'
-                        : 'bg-graphite-900 border-graphite-700 hover:border-graphite-600'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <span className={`font-mono text-[10px] uppercase font-bold ${isNivelDestaque ? 'text-amber-400' : 'text-vapor-400'}`}>
-                        {nKey === 'recomendado' ? 'Recomendado ★' : nKey}
-                      </span>
-                      {t.itensCount > 0 && (
-                        <span className="font-mono text-[9px] text-vapor-400">
-                          {t.itensCount} item{t.itensCount !== 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-[22px] font-black text-amber-400">
+                    {totais.essencial.itensCount === 0
+                      ? 'Sem itens'
+                      : totais.essencial.itensSemPrecoCount === totais.essencial.itensCount
+                        ? 'Preço a definir'
+                        : formatarMoeda(totais.essencial.valorComDesconto)}
+                  </span>
+                  {totais.essencial.valorComDesconto < totais.essencial.valorTotal && (
+                    <span className="font-mono text-[13px] text-vapor-500 line-through">
+                      {formatarMoeda(totais.essencial.valorTotal)}
+                    </span>
+                  )}
+                </div>
 
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <span className={`font-mono text-[14px] sm:text-[15px] font-bold ${isNivelDestaque ? 'text-amber-400' : 'text-vapor-100'}`}>
-                        {t.itensCount === 0
-                          ? 'Sem itens'
-                          : todosSemPreco
-                            ? 'Preço a definir'
-                            : formatarMoeda(t.valorComDesconto)}
-                      </span>
-                      {t.valorComDesconto < t.valorTotal && !todosSemPreco && (
-                        <span className="font-mono text-[10px] text-vapor-500 line-through">
-                          {formatarMoeda(t.valorTotal)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between w-full mt-0.5">
-                      <span className="font-mono text-[10px] text-vapor-400">
-                        {t.duracaoTotal} min
-                      </span>
-                      {semPreco && !todosSemPreco && (
-                        <span className="font-sans text-[9px] text-amber-500 font-medium">
-                          *com itens s/ preço
-                        </span>
-                      )}
-                    </div>
+                {totais.essencial.duracaoTotal > 0 && (
+                  <div className="flex items-center gap-1.5 text-vapor-300 font-mono text-[12px] bg-graphite-950 px-3 py-1.5 rounded-lg border border-graphite-800">
+                    <Clock size={14} className="text-amber-400" />
+                    <span>Tempo total: {formatarDuracao(totais.essencial.duracaoTotal)}</span>
                   </div>
-                );
-              })}
-            </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 flex-1">
+                {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nKey) => {
+                  const isNivelDestaque = nKey === 'recomendado';
+                  const t = totais[nKey];
+                  const semPreco = t.itensSemPrecoCount > 0;
+                  const todosSemPreco = t.itensCount > 0 && t.itensSemPrecoCount === t.itensCount;
+
+                  return (
+                    <div
+                      key={nKey}
+                      onClick={() => setActiveTabMobile(nKey)}
+                      className={`flex flex-col items-start p-2 sm:px-3.5 sm:py-2.5 rounded-lg border transition-all cursor-pointer min-h-[52px] ${isNivelDestaque
+                          ? 'bg-amber-500/10 border-amber-500/50 text-vapor-100 shadow-sm'
+                          : 'bg-graphite-900 border-graphite-700 hover:border-graphite-600'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className={`font-mono text-[10px] uppercase font-bold ${isNivelDestaque ? 'text-amber-400' : 'text-vapor-400'}`}>
+                          {nKey === 'recomendado' ? 'Recomendado ★' : nKey}
+                        </span>
+                        {t.itensCount > 0 && (
+                          <span className="font-mono text-[9px] text-vapor-400">
+                            {t.itensCount} item{t.itensCount !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className={`font-mono text-[14px] sm:text-[15px] font-bold ${isNivelDestaque ? 'text-amber-400' : 'text-vapor-100'}`}>
+                          {t.itensCount === 0
+                            ? 'Sem itens'
+                            : todosSemPreco
+                              ? 'Preço a definir'
+                              : formatarMoeda(t.valorComDesconto)}
+                        </span>
+                        {t.valorComDesconto < t.valorTotal && !todosSemPreco && (
+                          <span className="font-mono text-[10px] text-vapor-500 line-through">
+                            {formatarMoeda(t.valorTotal)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between w-full mt-0.5">
+                        <span className="font-mono text-[10px] text-vapor-400">
+                          {formatarDuracao(t.duracaoTotal)}
+                        </span>
+                        {semPreco && !todosSemPreco && (
+                          <span className="font-sans text-[9px] text-amber-500 font-medium">
+                            *com itens s/ preço
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* AÇÕES DIREITA */}
             <div className="flex items-center gap-2 justify-end shrink-0 pt-2 xl:pt-0 border-t xl:border-t-0 border-graphite-700/60">

@@ -21,13 +21,15 @@ import {
   AlertCircle,
   ChevronRight,
   Calendar,
-  Trash2
+  Trash2,
+  Clock
 } from 'lucide-react';
 import type { Orcamento } from '../types/orcamento';
 import type { Cliente, Veiculo, CategoriaVeiculo } from '../types/clientes';
 import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../utils/orcamento';
 import { formatarData } from '../utils/datas';
 import { formatarCodigoProposta, formatarMoeda } from '../utils/formatters';
+import { formatarDuracao } from '../utils/duracao';
 
 export const Orcamentos: React.FC = () => {
   const navigate = useNavigate();
@@ -194,9 +196,11 @@ export const Orcamentos: React.FC = () => {
           return;
         }
 
-        const cleanPlaca = novaPlaca.trim()
-          ? novaPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
-          : `ORC${Date.now().toString().slice(-4)}`;
+        const rawPlaca = novaPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const isPlacaGenerica = !rawPlaca || ['SEMPLACA', 'SEM', 'SP', 'NAOTEM', 'TESTE'].includes(rawPlaca);
+        const cleanPlaca = isPlacaGenerica
+          ? `PROV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+          : rawPlaca;
 
         const { data: cadData, error: cadErr } = await supabase.rpc('cadastro_rapido', {
           p_nome: novoNome.trim(),
@@ -213,8 +217,13 @@ export const Orcamentos: React.FC = () => {
         finalClienteId = res?.out_cliente_id || res?.cliente_id;
         finalVeiculoId = res?.out_veiculo_id || res?.veiculo_id;
 
-        if (novaCor.trim() && finalVeiculoId) {
-          await supabase.from('veiculos').update({ cor: novaCor.trim() }).eq('id', finalVeiculoId);
+        // Garante que o modelo, cor e categoria cadastrados pelo usuário sejam salvos diretamente no veículo
+        if (finalVeiculoId) {
+          await supabase.from('veiculos').update({
+            modelo: novoModelo.trim() || 'Veículo',
+            cor: novaCor.trim() || null,
+            categoria_id: finalCategoriaId,
+          }).eq('id', finalVeiculoId);
         }
       }
 
@@ -313,10 +322,16 @@ export const Orcamentos: React.FC = () => {
           <Button
             tone="amber"
             onClick={() => {
+              setModoEntrada('existente');
               setClienteId('');
               setVeiculoId('');
               setCategoriaId('');
               setTitulo('');
+              setNovoNome('');
+              setNovoTelefone('');
+              setNovoModelo('');
+              setNovaCor('');
+              setNovaPlaca('');
               setShowModal(true);
             }}
             className="flex items-center gap-2"
@@ -516,6 +531,12 @@ export const Orcamentos: React.FC = () => {
                     <span className="font-mono text-[13px] text-vapor-300">
                       Rec.: <strong className="text-amber-400">{formatarMoeda(valorReferencia)}</strong>
                     </span>
+                    {nivelDestaque?.duracao_total && nivelDestaque.duracao_total > 0 ? (
+                      <span className="font-mono text-[11px] text-vapor-400 flex items-center gap-1">
+                        <Clock size={11} className="text-vapor-500" />
+                        {formatarDuracao(nivelDestaque.duracao_total)}
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="flex items-center gap-1">
@@ -563,7 +584,11 @@ export const Orcamentos: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => setModoEntrada('rapido')}
+              onClick={() => {
+                setModoEntrada('rapido');
+                setClienteId('');
+                setVeiculoId('');
+              }}
               className={`py-2 text-xs font-bold rounded transition-colors ${
                 modoEntrada === 'rapido'
                   ? 'bg-amber-500 text-graphite-950 shadow'

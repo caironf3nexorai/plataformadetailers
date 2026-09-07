@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Layers, Package, Sparkles, AlertTriangle } from 'lucide-react';
+import { Layers, Package, Sparkles, AlertTriangle, Plus } from 'lucide-react';
 import { ServiceChip } from '../ui/ServiceChip';
 import { formatarDuracao } from '../../utils/agenda';
 import { formatValorMoeda } from '../../utils/precos';
@@ -23,6 +23,7 @@ export interface SeletorServicosProps {
   onToggleServico: (servico: any) => void;
   onToggleCombo: (combo: any) => void;
   onCloseModal?: () => void;
+  onAbrirNovoServico?: () => void;
 }
 
 export const SeletorServicos: React.FC<SeletorServicosProps> = ({
@@ -35,6 +36,7 @@ export const SeletorServicos: React.FC<SeletorServicosProps> = ({
   onToggleServico,
   onToggleCombo,
   onCloseModal,
+  onAbrirNovoServico,
 }) => {
   const [servicoTab, setServicoTab] = useState<'servicos' | 'combos'>('servicos');
 
@@ -121,32 +123,46 @@ export const SeletorServicos: React.FC<SeletorServicosProps> = ({
             </span>
           </div>
 
-          {/* Abas Serviços e Combos */}
-          <div className="flex border-b border-graphite-700">
-            <button
-              type="button"
-              onClick={() => setServicoTab('servicos')}
-              className={`px-4 py-2 font-sans text-[13px] font-semibold flex items-center gap-2 border-b-2 transition-colors ${
-                servicoTab === 'servicos'
-                  ? 'border-amber-500 text-amber-400'
-                  : 'border-transparent text-vapor-400 hover:text-vapor-200'
-              }`}
-            >
-              <Layers size={16} />
-              <span>Serviços ({servicos.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setServicoTab('combos')}
-              className={`px-4 py-2 font-sans text-[13px] font-semibold flex items-center gap-2 border-b-2 transition-colors ${
-                servicoTab === 'combos'
-                  ? 'border-amber-500 text-amber-400'
-                  : 'border-transparent text-vapor-400 hover:text-vapor-200'
-              }`}
-            >
-              <Package size={16} />
-              <span>Combos Promocionais ({combos.length})</span>
-            </button>
+          {/* Abas Serviços e Combos com Ação de Criar Serviço Rápido */}
+          <div className="flex items-center justify-between border-b border-graphite-700">
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => setServicoTab('servicos')}
+                className={`px-4 py-2 font-sans text-[13px] font-semibold flex items-center gap-2 border-b-2 transition-colors ${
+                  servicoTab === 'servicos'
+                    ? 'border-amber-500 text-amber-400'
+                    : 'border-transparent text-vapor-400 hover:text-vapor-200'
+                }`}
+              >
+                <Layers size={16} />
+                <span>Serviços ({servicos.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setServicoTab('combos')}
+                className={`px-4 py-2 font-sans text-[13px] font-semibold flex items-center gap-2 border-b-2 transition-colors ${
+                  servicoTab === 'combos'
+                    ? 'border-amber-500 text-amber-400'
+                    : 'border-transparent text-vapor-400 hover:text-vapor-200'
+                }`}
+              >
+                <Package size={16} />
+                <span>Combos Promocionais ({combos.length})</span>
+              </button>
+            </div>
+
+            {onAbrirNovoServico && (
+              <button
+                type="button"
+                onClick={onAbrirNovoServico}
+                className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg border border-amber-500/30 transition-colors shrink-0 mb-1"
+                title="Cadastrar novo serviço sem sair desta tela"
+              >
+                <Plus size={14} strokeWidth={2.5} />
+                <span>+ Novo Serviço</span>
+              </button>
+            )}
           </div>
 
           {/* CONTEÚDO DA ABA SERVIÇOS */}
@@ -157,11 +173,20 @@ export const SeletorServicos: React.FC<SeletorServicosProps> = ({
                   <span className="font-sans text-[13px] text-vapor-300">
                     Nenhum serviço cadastrado.
                   </span>
-                  {onCloseModal && (
+                  {onAbrirNovoServico ? (
+                    <button
+                      type="button"
+                      onClick={onAbrirNovoServico}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold text-[13px] rounded-lg flex items-center gap-1.5 transition-colors shadow"
+                    >
+                      <Plus size={16} strokeWidth={2.5} />
+                      <span>Cadastrar Novo Serviço Agora</span>
+                    </button>
+                  ) : onCloseModal ? (
                     <Link to="/servicos" onClick={onCloseModal} className="text-amber-400 underline text-[12px]">
                       Ir para Cadastro de Serviços
                     </Link>
-                  )}
+                  ) : null}
                 </div>
               ) : (
                 Object.entries(gruposServicos).map(([grupoNome, servs]) => (

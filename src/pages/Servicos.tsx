@@ -28,6 +28,7 @@ import { GerenciadorCombos } from '../components/servicos/GerenciadorCombos';
 import {
   slugifyGrupo,
   validateImageFile,
+  comprimirImagemCatalogo,
   getFotoPublicUrl,
   fotoDoServico
 } from '../utils/imagens';
@@ -54,7 +55,7 @@ export const Servicos: React.FC = () => {
   const [submittingMassa, setSubmittingMassa] = useState(false);
   const [confirmMassa, setConfirmMassa] = useState<{
     isOpen: boolean;
-    campo: 'ativo' | 'publico';
+    campo: 'ativo' | 'publico' | 'excluir';
     valor: boolean;
     label: string;
   }>({
@@ -63,6 +64,10 @@ export const Servicos: React.FC = () => {
     valor: true,
     label: '',
   });
+
+  // Exclusão individual
+  const [servicoParaExcluir, setServicoParaExcluir] = useState<ServicoComPrecos | null>(null);
+  const [submittingExcluir, setSubmittingExcluir] = useState(false);
 
   const canManage = membership?.role === 'dono' || membership?.role === 'gerente';
   
@@ -75,10 +80,11 @@ export const Servicos: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      // 1. Busca serviços cadastrados com seus preços
+      // 1. Busca serviços cadastrados com seus preços pertencentes estritamente a este tenant
       const { data: servs, error: sErr } = await supabase
         .from('servicos')
         .select('*, servico_precos(*)')
+        .eq('tenant_id', tenant.id)
         .order('ordem', { ascending: true });
 
       if (sErr) throw sErr;
@@ -135,7 +141,7 @@ export const Servicos: React.FC = () => {
     }
   };
 
-  const abrirConfirmacaoMassa = (campo: 'ativo' | 'publico', valor: boolean, label: string) => {
+  const abrirConfirmacaoMassa = (campo: 'ativo' | 'publico' | 'excluir', valor: boolean, label: string) => {
     if (selectedIds.length === 0) return;
     setConfirmMassa({
       isOpen: true,
@@ -171,27 +177,51 @@ export const Servicos: React.FC = () => {
     }
   };
 
+  const executarExclusaoIndividual = async () => {
+    if (!servicoParaExcluir || !tenant) return;
+    setSubmittingExcluir(true);
+    setErrorMsg(null);
+
+    try {
+      const { error } = await supabase.rpc('excluir_servico', {
+        p_servico_id: servicoParaExcluir.id,
+        p_tenant_id: tenant.id,
+      });
+
+      if (error) throw error;
+
+      setServicoParaExcluir(null);
+      await fetchServicesAndModels();
+    } catch (err: any) {
+      console.error('[Excluir Servico Error]:', err);
+      setErrorMsg(err.message || 'Erro ao excluir serviço.');
+    } finally {
+      setSubmittingExcluir(false);
+    }
+  };
+
   const handleGrupoFotoUpload = async (grupo: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !tenant) return;
     const file = e.target.files[0];
     setErrorMsg(null);
 
-    if (file.size > 2 * 1024 * 1024) {
-      setErrorMsg('A imagem deve ter no máximo 2MB.');
-      return;
-    }
-
-    const { valid, ext, error } = validateImageFile(file);
-    if (!valid || !ext) {
-      setErrorMsg(error || 'Formato inválido.');
+    const { valid, error } = validateImageFile(file);
+    if (!valid) {
+      setErrorMsg(error || 'Formato inválido. Use imagens JPG, PNG ou WEBP.');
       return;
     }
 
     setUploadingGrupo(grupo);
     const grupoSlug = slugifyGrupo(grupo);
-    const newPath = `${tenant.id}/grupos/${grupoSlug}.${ext}`;
 
     try {
+      // Comprime no cliente para o menor tamanho possível (< 200KB)
+      const { file: compressedFile, ext } = await comprimirImagemCatalogo(file, {
+        maxDimension: 1200,
+        targetMaxBytes: 200 * 1024,
+      });
+
+      const newPath = `${tenant.id}/grupos/${grupoSlug}.${ext}`;
       const oldPath = grupoFotos[grupo] || grupoFotos[grupoSlug];
       if (oldPath && oldPath !== newPath) {
         await supabase.storage.from('catalogo').remove([oldPath]);
@@ -199,7 +229,7 @@ export const Servicos: React.FC = () => {
 
       const { error: uploadError } = await supabase.storage
         .from('catalogo')
-        .upload(newPath, file, { upsert: true });
+        .upload(newPath, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
@@ -264,6 +294,11 @@ export const Servicos: React.FC = () => {
   };
 
   const handleSemear = async () => {
+    if (!tenant) {
+      setErrorMsg('Oficina não identificada.');
+      return;
+    }
+
     if (selectedModelos.length === 0) {
       setErrorMsg('Selecione ao menos um serviço para adicionar.');
       return;
@@ -273,11 +308,19 @@ export const Servicos: React.FC = () => {
     setErrorMsg(null);
 
     try {
-      const { error } = await supabase.rpc('semear_servicos', {
+      let rpcRes = await supabase.rpc('semear_servicos', {
         p_modelo_ids: selectedModelos,
+        p_tenant_id: tenant.id,
       });
 
-      if (error) throw error;
+      // Fallback defensivo para caso a assinatura antiga (com 1 parâmetro) ainda esteja em cache
+      if (rpcRes.error && (rpcRes.error.code === 'PGRST202' || rpcRes.error.message?.includes('parameter'))) {
+        rpcRes = await supabase.rpc('semear_servicos', {
+          p_modelo_ids: selectedModelos,
+        });
+      }
+
+      if (rpcRes.error) throw rpcRes.error;
 
       // Recarrega serviços cadastrados
       await fetchServicesAndModels();
@@ -689,6 +732,19 @@ export const Servicos: React.FC = () => {
                               <Pencil size={11} />
                               Editar
                             </span>
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setServicoParaExcluir(serv);
+                                }}
+                                className="p-1 rounded text-vapor-500 hover:text-flare-400 hover:bg-flare-400/10 transition-colors"
+                                title="Excluir serviço"
+                              >
+                                <Trash size={13} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </Card>
@@ -741,6 +797,19 @@ export const Servicos: React.FC = () => {
                       <Pencil size={11} />
                       Editar
                     </span>
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setServicoParaExcluir(serv);
+                        }}
+                        className="p-1 rounded text-vapor-500 hover:text-flare-400 hover:bg-flare-400/10 transition-colors"
+                        title="Excluir serviço"
+                      >
+                        <Trash size={13} />
+                      </button>
+                    )}
                   </div>
                 </Card>
               );
@@ -797,6 +866,16 @@ export const Servicos: React.FC = () => {
               Remover do catálogo
             </Button>
 
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={submittingMassa}
+              onClick={() => abrirConfirmacaoMassa('excluir', false, 'Excluir definitivamente')}
+              className="text-[12px] h-9 px-3 border-flare-400/40 hover:bg-flare-400/20 text-flare-400 hover:text-flare-300"
+            >
+              Excluir
+            </Button>
+
             <button
               type="button"
               onClick={() => setSelectedIds([])}
@@ -808,7 +887,7 @@ export const Servicos: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Confirmação no Padrão do Sistema */}
+      {/* Modal de Confirmação em Massa */}
       <ModalConfirmacao
         isOpen={confirmMassa.isOpen}
         onClose={() => setConfirmMassa((prev) => ({ ...prev, isOpen: false }))}
@@ -821,8 +900,25 @@ export const Servicos: React.FC = () => {
         }
         textoConfirmar="Confirmar Alteração"
         textoCancelar="Voltar"
-        variant={confirmMassa.label.includes('Desativar') ? 'danger' : 'primary'}
+        variant={confirmMassa.label.includes('Desativar') || confirmMassa.campo === 'excluir' ? 'danger' : 'primary'}
         loading={submittingMassa}
+      />
+
+      {/* Modal de Exclusão Individual */}
+      <ModalConfirmacao
+        isOpen={!!servicoParaExcluir}
+        onClose={() => setServicoParaExcluir(null)}
+        onConfirm={executarExclusaoIndividual}
+        title="Excluir Serviço"
+        mensagem={
+          <span>
+            Tem certeza que deseja excluir o serviço &quot;<strong className="text-vapor-100">{servicoParaExcluir?.nome}</strong>&quot;? Se ele já possuir histórico em atendimentos ou orçamentos, será desativado com segurança para preservar relatórios.
+          </span>
+        }
+        textoConfirmar="Excluir Serviço"
+        textoCancelar="Cancelar"
+        variant="danger"
+        loading={submittingExcluir}
       />
         </>
       )}

@@ -115,24 +115,38 @@ export function traduzirErro(erro: any, contextoTela?: string): ErroTraduzido {
     acao = 'Verifique seu Wi-Fi ou dados móveis.';
     ehInesperado = false;
   }
-  // 2. Erros de Banco de Dados por Código do PostgreSQL
-  else if (code === '23505') {
+  // 2. Erros de Banco de Dados por Código do PostgreSQL ou Texto da Mensagem
+  else if (
+    code === '23505' ||
+    msgLower.includes('23505') ||
+    msgLower.includes('unique constraint') ||
+    msgLower.includes('duplicate key') ||
+    msgLower.includes('já existe')
+  ) {
     // Duplicidade
-    titulo = 'Registro já existente';
-    if (msgLower.includes('telefone') || msgLower.includes('phone')) {
-      mensagem = 'Já existe um cadastro cadastrado com este número de telefone.';
+    titulo = 'Item já cadastrado';
+    if (msgLower.includes('servicos_tenant_id_nome_key') || msgLower.includes('servicos') || msgLower.includes('servico')) {
+      titulo = 'Serviço já cadastrado';
+      mensagem = 'Já existe um serviço cadastrado com este mesmo nome no catálogo da sua oficina.';
+      acao = 'Escolha um nome diferente ou edite o serviço já existente no catálogo.';
+    } else if (msgLower.includes('telefone') || msgLower.includes('phone')) {
+      mensagem = 'Já existe um cadastro com este número de telefone.';
+      acao = 'Verifique se o cliente já está cadastrado.';
     } else if (msgLower.includes('email')) {
-      mensagem = 'Já existe um cadastro cadastrado com este endereço de e-mail.';
+      mensagem = 'Já existe um cadastro com este endereço de e-mail.';
+      acao = 'Verifique se o cadastro já existe.';
     } else if (msgLower.includes('cpf') || msgLower.includes('cnpj')) {
-      mensagem = 'Já existe um cadastro cadastrado com este CPF/CNPJ.';
+      mensagem = 'Já existe um cadastro com este CPF/CNPJ.';
+      acao = 'Verifique os dados cadastrados.';
     } else if (msgLower.includes('placa')) {
       mensagem = 'Já existe um veículo cadastrado com esta placa.';
+      acao = 'Busque pela placa para visualizar o veículo.';
     } else {
-      mensagem = 'Já existe um registro com esses mesmos dados no sistema.';
+      mensagem = 'Já existe um registro com esses mesmos dados cadastrado no sistema.';
+      acao = 'Verifique se o item já está cadastrado ou utilize dados diferentes.';
     }
-    acao = 'Verifique se o item já está cadastrado ou utilize dados diferentes.';
     ehInesperado = false;
-  } else if (code === '23503') {
+  } else if (code === '23503' || msgLower.includes('foreign key') || msgLower.includes('violates foreign key')) {
     // Vínculo (Foreign Key)
     titulo = 'Item em uso';
     mensagem = 'Não é possível excluir ou alterar este item porque ele está sendo usado em outro lugar da plataforma (ex: em atendimentos ou históricos).';
@@ -163,7 +177,21 @@ export function traduzirErro(erro: any, contextoTela?: string): ErroTraduzido {
     ehInesperado = false;
   } else {
     // Se a mensagem original não parecer código/stacktrace técnico, exibe para o usuário
-    const pareceTecnico = rawMessage.includes('SELECT') || rawMessage.includes('UPDATE') || rawMessage.includes('INSERT') || rawMessage.includes('column') || rawMessage.includes('relation') || rawMessage.includes('function');
+    const pareceTecnico =
+      rawMessage.includes('SELECT') ||
+      rawMessage.includes('UPDATE') ||
+      rawMessage.includes('INSERT') ||
+      rawMessage.includes('column') ||
+      rawMessage.includes('relation') ||
+      rawMessage.includes('function') ||
+      rawMessage.includes('constraint') ||
+      rawMessage.includes('violates') ||
+      rawMessage.includes('duplicate key') ||
+      rawMessage.includes('syntaxerror') ||
+      rawMessage.includes('foreign key') ||
+      rawMessage.includes('table ') ||
+      rawMessage.includes('_key"');
+
     if (!pareceTecnico && rawMessage.length < 150) {
       titulo = 'Atenção';
       mensagem = rawMessage;

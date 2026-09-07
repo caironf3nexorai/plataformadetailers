@@ -122,3 +122,26 @@ input[type=number] {
 *:focus-visible {
   @apply outline-none ring-2 ring-amber-500 ring-offset-2 ring-offset-graphite-900;
 }
+
+/* Barra flutuante de orçamentos posicionada acima do menu inferior mobile (BottomNav) */
+.bottom-panel-orcamento {
+  bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+}
+
+.btn-feedback-pos {
+  bottom: calc(68px + max(12px, env(safe-area-inset-bottom, 0px)));
+}
+
+.btn-feedback-pos-elevada {
+  bottom: calc(138px + max(12px, env(safe-area-inset-bottom, 0px)));
+}
+
+@media (min-width: 1024px) {
+  .bottom-panel-orcamento {
+    bottom: 0px;
+  }
+  .btn-feedback-pos,
+  .btn-feedback-pos-elevada {
+    bottom: 1.5rem; /* 24px - lg:bottom-6 */
+  }
+}

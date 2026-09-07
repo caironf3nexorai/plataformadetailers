@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissao } from '../hooks/usePermissao';
@@ -25,7 +26,8 @@ import type { Agendamento, HorarioFuncionamento, AgendamentoStatus } from '../ty
 import { 
   getLabelFromStatus, 
   getBadgeToneFromStatus, 
-  getNomeDiaSemana 
+  getNomeDiaSemana,
+  formatarDuracao 
 } from '../utils/agenda';
 import { 
   formatarHora, 
@@ -47,7 +49,17 @@ const ALL_STATUSES: { id: AgendamentoStatus; label: string }[] = [
   { id: 'nao_compareceu', label: 'Não compareceu' },
 ];
 
-const VisaoAgenda: React.FC = () => {
+interface VisaoAgendaProps {
+  initialNovoAgendamento?: boolean;
+  initialClienteId?: string;
+  initialVeiculoId?: string;
+}
+
+const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
+  initialNovoAgendamento = false,
+  initialClienteId,
+  initialVeiculoId,
+}) => {
   const { tenant } = useAuth();
   const { podeGerirServicos, podeVerValor } = usePermissao();
 
@@ -104,9 +116,19 @@ const VisaoAgenda: React.FC = () => {
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
 
   // Modais
-  const [isModalNovoOpen, setIsModalNovoOpen] = useState<boolean>(false);
+  const [isModalNovoOpen, setIsModalNovoOpen] = useState<boolean>(initialNovoAgendamento);
+  const [targetClienteId, setTargetClienteId] = useState<string | undefined>(initialClienteId);
+  const [targetVeiculoId, setTargetVeiculoId] = useState<string | undefined>(initialVeiculoId);
   const [selectedAgendamento, setSelectedAgendamento] = useState<Agendamento | null>(null);
   const [isPainelOpen, setIsPainelOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialNovoAgendamento) {
+      setIsModalNovoOpen(true);
+      setTargetClienteId(initialClienteId);
+      setTargetVeiculoId(initialVeiculoId);
+    }
+  }, [initialNovoAgendamento, initialClienteId, initialVeiculoId]);
 
   // Debounce do campo de busca (300ms)
   useEffect(() => {
@@ -792,7 +814,7 @@ const VisaoAgenda: React.FC = () => {
                                 {hora}
                               </span>
                               <span className="font-sans text-[10px] text-vapor-400">
-                                {durTotal} min
+                                {formatarDuracao(durTotal)}
                               </span>
                             </div>
 
@@ -1150,11 +1172,17 @@ const VisaoAgenda: React.FC = () => {
       {/* Modal de Novo Agendamento */}
       <ModalNovoAgendamento
         isOpen={isModalNovoOpen}
-        onClose={() => setIsModalNovoOpen(false)}
+        onClose={() => {
+          setIsModalNovoOpen(false);
+          setTargetClienteId(undefined);
+          setTargetVeiculoId(undefined);
+        }}
         onSuccess={() => {
           fetchAgendaData();
         }}
         initialDate={formatarDataIsoSP(selectedDate)}
+        initialClienteId={targetClienteId}
+        initialVeiculoId={targetVeiculoId}
       />
 
       {/* Painel de Detalhes e Ações do Agendamento */}
@@ -1178,11 +1206,35 @@ interface AgendaProps {
 }
 
 export const Agenda: React.FC<AgendaProps> = ({ abaInicial = 'hoje' }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+
+  const queryNovo = searchParams.get('novoAgendamento') === 'true';
+  const stateNovo = !!(location.state as any)?.openNovoAgendamento;
+  const isNovoAgendamentoRequested = queryNovo || stateNovo;
+
+  const paramClienteId = searchParams.get('clienteId') || (location.state as any)?.clienteId;
+  const paramVeiculoId = searchParams.get('veiculoId') || (location.state as any)?.veiculoId;
+
   const [activeTab, setActiveTab] = useState<'hoje' | 'agenda'>(() => {
+    if (isNovoAgendamentoRequested) return 'agenda';
     const saved = localStorage.getItem('agenda_active_tab');
     if (saved === 'hoje' || saved === 'agenda') return saved;
     return abaInicial;
   });
+
+  useEffect(() => {
+    if (isNovoAgendamentoRequested) {
+      setActiveTab('agenda');
+      if (queryNovo) {
+        const next = new URLSearchParams(searchParams);
+        next.delete('novoAgendamento');
+        next.delete('clienteId');
+        next.delete('veiculoId');
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [isNovoAgendamentoRequested]);
 
   useEffect(() => {
     localStorage.setItem('agenda_active_tab', activeTab);
@@ -1204,7 +1256,15 @@ export const Agenda: React.FC<AgendaProps> = ({ abaInicial = 'hoje' }) => {
         />
       </div>
 
-      {activeTab === 'hoje' ? <Hoje /> : <VisaoAgenda />}
+      {activeTab === 'hoje' ? (
+        <Hoje />
+      ) : (
+        <VisaoAgenda
+          initialNovoAgendamento={isNovoAgendamentoRequested}
+          initialClienteId={paramClienteId}
+          initialVeiculoId={paramVeiculoId}
+        />
+      )}
     </div>
   );
 };

@@ -21,6 +21,7 @@ import type { ProdutoParaConsumo, ItemConsumoExecucao } from '../../types/estoqu
 import { formatarMoeda, parseNumeroFlexivel } from '../../utils/formatters';
 import { notificarAtualizacaoTempo } from '../../hooks/useTempoExecucao';
 import { Cronometro } from './Cronometro';
+import { ModalProduto } from '../estoque/ModalProduto';
 
 interface ItemPreco {
   agendamento_item_id: string;
@@ -121,6 +122,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   const [_produtosCatalogo, setProdutosCatalogo] = useState<Record<string, { custo_unitario: number }>>({});
   const [produtosDisponiveis, setProdutosDisponiveis] = useState<ProdutoParaConsumo[]>([]);
   const [selectedProdutoId, setSelectedProdutoId] = useState('');
+  const [showModalNovoProduto, setShowModalNovoProduto] = useState(false);
 
   // Estados de Formas de Pagamento, Maquininhas, Bandeiras & Desconto
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamentoOption[]>([]);
@@ -447,6 +449,110 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
     setConsumos((prev) => prev.filter((c) => c.produto_id !== produto_id));
   };
 
+  const handleSalvarNovoProduto = async (data: {
+    nome: string;
+    marca?: string;
+    categoria: string;
+    unidade_uso: any;
+    tamanho_compra: number;
+    preco_compra: number;
+    estoque_minimo: number;
+    estoque_atual?: number;
+  }) => {
+    if (!tenantId) return;
+
+    let novoProdutoId = '';
+    let custoUnitario = 0;
+
+    try {
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('cadastrar_produto_rapido', {
+        p_tenant_id: tenantId,
+        p_nome: data.nome,
+        p_marca: data.marca || null,
+        p_categoria: data.categoria || 'Geral',
+        p_unidade_uso: data.unidade_uso || 'ml',
+        p_tamanho_compra: data.tamanho_compra,
+        p_preco_compra: data.preco_compra || 0,
+        p_estoque_minimo: data.estoque_minimo || 0,
+        p_estoque_atual: data.estoque_atual || 0,
+      });
+
+      if (!rpcErr && rpcRes && rpcRes.id) {
+        novoProdutoId = rpcRes.id;
+        custoUnitario = rpcRes.custo_unitario || 0;
+      } else {
+        console.warn('[ModalFinalizarExecucao] RPC cadastrar_produto_rapido falhou, tentando fallback insert direto:', rpcErr);
+        const calcCusto = data.tamanho_compra > 0 ? (data.preco_compra || 0) / data.tamanho_compra : 0;
+        const { data: directInsert, error: directErr } = await supabase
+          .from('produtos')
+          .insert({
+            tenant_id: tenantId,
+            nome: data.nome,
+            marca: data.marca || null,
+            categoria: data.categoria || 'Geral',
+            unidade_uso: data.unidade_uso || 'ml',
+            tamanho_compra: data.tamanho_compra,
+            preco_compra: data.preco_compra || 0,
+            custo_unitario: calcCusto,
+            estoque_minimo: data.estoque_minimo || 0,
+            estoque_atual: data.estoque_atual || 0,
+            ativo: true,
+          })
+          .select()
+          .single();
+
+        if (directErr) throw directErr;
+        if (directInsert) {
+          novoProdutoId = directInsert.id;
+          custoUnitario = directInsert.custo_unitario || 0;
+        }
+      }
+
+      if (novoProdutoId) {
+        const novoProdutoParaConsumo: ProdutoParaConsumo = {
+          id: novoProdutoId,
+          nome: data.nome,
+          marca: data.marca || undefined,
+          categoria: data.categoria || 'Geral',
+          unidade_uso: data.unidade_uso,
+        };
+
+        setProdutosDisponiveis((prev) => {
+          const existe = prev.some((p) => p.id === novoProdutoId);
+          return existe ? prev : [...prev, novoProdutoParaConsumo];
+        });
+
+        setProdutosCatalogo((prev) => ({
+          ...prev,
+          [novoProdutoId]: { custo_unitario: custoUnitario },
+        }));
+
+        // Adiciona automaticamente aos consumos da finalização
+        const defaultQtd = data.unidade_uso === 'ml' ? '90' : '10';
+        setConsumos((prev) => {
+          if (prev.some((c) => c.produto_id === novoProdutoId)) return prev;
+          return [
+            ...prev,
+            {
+              produto_id: novoProdutoId,
+              nome: data.nome,
+              marca: data.marca,
+              unidade_uso: data.unidade_uso,
+              quantidade: defaultQtd,
+              sugerido: false,
+            },
+          ];
+        });
+
+        setSelectedProdutoId('');
+        setShowModalNovoProduto(false);
+      }
+    } catch (err: any) {
+      console.error('[handleSalvarNovoProduto Error]:', err);
+      throw err;
+    }
+  };
+
   // Adicionar lançamento de pagamento no frontend
   const handleAddPagamento = async () => {
     if (!novoFormaId) return;
@@ -734,6 +840,14 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
               <Package size={18} />
               <span>O que foi usado neste serviço?</span>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowModalNovoProduto(true)}
+              className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20"
+            >
+              <Plus size={14} />
+              <span>+ Cadastrar Produto</span>
+            </button>
           </div>
 
           {consumos.map((item) => (
@@ -764,10 +878,20 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                 <option key={p.id} value={p.id}>{p.nome} {p.marca ? `(${p.marca})` : ''}</option>
               ))}
             </select>
-            <Button type="button" variant="secondary" onClick={handleAddProdutoConsumo} disabled={!selectedProdutoId}>
-              <Plus size={18} />
-              <span>Adicionar Produto</span>
-            </Button>
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
+              <button
+                type="button"
+                onClick={() => setShowModalNovoProduto(true)}
+                className="text-[12px] text-vapor-400 hover:text-amber-400 transition-colors flex items-center gap-1 underline underline-offset-2"
+              >
+                <Plus size={13} />
+                Não encontrou o produto? Cadastre aqui
+              </button>
+              <Button type="button" variant="secondary" onClick={handleAddProdutoConsumo} disabled={!selectedProdutoId}>
+                <Plus size={18} />
+                <span>Adicionar Produto</span>
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -1116,6 +1240,11 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
           </Button>
         </div>
       </div>
+      <ModalProduto
+        isOpen={showModalNovoProduto}
+        onClose={() => setShowModalNovoProduto(false)}
+        onSave={handleSalvarNovoProduto}
+      />
     </Modal>
   );
 };

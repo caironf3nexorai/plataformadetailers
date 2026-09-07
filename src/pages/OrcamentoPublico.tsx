@@ -27,6 +27,7 @@ import { SeletorHorarioPublico, type ItemAgendamentoPublico, type SlotHorarioPub
 import { formatarData, formatarDataHora, montarTimestampLocal } from '../utils/datas';
 import { formatarInformacaoTransbordo } from '../utils/transbordoUtils';
 import { formatarMoeda, formatarCodigoProposta } from '../utils/formatters';
+import { formatarDuracao } from '../utils/agenda';
 import { getFotoPublicUrl } from '../utils/imagens';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../utils/pdfOrcamento';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
@@ -197,14 +198,22 @@ export const OrcamentoPublico: React.FC = () => {
     if (!data) return;
     setGerandoPDF(true);
     try {
-      const niveisFormatados: PDFOrcamentoNivelData[] = (data.niveis || []).map((n) => ({
+      const isSimples = data.modo_orcamento === 'simples' || (data.niveis && data.niveis.length === 1);
+      const niveisOrig = data.niveis || [];
+      const niveisFiltrados = isSimples
+        ? (niveisOrig.filter((n) => n.nivel === 'essencial').length > 0
+            ? niveisOrig.filter((n) => n.nivel === 'essencial')
+            : [niveisOrig[0]])
+        : niveisOrig;
+
+      const niveisFormatados: PDFOrcamentoNivelData[] = niveisFiltrados.map((n) => ({
         nivel: n.nivel,
-        titulo: n.titulo,
+        titulo: isSimples && (!n.titulo || n.titulo.toLowerCase() === 'essencial') ? 'Proposta de Serviços' : n.titulo,
         descricao: n.descricao,
         valor_total: n.valor_total,
         valor_original: n.valor_original,
         duracao_total: n.duracao_total,
-        destaque: n.destaque,
+        destaque: isSimples ? false : n.destaque,
         itens: (n.itens || []).map((i: any) => ({
           servico_nome: i.servico_nome || 'Serviço',
           servico_descricao: i.servico_descricao,
@@ -218,6 +227,7 @@ export const OrcamentoPublico: React.FC = () => {
         numero: data.numero,
         numero_os: data.numero_os,
         status: data.status,
+        modo_orcamento: data.modo_orcamento || (isSimples ? 'simples' : '3_niveis'),
         nivel_aprovado: data.nivel_aprovado,
         enviado_em: data.enviado_em,
         validade_dias: data.validade_dias,
@@ -580,6 +590,10 @@ export const OrcamentoPublico: React.FC = () => {
                   <span className="text-emerald-400 font-bold font-mono">{formatarDataHora(data.agendamento.previsao_entrega)}</span>
                 </div>
               )}
+              <div className="flex justify-between">
+                <span className="text-vapor-400">Tempo de Execução:</span>
+                <span className="text-vapor-200 font-bold font-mono">{formatarDuracao(data.agendamento.duracao_total || 0)}</span>
+              </div>
               {data.agendamento.preco_estimado_total ? (
                 <div className="flex justify-between border-t border-graphite-800/80 pt-2 font-bold text-vapor-100">
                   <span>Valor Total da Proposta:</span>
@@ -660,144 +674,172 @@ export const OrcamentoPublico: React.FC = () => {
             <div className="flex items-center gap-2.5">
               <Sparkles size={18} className="text-amber-400 shrink-0" />
               <span>
-                Você escolheu o pacote <strong className="text-vapor-100 uppercase">{nivelAprovadoObj?.titulo}</strong>. Escolha a data e horário abaixo para agendar, ou selecione outro pacote nos cards se desejar alterar sua escolha.
+                {data.modo_orcamento === 'simples'
+                  ? 'Você aprovou esta proposta! Escolha a data e o melhor horário abaixo para realizar o seu atendimento.'
+                  : `Você escolheu o pacote ${nivelAprovadoObj?.titulo || ''}. Escolha a data e horário abaixo para agendar, ou selecione outro pacote nos cards se desejar alterar sua escolha.`}
               </span>
             </div>
           </div>
         )}
 
-        {/* OS TRÊS CARDS DE NÍVEL LADO A LADO COM SUPORTE A TROCA DE ESCOLHA */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-          {(data.niveis || []).map((n) => {
-            const isDestaque = n.destaque;
-            const isEstaAprovada = isAprovado && (data.nivel_aprovado === n.nivel || escolhaSucesso === n.nivel);
+        {/* CARDS DE PROPOSTA COM SUPORTE A ORÇAMENTO SIMPLES (1 CARD) OU 3 NÍVEIS (3 CARDS) */}
+        {(() => {
+          const isSimples = data.modo_orcamento === 'simples' || (data.niveis && data.niveis.length === 1);
+          const niveisExibir = isSimples
+            ? (data.niveis || []).filter((n) => n.nivel === 'essencial').length > 0
+              ? (data.niveis || []).filter((n) => n.nivel === 'essencial')
+              : (data.niveis || []).slice(0, 1)
+            : (data.niveis || []);
 
-            // Definição da ordem mobile (< 768px): Recomendado primeiro (order-1), Essencial (order-2), Completo (order-3)
-            let orderClass = 'order-3 md:order-3';
-            if (n.nivel === 'recomendado') orderClass = 'order-1 md:order-2';
-            if (n.nivel === 'essencial') orderClass = 'order-2 md:order-1';
+          return (
+            <div className={`pt-4 ${isSimples ? 'max-w-xl mx-auto w-full' : 'grid grid-cols-1 md:grid-cols-3 gap-6'}`}>
+              {niveisExibir.map((n) => {
+                const isDestaque = !isSimples && n.destaque;
+                const isEstaAprovada = isAprovado && (isSimples || data.nivel_aprovado === n.nivel || escolhaSucesso === n.nivel);
 
-            return (
-              <Card
-                key={n.nivel}
-                className={`p-6 pt-7 flex flex-col justify-between gap-6 relative transition-all overflow-visible ${orderClass} ${isEstaAprovada
-                    ? 'bg-emerald-950/30 border-2 border-emerald-500 shadow-2xl'
-                    : isDestaque
-                      ? 'bg-graphite-900 border-2 border-amber-500 shadow-2xl shadow-amber-500/10 md:-translate-y-2'
-                      : 'bg-graphite-900 border-graphite-800'
-                  }`}
-              >
-                {/* BADGES DE DESTAQUE COM OVERFLOW-VISIBLE */}
-                {isDestaque && !isEstaAprovada && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-amber-500 text-graphite-950 font-mono text-[11px] font-bold uppercase tracking-widest px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg z-10 whitespace-nowrap">
-                    <Star size={13} fill="currentColor" />
-                    <span>Mais Escolhido</span>
-                  </div>
-                )}
+                let orderClass = 'order-3 md:order-3';
+                if (!isSimples) {
+                  if (n.nivel === 'recomendado') orderClass = 'order-1 md:order-2';
+                  if (n.nivel === 'essencial') orderClass = 'order-2 md:order-1';
+                } else {
+                  orderClass = 'w-full';
+                }
 
-                {isEstaAprovada && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-emerald-500 text-graphite-950 font-mono text-[11px] font-bold uppercase tracking-widest px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg z-10 whitespace-nowrap">
-                    <Check size={13} strokeWidth={3} />
-                    <span>{isAgendado ? 'Sua Escolha' : 'Sua Escolha Atual'}</span>
-                  </div>
-                )}
+                const tituloCard = isSimples && (!n.titulo || n.titulo.toLowerCase() === 'essencial')
+                  ? 'Proposta de Serviços'
+                  : n.titulo;
 
-                {/* HEADER DO CARD - ALTURA MÍNIMA FIXA PARA ALINHAMENTO HORIZONTAL */}
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-1 min-h-[84px]">
-                    <h3 className="font-display text-[20px] uppercase tracking-wide text-vapor-100">
-                      {n.titulo}
-                    </h3>
-                    {n.descricao ? (
-                      <p className="font-sans text-[13px] text-vapor-400 line-clamp-2 leading-tight">
-                        {n.descricao}
-                      </p>
-                    ) : (
-                      <span className="font-sans text-[13px] text-vapor-500 italic">
-                        Sem descrição adicional
-                      </span>
-                    )}
-                  </div>
-
-                  {/* PREÇO E TEMPO */}
-                  <div className="flex flex-col bg-graphite-950/60 p-3.5 rounded-xl border border-graphite-800">
-                    <span className="font-mono text-[11px] text-vapor-400 uppercase tracking-wider">
-                      Investimento Total
-                    </span>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      {n.valor_original && n.valor_original > n.valor_total && (
-                        <span className="font-mono text-[16px] text-vapor-500 line-through">
-                          {formatarMoeda(n.valor_original)}
-                        </span>
-                      )}
-                      <span className="font-mono text-[26px] font-bold text-amber-400">
-                        {formatarMoeda(n.valor_total)}
-                      </span>
-                    </div>
-                    <span className="font-mono text-[12px] text-vapor-400 flex items-center gap-1 mt-0.5">
-                      <Clock size={13} /> Tempo estimado: {n.duracao_total} minutos
-                    </span>
-                  </div>
-
-                  {/* LISTA DE SERVIÇOS INCLUÍDOS */}
-                  <div className="flex flex-col gap-2">
-                    <span className="font-mono text-[11px] text-vapor-400 uppercase tracking-wider">
-                      O que está incluído:
-                    </span>
-                    <ul className="flex flex-col gap-2.5">
-                      {n.itens.map((it, idx) => (
-                        <li key={idx} className="flex items-start gap-2.5 font-sans text-[13.5px]">
-                          <div className="p-0.5 bg-emerald-500/20 text-emerald-400 rounded mt-0.5 shrink-0">
-                            <Check size={13} strokeWidth={2.5} />
-                          </div>
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <span
-                              title={it.servico_nome}
-                              className="font-bold text-vapor-100 line-clamp-2 leading-snug break-words"
-                            >
-                              {it.servico_nome}
-                            </span>
-                            {it.servico_descricao && (
-                              <span className="text-[12px] text-vapor-400 line-clamp-2 leading-tight">
-                                {it.servico_descricao}
-                              </span>
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* BOTÃO DE ESCOLHA / TROCA */}
-                {podeTrocarOuResponder && (
-                  <Button
-                    tone={isEstaAprovada ? 'emerald' : isDestaque ? 'amber' : 'graphite'}
-                    size="lg"
-                    onClick={() => handleResponder(n.nivel, true)}
-                    loading={responding}
-                    disabled={isEstaAprovada}
-                    className="w-full flex items-center justify-center gap-2 mt-4 font-bold min-h-[48px]"
+                return (
+                  <Card
+                    key={n.nivel}
+                    className={`p-6 pt-7 flex flex-col justify-between gap-6 relative transition-all overflow-visible ${orderClass} ${isEstaAprovada
+                        ? 'bg-emerald-950/30 border-2 border-emerald-500 shadow-2xl'
+                        : isDestaque
+                          ? 'bg-graphite-900 border-2 border-amber-500 shadow-2xl shadow-amber-500/10 md:-translate-y-2'
+                          : 'bg-graphite-900 border-graphite-800'
+                      }`}
                   >
-                    {isEstaAprovada ? (
-                      <>
-                        <Check size={16} />
-                        <span>Pacote Selecionado</span>
-                      </>
-                    ) : isAprovado ? (
-                      <>
-                        <RefreshCw size={15} />
-                        <span>Trocar para esta opção</span>
-                      </>
-                    ) : (
-                      <span>Escolher esta opção</span>
+                    {/* BADGES DE DESTAQUE COM OVERFLOW-VISIBLE */}
+                    {isDestaque && !isEstaAprovada && (
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-amber-500 text-graphite-950 font-mono text-[11px] font-bold uppercase tracking-widest px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg z-10 whitespace-nowrap">
+                        <Star size={13} fill="currentColor" />
+                        <span>Mais Escolhido</span>
+                      </div>
                     )}
-                  </Button>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+
+                    {isEstaAprovada && (
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-emerald-500 text-graphite-950 font-mono text-[11px] font-bold uppercase tracking-widest px-3.5 py-1 rounded-full flex items-center gap-1.5 shadow-lg z-10 whitespace-nowrap">
+                        <Check size={13} strokeWidth={3} />
+                        <span>{isSimples ? 'Proposta Aprovada' : (isAgendado ? 'Sua Escolha' : 'Sua Escolha Atual')}</span>
+                      </div>
+                    )}
+
+                    {/* HEADER DO CARD */}
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col gap-1 min-h-[50px]">
+                        <h3 className="font-display text-[20px] uppercase tracking-wide text-vapor-100">
+                          {tituloCard}
+                        </h3>
+                        {n.descricao ? (
+                          <p className="font-sans text-[13px] text-vapor-400 line-clamp-2 leading-tight">
+                            {n.descricao}
+                          </p>
+                        ) : (
+                          <span className="font-sans text-[13px] text-vapor-500 italic">
+                            {isSimples ? 'Serviços selecionados para o seu veículo' : 'Sem descrição adicional'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* PREÇO E TEMPO */}
+                      <div className="flex flex-col bg-graphite-950/60 p-3.5 rounded-xl border border-graphite-800">
+                        <span className="font-mono text-[11px] text-vapor-400 uppercase tracking-wider">
+                          Investimento Total
+                        </span>
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          {n.valor_original && n.valor_original > n.valor_total && (
+                            <span className="font-mono text-[16px] text-vapor-500 line-through">
+                              {formatarMoeda(n.valor_original)}
+                            </span>
+                          )}
+                          <span className="font-mono text-[26px] font-bold text-amber-400">
+                            {formatarMoeda(n.valor_total)}
+                          </span>
+                        </div>
+                        <span className="font-mono text-[12px] text-vapor-400 flex items-center gap-1 mt-0.5">
+                          <Clock size={13} /> Tempo estimado: {formatarDuracao(n.duracao_total || (n.itens || []).reduce((acc: number, it: any) => acc + (it.duracao_minutos || 0), 0) || 0)}
+                        </span>
+                      </div>
+
+                      {/* LISTA DE SERVIÇOS INCLUÍDOS */}
+                      <div className="flex flex-col gap-2">
+                        <span className="font-mono text-[11px] text-vapor-400 uppercase tracking-wider">
+                          O que está incluído:
+                        </span>
+                        <ul className="flex flex-col gap-2.5">
+                          {n.itens.map((it, idx) => (
+                            <li key={idx} className="flex items-start gap-2.5 font-sans text-[13.5px]">
+                              <div className="p-0.5 bg-emerald-500/20 text-emerald-400 rounded mt-0.5 shrink-0">
+                                <Check size={13} strokeWidth={2.5} />
+                              </div>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <div className="flex items-baseline justify-between gap-2">
+                                  <span
+                                    title={it.servico_nome}
+                                    className="font-bold text-vapor-100 line-clamp-2 leading-snug break-words"
+                                  >
+                                    {it.servico_nome}
+                                  </span>
+                                  {it.duracao_minutos > 0 && (
+                                    <span className="inline-flex items-center gap-1 font-mono text-[11px] text-vapor-400 bg-graphite-950/80 px-2 py-0.5 rounded border border-graphite-800 shrink-0">
+                                      <Clock size={10} className="text-amber-400" />
+                                      {formatarDuracao(it.duracao_minutos)}
+                                    </span>
+                                  )}
+                                </div>
+                                {it.servico_descricao && (
+                                  <span className="text-[12px] text-vapor-400 line-clamp-2 leading-tight mt-0.5">
+                                    {it.servico_descricao}
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* BOTÃO DE ESCOLHA / TROCA */}
+                    {podeTrocarOuResponder && (
+                      <Button
+                        tone={isEstaAprovada ? 'emerald' : isDestaque ? 'amber' : 'graphite'}
+                        size="lg"
+                        onClick={() => handleResponder(n.nivel, true)}
+                        loading={responding}
+                        disabled={isEstaAprovada}
+                        className="w-full flex items-center justify-center gap-2 mt-4 font-bold min-h-[48px]"
+                      >
+                        {isEstaAprovada ? (
+                          <>
+                            <Check size={16} />
+                            <span>{isSimples ? 'Proposta Aprovada' : 'Pacote Selecionado'}</span>
+                          </>
+                        ) : isAprovado ? (
+                          <>
+                            <RefreshCw size={15} />
+                            <span>Trocar para esta opção</span>
+                          </>
+                        ) : (
+                          <span>{isSimples ? 'Aprovar Orçamento' : 'Escolher esta opção'}</span>
+                        )}
+                      </Button>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* CARD DE OBSERVAÇÕES E TERMOS DO ORÇAMENTO */}
         {(data.observacoes || data.oficina?.pdf_texto_observacoes_orcamento) && (
@@ -835,7 +877,7 @@ export const OrcamentoPublico: React.FC = () => {
 
         {/* PARTE 2: AGENDAMENTO ONLINE DE HORÁRIO PELO CLIENTE (EXIBIDO APÓS APROVAÇÃO E SE AINDA NÃO AGENDOU) */}
         {isAprovado && !data.agendamento && data.oficina?.orcamento_agendamento_cliente !== false && (() => {
-          const nivelAprovado = data.niveis?.find((n) => n.nivel === (data.nivel_aprovado || escolhaSucesso));
+          const nivelAprovado = data.niveis?.find((n) => n.nivel === (data.nivel_aprovado || escolhaSucesso)) || data.niveis?.[0];
           const itensLocais = nivelAprovado?.itens?.map((i) => ({ servico_id: i.servico_id })) || [];
           const itensParaConsulta: ItemAgendamentoPublico[] = (data.itens_aprovados && data.itens_aprovados.length > 0)
             ? data.itens_aprovados

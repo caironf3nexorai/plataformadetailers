@@ -20,15 +20,25 @@ import {
   Globe, 
   Calendar, 
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Sparkles
 } from 'lucide-react';
 import {
   slugifyGrupo,
   validateImageFile,
+  comprimirImagemCatalogo,
   getFotoPublicUrl,
   DEFAULT_SERVICE_PLACEHOLDER
 } from '../../utils/imagens';
+import {
+  type UnidadeDuracao,
+  converterParaMinutos,
+  converterDeMinutos,
+  detectarUnidadeSugerida,
+  OPCOES_UNIDADE_DURACAO
+} from '../../utils/duracao';
 import { AlertaErro } from '../../components/ui/AlertaErro';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 
 const GRUPOS_SUGESTOES = [
   'Lavagem',
@@ -41,19 +51,45 @@ const GRUPOS_SUGESTOES = [
 ];
 
 export const FormularioServico: React.FC = () => {
-  const { tenant } = useAuth();
+  const { tenant, membership } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isEdit = !!id && id !== 'novo';
+  const canManage = !membership || membership.role === 'dono' || membership.role === 'gerente';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showModalExcluir, setShowModalExcluir] = useState(false);
+  const [deletingServico, setDeletingServico] = useState(false);
   const [categories, setCategories] = useState<CategoriaVeiculo[]>([]);
   const [grupoFotos, setGrupoFotos] = useState<Record<string, string>>({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleExcluirServico = async () => {
+    if (!id || !tenant) return;
+    setDeletingServico(true);
+    setErrorMsg(null);
+
+    try {
+      const { error } = await supabase.rpc('excluir_servico', {
+        p_servico_id: id,
+        p_tenant_id: tenant.id,
+      });
+
+      if (error) throw error;
+
+      setShowModalExcluir(false);
+      navigate('/servicos');
+    } catch (err: any) {
+      console.error('[Excluir Servico Error]:', err);
+      setErrorMsg(err.message || 'Erro ao excluir serviço.');
+    } finally {
+      setDeletingServico(false);
+    }
+  };
 
   // Estados dos campos do serviço
   const [nome, setNome] = useState('');
@@ -72,7 +108,20 @@ export const FormularioServico: React.FC = () => {
   const [checklistModelos, setChecklistModelos] = useState<Array<{ id: string; nome: string }>>([]);
 
   // Matriz de preços local para o serviço específico
-  const [precosLocais, setPrecosLocais] = useState<Record<string, { preco_base: string; duracao_minutos: number; duracao_confirmada: boolean }>>({});
+  const [servicosDoTenant, setServicosDoTenant] = useState<Array<{ id: string; nome: string; grupo: string; ativo?: boolean }>>([]);
+  const [unidadePadrao, setUnidadePadrao] = useState<UnidadeDuracao>('min');
+  const [precosLocais, setPrecosLocais] = useState<
+    Record<
+      string,
+      {
+        preco_base: string;
+        duracao_minutos: number;
+        duracao_valor: string | number;
+        unidade_duracao: UnidadeDuracao;
+        duracao_confirmada: boolean;
+      }
+    >
+  >({});
 
   const fetchServiceData = async () => {
     if (!tenant) return;
@@ -115,14 +164,26 @@ export const FormularioServico: React.FC = () => {
 
       setChecklistModelos(modData || []);
 
+      // 2c. Busca lista de serviços existentes para detecção de substituição de duração
+      const { data: allSrvs } = await supabase
+        .from('servicos')
+        .select('id, nome, grupo, ativo')
+        .eq('tenant_id', tenant.id);
+
+      if (allSrvs) {
+        setServicosDoTenant(allSrvs);
+      }
+
       let existingPrices: ServicoPreco[] = [];
+      let servicoUnidadeSalva: UnidadeDuracao = 'min';
 
       if (isEdit) {
-        // 3. Busca dados do serviço se for edição
+        // 3. Busca dados do serviço se for edição pertencente a este tenant
         const { data: serv, error: sErr } = await supabase
           .from('servicos')
           .select('*, servico_precos(*)')
           .eq('id', id)
+          .eq('tenant_id', tenant.id)
           .single();
 
         if (sErr) throw sErr;
@@ -145,16 +206,31 @@ export const FormularioServico: React.FC = () => {
           setFotoPath(s.foto_path);
           setAtivo(s.ativo);
           setChecklistModeloId(s.checklist_modelo_id || null);
+
+          if (s.unidade_duracao === 'dias' || s.unidade_duracao === 'horas' || s.unidade_duracao === 'min') {
+            servicoUnidadeSalva = s.unidade_duracao;
+            setUnidadePadrao(s.unidade_duracao);
+          }
         }
       }
 
       // 4. Inicializa preços locais
-      const initialPrices: Record<string, { preco_base: string; duracao_minutos: number; duracao_confirmada: boolean }> = {};
+      const initialPrices: typeof precosLocais = {};
       cats?.forEach((c) => {
         const matched = existingPrices.find((p) => p.categoria_id === c.id);
+        const dMins = matched?.duracao_minutos ?? 60;
+        const uDur = detectarUnidadeSugerida(
+          dMins,
+          modoOcupacao,
+          matched?.unidade_duracao || servicoUnidadeSalva
+        );
+        const dValor = converterDeMinutos(dMins, uDur);
+
         initialPrices[c.id] = {
           preco_base: matched?.preco_base !== null && matched?.preco_base !== undefined ? String(matched.preco_base) : '',
-          duracao_minutos: matched?.duracao_minutos || 60,
+          duracao_minutos: dMins,
+          duracao_valor: dValor > 0 ? String(dValor) : '60',
+          unidade_duracao: uDur,
           duracao_confirmada: matched?.duracao_confirmada || false,
         };
       });
@@ -172,16 +248,80 @@ export const FormularioServico: React.FC = () => {
     fetchServiceData();
   }, [tenant?.id, id]);
 
-  const handlePriceLocalChange = (catId: string, field: 'preco_base' | 'duracao_minutos', value: string) => {
+  const handlePriceLocalChange = (catId: string, value: string) => {
     setPrecosLocais((prev) => {
-      const updated = { ...prev[catId] };
-      if (field === 'preco_base') {
-        updated.preco_base = value;
-      } else {
-        updated.duracao_minutos = Number(value) || 0;
-        updated.duracao_confirmada = true; // Edição manual grava true
-      }
+      const updated = { ...prev[catId], preco_base: value };
       return { ...prev, [catId]: updated };
+    });
+  };
+
+  const handleDuracaoValorChange = (catId: string, novoValor: string | number) => {
+    setPrecosLocais((prev) => {
+      const item = prev[catId] || {
+        preco_base: '',
+        duracao_minutos: 60,
+        duracao_valor: '60',
+        unidade_duracao: unidadePadrao,
+        duracao_confirmada: false,
+      };
+      const mins = converterParaMinutos(Number(novoValor) || 0, item.unidade_duracao);
+      if (item.unidade_duracao === 'dias') {
+        const valDias = Number(novoValor) || 1;
+        if (valDias > 1) {
+          setModoOcupacao('multiplos_dias');
+          setDiasOcupados(valDias);
+        } else {
+          setModoOcupacao((prev) => (prev === 'slot' ? 'dia_inteiro' : prev));
+          setDiasOcupados(1);
+        }
+      }
+
+      return {
+        ...prev,
+        [catId]: {
+          ...item,
+          duracao_valor: novoValor,
+          duracao_minutos: mins,
+          duracao_confirmada: true,
+        },
+      };
+    });
+  };
+
+  const handleUnidadeCategoriaChange = (catId: string, novaUnidade: UnidadeDuracao) => {
+    setPrecosLocais((prev) => {
+      const item = prev[catId];
+      if (!item) return prev;
+      const novoValor = converterDeMinutos(item.duracao_minutos, novaUnidade);
+      return {
+        ...prev,
+        [catId]: {
+          ...item,
+          unidade_duracao: novaUnidade,
+          duracao_valor: novoValor > 0 ? String(novoValor) : '',
+          duracao_confirmada: true,
+        },
+      };
+    });
+  };
+
+  const handleMudarUnidadePadrao = (novaUnidade: UnidadeDuracao) => {
+    setUnidadePadrao(novaUnidade);
+    if (novaUnidade === 'dias') {
+      setModoOcupacao((prev) => (prev === 'slot' ? 'dia_inteiro' : prev));
+    }
+    setPrecosLocais((prev) => {
+      const updated: typeof prev = {};
+      Object.entries(prev).forEach(([cId, item]) => {
+        const novoValor = converterDeMinutos(item.duracao_minutos, novaUnidade);
+        updated[cId] = {
+          ...item,
+          unidade_duracao: novaUnidade,
+          duracao_valor: novoValor > 0 ? String(novoValor) : '',
+          duracao_confirmada: true,
+        };
+      });
+      return updated;
     });
   };
 
@@ -190,36 +330,38 @@ export const FormularioServico: React.FC = () => {
     const file = e.target.files[0];
     setPhotoError(null);
 
-    if (file.size > 2 * 1024 * 1024) {
-      setPhotoError('A imagem deve ter no máximo 2MB.');
-      return;
-    }
-
-    const { valid, ext, error } = validateImageFile(file);
-    if (!valid || !ext) {
-      setPhotoError(error || 'Formato inválido.');
+    const { valid, error } = validateImageFile(file);
+    if (!valid) {
+      setPhotoError(error || 'Formato inválido. Use JPG, PNG ou WEBP.');
       return;
     }
 
     setUploadingPhoto(true);
-    const targetServiceId = isEdit ? id : (id === 'novo' ? gerarId() : id);
-    const newPath = `${tenant.id}/servicos/${targetServiceId}/capa.${ext}`;
 
     try {
+      // Comprime no cliente para o menor tamanho possível sem perda visual (< 200KB)
+      const { file: compressedFile, ext } = await comprimirImagemCatalogo(file, {
+        maxDimension: 1200,
+        targetMaxBytes: 200 * 1024,
+      });
+
+      const targetServiceId = isEdit ? id : (id === 'novo' ? gerarId() : id);
+      const newPath = `${tenant.id}/servicos/${targetServiceId}/capa.${ext}`;
+
       if (fotoPath && fotoPath !== newPath) {
         await supabase.storage.from('catalogo').remove([fotoPath]);
       }
 
       const { error: uploadError } = await supabase.storage
         .from('catalogo')
-        .upload(newPath, file, { upsert: true });
+        .upload(newPath, compressedFile, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       setFotoPath(newPath);
     } catch (err: any) {
       console.error('[Upload Error]:', err);
-      setPhotoError(err.message || 'Erro ao fazer upload da imagem.');
+      setPhotoError(err.message || 'Erro ao processar e enviar a imagem.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -242,11 +384,19 @@ export const FormularioServico: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
+
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (!nome.trim()) {
+    const nomeFormatado = nome.trim();
+    if (!nomeFormatado) {
       setErrorMsg('Nome do serviço é obrigatório.');
+      return;
+    }
+
+    if (!tenant) {
+      setErrorMsg('Sessão expirada. Recarregue a página.');
       return;
     }
 
@@ -255,51 +405,187 @@ export const FormularioServico: React.FC = () => {
     try {
       let servicoId = id;
 
+      // Sincroniza automaticamente modo_ocupacao e dias_ocupados com a duração configurada em dias
+      let maxDiasCalculados = 1;
+      let temDuracaoEmDias = unidadePadrao === 'dias';
+
+      Object.values(precosLocais).forEach((item) => {
+        if (item.unidade_duracao === 'dias' || item.duracao_minutos >= 480) {
+          const d = Math.ceil(item.duracao_minutos / 480);
+          if (d > maxDiasCalculados) maxDiasCalculados = d;
+          if (item.unidade_duracao === 'dias') temDuracaoEmDias = true;
+        }
+      });
+
+      let modoOcupacaoFinal = modoOcupacao;
+      let diasOcupadosFinal = modoOcupacao === 'multiplos_dias' ? diasOcupados : 1;
+
+      if (temDuracaoEmDias && maxDiasCalculados > 1) {
+        modoOcupacaoFinal = 'multiplos_dias';
+        diasOcupadosFinal = Math.max(diasOcupados, maxDiasCalculados);
+      } else if (temDuracaoEmDias && maxDiasCalculados === 1 && modoOcupacao === 'slot') {
+        modoOcupacaoFinal = 'dia_inteiro';
+        diasOcupadosFinal = 1;
+      }
+
       const payload = {
-        tenant_id: tenant?.id || '',
-        nome: nome.trim(),
-        grupo: grupo.trim(),
+        tenant_id: tenant.id,
+        nome: nomeFormatado,
+        grupo: grupo.trim() || 'Geral',
         codigo: codigo.trim() || null,
         tom,
-        modo_ocupacao: modoOcupacao,
-        dias_ocupados: modoOcupacao === 'multiplos_dias' ? diasOcupados : 1,
+        modo_ocupacao: modoOcupacaoFinal,
+        dias_ocupados: diasOcupadosFinal,
         publico,
         sob_consulta: sobConsulta,
         descricao_publica: descricaoPublica.trim() || null,
         descricao_interna: descricaoInterna.trim() || null,
         foto_path: fotoPath,
+        unidade_duracao: unidadePadrao,
         ativo,
         checklist_modelo_id: checklistModeloId || null,
       };
 
-      if (isEdit) {
-        // 1. Atualiza serviço
+      // 1. Identifica se já existe serviço com este mesmo nome no tenant
+      const nomeNormalizado = nomeFormatado.trim().toLowerCase();
+
+      let matchExistente = servicosDoTenant.find(
+        (s) => s.nome.trim().toLowerCase() === nomeNormalizado
+      );
+
+      // Se não encontrou em memória, faz busca defensiva no banco com LIMIT 5 (evitando crash de maybeSingle)
+      if (!matchExistente) {
+        const { data: dbMatches } = await supabase
+          .from('servicos')
+          .select('id, nome, ativo, grupo')
+          .eq('tenant_id', tenant.id)
+          .ilike('nome', nomeFormatado)
+          .limit(5);
+
+        if (dbMatches && dbMatches.length > 0) {
+          matchExistente = dbMatches.find((m) => m.ativo) || dbMatches[0];
+        }
+      }
+
+      // Determina se vamos fazer UPDATE ou INSERT:
+      // Se for edição OU se já existir um serviço com este nome no tenant, É UM UPDATE!
+      const targetId = isEdit ? id : (matchExistente ? matchExistente.id : null);
+
+      if (targetId) {
+        // --- FLUXO 1: UPDATE GARANTIDO ---
+        servicoId = targetId;
+
+        // Se o nome coincidir com outro registro existente diferente de targetId, atualiza o que tem o nome
+        if (matchExistente && matchExistente.id !== targetId) {
+          console.warn('[FormularioServico] Nome coincide com outro registro existente. Atualizando o serviço correspondente:', matchExistente.id);
+          servicoId = matchExistente.id;
+        }
+
         const { error: sErr } = await supabase
           .from('servicos')
-          .update(payload)
-          .eq('id', id);
+          .update({
+            ...payload,
+            ativo: isEdit ? ativo : true,
+          })
+          .eq('id', servicoId)
+          .eq('tenant_id', tenant.id);
 
-        if (sErr) throw sErr;
+        if (sErr) {
+          // Se mesmo o UPDATE falhar por unicidade (outro registro no banco com esse nome):
+          if (
+            sErr.code === '23505' ||
+            sErr.message?.includes('duplicate key') ||
+            sErr.message?.includes('servicos_tenant_id_nome')
+          ) {
+            console.warn('[FormularioServico] Update colidiu com unicidade. Buscando o registro conflitante para sobrescrever...');
+            const { data: colididos } = await supabase
+              .from('servicos')
+              .select('id')
+              .eq('tenant_id', tenant.id)
+              .ilike('nome', nomeFormatado)
+              .limit(1);
+
+            if (colididos && colididos.length > 0) {
+              servicoId = colididos[0].id;
+              const { error: updErr } = await supabase
+                .from('servicos')
+                .update({
+                  ...payload,
+                  ativo: isEdit ? ativo : true,
+                })
+                .eq('id', servicoId)
+                .eq('tenant_id', tenant.id);
+
+              if (updErr) throw updErr;
+            } else {
+              throw sErr;
+            }
+          } else {
+            throw sErr;
+          }
+        }
       } else {
-        // 1. Cria serviço
+        // --- FLUXO 2: NOVO SERVIÇO (INSERT) COM FALLBACK TRANSPARENTE PARA UPDATE ---
         const { data: newServ, error: sErr } = await supabase
           .from('servicos')
           .insert(payload)
           .select()
           .single();
 
-        if (sErr) throw sErr;
-        servicoId = newServ.id;
+        if (sErr) {
+          // SE O INSERT FALHOU POR DUPLICIDADE (23505), NUNCA EXIBA ERRO!
+          // Faz UPDATE direto no serviço existente que causou o conflito!
+          if (
+            sErr.code === '23505' ||
+            sErr.message?.includes('duplicate key') ||
+            sErr.message?.includes('servicos_tenant_id_nome')
+          ) {
+            console.warn('[FormularioServico] Insert colidiu por duplicidade. Executando UPDATE de recuperação no serviço existente...');
+            const { data: colididos } = await supabase
+              .from('servicos')
+              .select('id')
+              .eq('tenant_id', tenant.id)
+              .ilike('nome', nomeFormatado)
+              .limit(1);
+
+            if (colididos && colididos.length > 0) {
+              servicoId = colididos[0].id;
+              const { error: updErr } = await supabase
+                .from('servicos')
+                .update({
+                  ...payload,
+                  ativo: true,
+                })
+                .eq('id', servicoId)
+                .eq('tenant_id', tenant.id);
+
+              if (updErr) throw updErr;
+            } else {
+              throw sErr;
+            }
+          } else {
+            throw sErr;
+          }
+        } else {
+          servicoId = newServ.id;
+        }
       }
 
-      // 2. Salva matriz de preços local
+      // 2. Salva matriz de preços e tempos de execução para todas as categorias
       const pLinhas = categories.map((c) => {
-        const local = precosLocais[c.id] || { preco_base: '', duracao_minutos: 60, duracao_confirmada: false };
+        const local = precosLocais[c.id] || {
+          preco_base: '',
+          duracao_minutos: 60,
+          duracao_valor: '60',
+          unidade_duracao: unidadePadrao,
+          duracao_confirmada: false,
+        };
         return {
           categoria_id: c.id,
           preco_base: local.preco_base === '' ? null : Number(local.preco_base.replace(',', '.')),
           duracao_minutos: local.duracao_minutos,
-          duracao_confirmada: local.duracao_confirmada,
+          unidade_duracao: local.unidade_duracao,
+          duracao_confirmada: true,
         };
       });
 
@@ -308,15 +594,33 @@ export const FormularioServico: React.FC = () => {
         p_linhas: pLinhas,
       });
 
-      if (mErr) throw mErr;
+      if (mErr) {
+        console.warn('[FormularioServico] RPC salvar_matriz_precos retornou erro, executando upsert direto:', mErr);
+        const promessas = pLinhas.map((linha) =>
+          supabase.from('servico_precos').upsert(
+            {
+              tenant_id: tenant.id,
+              servico_id: servicoId,
+              categoria_id: linha.categoria_id,
+              preco_base: linha.preco_base,
+              duracao_minutos: linha.duracao_minutos,
+              unidade_duracao: linha.unidade_duracao,
+              duracao_confirmada: true,
+              ativo: true,
+            },
+            { onConflict: 'servico_id,categoria_id' }
+          )
+        );
+        await Promise.all(promessas);
+      }
 
-      setSuccessMsg('Serviço salvo com sucesso!');
+      setSuccessMsg('Serviço e tempos de execução atualizados com sucesso!');
       setTimeout(() => {
         navigate('/servicos');
       }, 1000);
     } catch (err: any) {
       console.error('[FormularioServico Submit Error]:', err);
-      setErrorMsg(err.message || 'Erro ao salvar serviço.');
+      setErrorMsg(err);
     } finally {
       setSaving(false);
     }
@@ -398,6 +702,12 @@ export const FormularioServico: React.FC = () => {
                 required
                 className="min-h-[48px]"
               />
+              {!isEdit && servicosDoTenant.some((s) => s.nome.trim().toLowerCase() === nome.trim().toLowerCase()) && (
+                <span className="text-[11px] text-amber-400 font-sans flex items-center gap-1.5 mt-1 bg-amber-500/10 p-2 rounded border border-amber-500/30">
+                  <Sparkles size={14} className="shrink-0 text-amber-400" />
+                  Este serviço já existe no catálogo. Ao salvar, suas novas durações e preços substituirão o registro antigo diretamente.
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -570,13 +880,41 @@ export const FormularioServico: React.FC = () => {
               </div>
             ) : (
               <div className="flex flex-col gap-4">
-                <p className="font-sans text-[12px] text-vapor-400 leading-relaxed">
-                  Informe o piso do preço de partida ("A partir de") e a duração estimada em minutos para cada tipo de veículo:
-                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-graphite-900/60 p-3 rounded-lg border border-graphite-700/80">
+                  <p className="font-sans text-[12px] text-vapor-400 leading-relaxed">
+                    Informe o piso de preço e a duração estimada. Você pode escolher entre <strong>minutos</strong>, <strong>horas</strong> ou <strong>dias</strong>:
+                  </p>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <span className="text-[11px] uppercase tracking-wider text-vapor-400 font-medium">Unidade padrão:</span>
+                    <div className="inline-flex bg-graphite-950 border border-graphite-700 rounded-lg p-0.5">
+                      {OPCOES_UNIDADE_DURACAO.map((opt) => (
+                        <button
+                          key={opt.valor}
+                          type="button"
+                          onClick={() => handleMudarUnidadePadrao(opt.valor)}
+                          className={`px-2.5 py-1 text-[11px] rounded-md font-bold transition-all ${
+                            unidadePadrao === opt.valor
+                              ? 'bg-amber-500 text-graphite-950 shadow-sm'
+                              : 'text-vapor-400 hover:text-vapor-200'
+                          }`}
+                        >
+                          {opt.rotulo}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
 
                 <div className="flex flex-col gap-3">
                   {categories.map((cat) => {
-                    const precoObj = precosLocais[cat.id] || { preco_base: '', duracao_minutos: 60, duracao_confirmada: false };
+                    const precoObj = precosLocais[cat.id] || {
+                      preco_base: '',
+                      duracao_minutos: 60,
+                      duracao_valor: '60',
+                      unidade_duracao: unidadePadrao,
+                      duracao_confirmada: false,
+                    };
                     
                     return (
                       <div
@@ -593,22 +931,32 @@ export const FormularioServico: React.FC = () => {
                           align="right"
                           placeholder="--"
                           value={precoObj.preco_base}
-                          onChange={(_, valStr) => handlePriceLocalChange(cat.id, 'preco_base', valStr)}
+                          onChange={(_, valStr) => handlePriceLocalChange(cat.id, valStr)}
                           wrapperClassName="w-full min-h-[40px]"
                         />
 
-                        {/* Input Duração */}
-                        <CampoNumerico
-                          suffix="min"
-                          integerOnly
-                          align="center"
-                          placeholder="60"
-                          value={precoObj.duracao_minutos}
-                          onChange={(val) => handlePriceLocalChange(cat.id, 'duracao_minutos', String(val || 0))}
-                          wrapperClassName={`w-full min-h-[40px] ${
-                            !precoObj.duracao_confirmada ? 'border-amber-500 bg-amber-500/5 text-amber-500 font-bold' : ''
-                          }`}
-                        />
+                        {/* Input Duração com Seletor de Unidade */}
+                        <div className="flex items-center gap-1.5 w-full">
+                          <CampoNumerico
+                            align="center"
+                            placeholder="0"
+                            value={precoObj.duracao_valor}
+                            onChange={(val) => handleDuracaoValorChange(cat.id, val ?? 0)}
+                            wrapperClassName={`flex-1 min-h-[40px] ${
+                              !precoObj.duracao_confirmada ? 'border-amber-500 bg-amber-500/5 text-amber-500 font-bold' : ''
+                            }`}
+                          />
+                          <select
+                            value={precoObj.unidade_duracao || unidadePadrao}
+                            onChange={(e) => handleUnidadeCategoriaChange(cat.id, e.target.value as UnidadeDuracao)}
+                            className="bg-graphite-800 text-vapor-100 border border-graphite-700 hover:border-graphite-600 rounded px-2 h-[40px] text-[12px] font-sans font-semibold focus:border-amber-500 focus:outline-none shrink-0 cursor-pointer"
+                            title="Alterar unidade desta categoria"
+                          >
+                            <option value="min">min</option>
+                            <option value="horas">horas</option>
+                            <option value="dias">dias</option>
+                          </select>
+                        </div>
                       </div>
                     );
                   })}
@@ -820,9 +1168,38 @@ export const FormularioServico: React.FC = () => {
             >
               Cancelar
             </Button>
+
+            {isEdit && canManage && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowModalExcluir(true)}
+                className="w-full border-flare-400/40 text-flare-400 hover:bg-flare-400/10 hover:border-flare-400 mt-2 flex items-center justify-center gap-2"
+              >
+                <Trash size={16} />
+                Excluir Serviço
+              </Button>
+            )}
           </div>
         </div>
       </form>
+
+      {/* Modal de Confirmação de Exclusão do Serviço */}
+      <ModalConfirmacao
+        isOpen={showModalExcluir}
+        onClose={() => setShowModalExcluir(false)}
+        onConfirm={handleExcluirServico}
+        title="Excluir Serviço"
+        mensagem={
+          <span>
+            Tem certeza que deseja excluir o serviço &quot;<strong className="text-vapor-100">{nome}</strong>&quot;? Se ele já possuir histórico em atendimentos ou orçamentos, será desativado com segurança para manter o histórico financeiro e relatórios íntegros.
+          </span>
+        }
+        textoConfirmar="Excluir Serviço"
+        textoCancelar="Voltar"
+        variant="danger"
+        loading={deletingServico}
+      />
     </div>
   );
 };

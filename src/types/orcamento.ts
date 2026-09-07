@@ -127,6 +127,7 @@ export interface OrcamentoPublicoData {
   titulo?: string | null;
   observacoes?: string | null;
   status: StatusOrcamento;
+  modo_orcamento?: 'simples' | '3_niveis' | string | null;
   nivel_aprovado?: TipoNivelOrcamento | null;
   categoria_id?: string;
   itens_aprovados?: Array<{ servico_id: string; combo_id?: string | null }>;

@@ -19,6 +19,7 @@ import type { HorarioDisponivel } from '../../types/agenda';
 import { traduzirMotivoIndisponivel, formatarHoraCurta, formatarDuracao, calcularTermino } from '../../utils/agenda';
 import { formatValorMoeda } from '../../utils/precos';
 import { SeletorServicos } from '../servicos/SeletorServicos';
+import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
 import { AvisoPernoite } from '../compartilhado/AvisoPernoite';
 import { montarTimestampLocal, formatarDataIsoSP } from '../../utils/datas';
 
@@ -53,13 +54,17 @@ interface ModalNovoAgendamentoProps {
   onClose: () => void;
   onSuccess: () => void;
   initialDate?: string; // ISO YYYY-MM-DD
+  initialClienteId?: string;
+  initialVeiculoId?: string;
 }
 
 export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  initialDate
+  initialDate,
+  initialClienteId,
+  initialVeiculoId,
 }) => {
   const { tenant, membership } = useAuth();
   const isGestor = membership?.role === 'dono' || membership?.role === 'gerente';
@@ -99,6 +104,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
   const [observacoes, setObservacoes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showModalServicoRapido, setShowModalServicoRapido] = useState(false);
 
   // Reseta estado ao abrir o modal
   useEffect(() => {
@@ -121,6 +127,66 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
       setSelectedData(initialDate);
     }
   }, [initialDate]);
+
+  // Carrega e pré-seleciona cliente/veículo inicial quando fornecido
+  useEffect(() => {
+    if (!isOpen || !tenant || !initialClienteId) return;
+
+    let isMounted = true;
+    async function loadClienteInicial() {
+      try {
+        const { data: cli, error } = await supabase
+          .from('clientes')
+          .select('id, nome, telefone, veiculos(id, placa, modelo, marca, cor, categoria_id, categorias_veiculo(id, nome))')
+          .eq('tenant_id', tenant!.id)
+          .eq('id', initialClienteId)
+          .single();
+
+        if (error || !cli || !isMounted) return;
+
+        setSelectedCliente(cli);
+        const vList = cli.veiculos || [];
+        setVeiculosList(vList);
+
+        if (initialVeiculoId) {
+          const matchV = vList.find((v: any) => v.id === initialVeiculoId);
+          if (matchV) {
+            setSelectedVeiculo(matchV);
+            if (matchV.categorias_veiculo) {
+              setSelectedCategoria(matchV.categorias_veiculo);
+            } else if (matchV.categoria_id && categoriasList.length > 0) {
+              const matchCat = categoriasList.find((c) => c.id === matchV.categoria_id);
+              if (matchCat) setSelectedCategoria(matchCat);
+            }
+            setStep(3);
+            return;
+          }
+        }
+
+        if (vList.length === 1) {
+          const unico = vList[0];
+          setSelectedVeiculo(unico);
+          if (unico.categorias_veiculo) {
+            setSelectedCategoria(unico.categorias_veiculo);
+          } else if (unico.categoria_id && categoriasList.length > 0) {
+            const matchCat = categoriasList.find((c) => c.id === unico.categoria_id);
+            if (matchCat) setSelectedCategoria(matchCat);
+          }
+          setStep(3);
+        } else {
+          setStep(2);
+        }
+      } catch (e) {
+        console.error('[ModalNovoAgendamento] Erro ao carregar cliente inicial:', e);
+      }
+    }
+
+    loadClienteInicial();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, tenant, initialClienteId, initialVeiculoId, categoriasList]);
 
   // Carrega Clientes ao buscar
   useEffect(() => {
@@ -269,6 +335,50 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
         }
       });
       setSelectedItens(novosItens);
+    }
+  };
+
+  // Callback de Criação Rápida de Serviço sem sair do agendamento
+  const handleNovoServicoCriado = async (novoServico: any) => {
+    if (!tenant) return;
+    try {
+      const { data: srvFull } = await supabase
+        .from('servicos')
+        .select('*, servico_precos(*)')
+        .eq('id', novoServico.id)
+        .eq('tenant_id', tenant.id)
+        .single();
+
+      const servicoParaAdicionar = srvFull || novoServico;
+
+      setServicosList((prev) => {
+        const existe = prev.some((s) => s.id === servicoParaAdicionar.id);
+        if (existe) {
+          return prev.map((s) => (s.id === servicoParaAdicionar.id ? servicoParaAdicionar : s));
+        }
+        return [servicoParaAdicionar, ...prev];
+      });
+
+      const matchPreco = servicoParaAdicionar.servico_precos?.find(
+        (p: any) => p.categoria_id === selectedCategoria?.id
+      );
+      const precoPadrao = matchPreco?.preco_base ?? servicoParaAdicionar.preco_base ?? 0;
+
+      setSelectedItens((prev) => {
+        const jaSelecionado = prev.some((i) => i.servico_id === servicoParaAdicionar.id);
+        if (jaSelecionado) return prev;
+        return [
+          ...prev,
+          {
+            servico_id: servicoParaAdicionar.id,
+            combo_id: null,
+            servico: servicoParaAdicionar,
+            preco: Number(precoPadrao),
+          },
+        ];
+      });
+    } catch (err) {
+      console.error('[ModalNovoAgendamento] Erro ao integrar novo serviço:', err);
     }
   };
 
@@ -430,7 +540,8 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
   });
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Novo Agendamento"
@@ -637,6 +748,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                 onToggleServico={handleToggleServico}
                 onToggleCombo={handleToggleCombo}
                 onCloseModal={onClose}
+                onAbrirNovoServico={() => setShowModalServicoRapido(true)}
               />
 
               {/* Lista de Valores Editáveis para Serviços Selecionados */}
@@ -873,7 +985,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                             )}
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-vapor-400">{dur} min</span>
+                            <span className="text-vapor-400">{formatarDuracao(dur)}</span>
                             <span className="font-mono text-vapor-200">{itemPriceStr}</span>
                           </div>
                         </div>
@@ -990,5 +1102,15 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
         </div>
       </div>
     </Modal>
+
+    {/* Modal de Criação Rápida de Serviço sem perder o agendamento */}
+    <ModalServicoRapido
+      isOpen={showModalServicoRapido}
+      onClose={() => setShowModalServicoRapido(false)}
+      onSuccess={handleNovoServicoCriado}
+      categoriaVeiculoId={selectedCategoria?.id}
+      categoriaVeiculoNome={selectedCategoria?.nome}
+    />
+    </>
   );
 };

@@ -92,12 +92,9 @@ export function getNomeDiaSemana(diaSemana: number): string {
   return dias[diaSemana] || '';
 }
 
-export function formatarDuracao(minutos: number): string {
-  if (!minutos || minutos <= 0) return '0 min';
-  const horas = Math.floor(minutos / 60);
-  const mins = minutos % 60;
-  if (horas === 0) return `${mins}min`;
-  if (mins === 0) return `${horas}h 00min`;
-  return `${horas}h ${mins < 10 ? '0' : ''}${mins}min`;
+import { formatarDuracaoAmigavel } from './duracao';
+
+export function formatarDuracao(minutos: number, unidadePreferida?: 'min' | 'horas' | 'dias'): string {
+  return formatarDuracaoAmigavel(minutos, unidadePreferida);
 }
 

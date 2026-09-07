@@ -18,6 +18,7 @@ export interface Servico {
   publico: boolean;
   sob_consulta: boolean;
   foto_path: string | null;
+  unidade_duracao?: 'min' | 'horas' | 'dias';
   ordem: number;
   ativo: boolean;
   created_at?: string;
@@ -31,6 +32,7 @@ export interface ServicoPreco {
   categoria_id: string;
   preco_base: number | null; // Null se for "Sob Consulta" ou não definido
   duracao_minutos: number;
+  unidade_duracao?: 'min' | 'horas' | 'dias';
   duracao_confirmada: boolean;
   ativo: boolean;
   created_at?: string;
@@ -54,6 +56,7 @@ export interface MatrizPrecoLinha {
   categoria_id: string;
   preco_base: number | null;
   duracao_minutos: number;
+  unidade_duracao?: 'min' | 'horas' | 'dias';
   duracao_confirmada?: boolean;
 }
 

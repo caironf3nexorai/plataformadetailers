@@ -31,7 +31,8 @@ import { ModalConfirmacao } from '../ui/ModalConfirmacao';
 import type { Agendamento, HorarioDisponivel } from '../../types/agenda';
 import { gerarPDFOS } from '../../utils/pdfOS';
 import { 
-  getLabelFromStatus
+  getLabelFromStatus,
+  formatarDuracao
 } from '../../utils/agenda';
 import { 
   formatarData, 
@@ -433,6 +434,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
       const { data } = await supabase
         .from('servicos')
         .select('id, nome, duracao_minutos')
+        .eq('tenant_id', agendamento.tenant_id)
         .eq('ativo', true)
         .order('nome');
       if (data) setServicosDisponiveis(data);
@@ -700,7 +702,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                   <option value="">Selecione...</option>
                   {servicosDisponiveis.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.nome} ({s.duracao_minutos} min)
+                      {s.nome} ({formatarDuracao(s.duracao_minutos)})
                     </option>
                   ))}
                 </select>
@@ -742,7 +744,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                           tone={serv?.tom as any || 'vapor'}
                         />
                         <span className="font-mono text-[11px] text-vapor-400">
-                          {item.duracao_minutos} min
+                          {formatarDuracao(item.duracao_minutos)}
                         </span>
                       </div>
 

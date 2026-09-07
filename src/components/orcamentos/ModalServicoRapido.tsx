@@ -7,6 +7,12 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Clock, Check, Wrench, Sparkles, Car } from 'lucide-react';
 import type { CategoriaVeiculo } from '../../types/clientes';
+import {
+  type UnidadeDuracao,
+  converterParaMinutos,
+  converterDeMinutos,
+  OPCOES_UNIDADE_DURACAO
+} from '../../utils/duracao';
 
 interface ModalServicoRapidoProps {
   isOpen: boolean;
@@ -33,9 +39,11 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
 
   // Categorias de Veículos do Tenant para Precificação Variável
   const [categorias, setCategorias] = useState<CategoriaVeiculo[]>([]);
+  const [servicosExistentes, setServicosExistentes] = useState<{ id: string; nome: string }[]>([]);
   const [loadingCats, setLoadingCats] = useState(false);
+  const [unidadePadrao, setUnidadePadrao] = useState<UnidadeDuracao>('min');
   const [precosPorCategoria, setPrecosPorCategoria] = useState<
-    Record<string, { preco: string; duracao: string }>
+    Record<string, { preco: string; duracao: string; unidade: UnidadeDuracao }>
   >({});
 
   // Campo auxiliar para replicar valor base se desejar
@@ -68,12 +76,19 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
         if (error) throw error;
         if (data && data.length > 0) {
           setCategorias(data as CategoriaVeiculo[]);
-          const initialMap: Record<string, { preco: string; duracao: string }> = {};
+          const initialMap: Record<string, { preco: string; duracao: string; unidade: UnidadeDuracao }> = {};
           data.forEach((cat) => {
-            initialMap[cat.id] = { preco: '', duracao: '60' };
+            initialMap[cat.id] = { preco: '', duracao: '60', unidade: 'min' };
           });
           setPrecosPorCategoria(initialMap);
         }
+
+        // Carrega nomes de serviços existentes para validação proativa de duplicatas
+        const { data: srvs } = await supabase
+          .from('servicos')
+          .select('id, nome')
+          .eq('tenant_id', tenant.id);
+        if (srvs) setServicosExistentes(srvs);
       } catch (err: any) {
         console.error('[ModalServicoRapido] Erro ao carregar categorias:', err);
       } finally {
@@ -102,6 +117,41 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
         duracao,
       },
     }));
+  };
+
+  const handleUnidadeChange = (catId: string, novaUnidade: UnidadeDuracao) => {
+    setPrecosPorCategoria((prev) => {
+      const item = prev[catId];
+      if (!item) return prev;
+      const minsAtuais = converterParaMinutos(Number(item.duracao) || 0, item.unidade);
+      const novoValor = converterDeMinutos(minsAtuais, novaUnidade);
+      return {
+        ...prev,
+        [catId]: {
+          ...item,
+          unidade: novaUnidade,
+          duracao: novoValor > 0 ? String(novoValor) : '',
+        },
+      };
+    });
+  };
+
+  const handleMudarUnidadePadrao = (novaUnidade: UnidadeDuracao) => {
+    setUnidadePadrao(novaUnidade);
+    setPrecosPorCategoria((prev) => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach((catId) => {
+        const item = updated[catId];
+        const mins = converterParaMinutos(Number(item.duracao) || 0, item.unidade);
+        const novoValor = converterDeMinutos(mins, novaUnidade);
+        updated[catId] = {
+          ...item,
+          unidade: novaUnidade,
+          duracao: novoValor > 0 ? String(novoValor) : '',
+        };
+      });
+      return updated;
+    });
   };
 
   // Replicar valor base com ajuste de porte opcional
@@ -139,58 +189,180 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
 
     if (precoAtualObj && precoAtualObj.preco) {
       precoBasePadrao = Number(precoAtualObj.preco.replace(',', '.')) || 0;
-      duracaoPadrao = Number(precoAtualObj.duracao) || 60;
+      duracaoPadrao = converterParaMinutos(
+        Number(precoAtualObj.duracao) || 60,
+        precoAtualObj.unidade || unidadePadrao
+      );
     } else {
       // Pega o primeiro preço informado
       const primeiraCatPreenchida = Object.values(precosPorCategoria).find((p) => Number(p.preco) > 0);
       if (primeiraCatPreenchida) {
         precoBasePadrao = Number(primeiraCatPreenchida.preco.replace(',', '.')) || 0;
-        duracaoPadrao = Number(primeiraCatPreenchida.duracao) || 60;
+        duracaoPadrao = converterParaMinutos(
+          Number(primeiraCatPreenchida.duracao) || 60,
+          primeiraCatPreenchida.unidade || unidadePadrao
+        );
       }
     }
 
     setSaving(true);
     try {
-      // 1. Inserir o serviço mestre no catálogo
-      const { data: servicoData, error: servicoErr } = await supabase
-        .from('servicos')
-        .insert({
-          tenant_id: tenant.id,
-          nome: nome.trim(),
-          grupo: grupo.trim() || 'Geral',
-          preco_base: precoBasePadrao,
-          duracao_minutos: duracaoPadrao,
-          descricao_publica: descricao.trim() || null,
-          ativo: true,
-        })
-        .select('*')
-        .single();
-
-      if (servicoErr) throw servicoErr;
-
-      // 2. Inserir preços específicos por categoria na tabela `servico_precos`
-      const promessasPrecos = categorias.map(async (cat) => {
-        const catPrecoObj = precosPorCategoria[cat.id];
-        const precoNum = Number((catPrecoObj?.preco || '').replace(',', '.')) || (cat.id === categoriaVeiculoId ? precoBasePadrao : 0);
-        const duracaoNum = Number(catPrecoObj?.duracao) || duracaoPadrao;
-
-        if (precoNum > 0 || cat.id === categoriaVeiculoId) {
-          return supabase.from('servico_precos').insert({
-            tenant_id: tenant.id,
-            servico_id: servicoData.id,
-            categoria_id: cat.id,
-            preco_base: precoNum,
-            duracao_minutos: duracaoNum,
-            duracao_confirmada: true,
-            ativo: true,
-          });
+      // Calcula modo de ocupação e dias se o serviço tiver duração em dias
+      let maxDiasCalculados = 1;
+      Object.values(precosPorCategoria).forEach((p) => {
+        const u = p.unidade || unidadePadrao;
+        if (u === 'dias') {
+          const d = Math.ceil(Number(p.duracao) || 1);
+          if (d > maxDiasCalculados) maxDiasCalculados = d;
+        } else {
+          const mins = converterParaMinutos(Number(p.duracao) || 60, u);
+          if (mins >= 480) {
+            const d = Math.ceil(mins / 480);
+            if (d > maxDiasCalculados) maxDiasCalculados = d;
+          }
         }
-        return null;
       });
 
-      await Promise.all(promessasPrecos);
+      const modoOcupacaoCalculado = maxDiasCalculados > 1
+        ? 'multiplos_dias'
+        : (unidadePadrao === 'dias' ? 'dia_inteiro' : 'slot');
 
-      showSuccess(`Serviço "${nome.trim()}" cadastrado com preços por categoria!`);
+      // 1. Verifica se já existe um serviço com esse nome no catálogo deste tenant
+      const { data: existenteList } = await supabase
+        .from('servicos')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .ilike('nome', nome.trim())
+        .limit(1);
+
+      const jaExistia = Boolean(existenteList && existenteList.length > 0);
+      let servicoData = jaExistia ? existenteList![0] : null;
+
+      if (servicoData) {
+        // Se já existe, atualiza diretamente os dados do serviço e garante que fique ativo
+        const { data: atualizado, error: updErr } = await supabase
+          .from('servicos')
+          .update({
+            ativo: true,
+            grupo: grupo.trim() || servicoData.grupo,
+            unidade_duracao: unidadePadrao,
+            modo_ocupacao: modoOcupacaoCalculado,
+            dias_ocupados: maxDiasCalculados,
+          })
+          .eq('id', servicoData.id)
+          .select('*')
+          .single();
+
+        if (!updErr && atualizado) {
+          servicoData = atualizado;
+        }
+      } else {
+        // Inserir o novo serviço mestre no catálogo
+        const { data: novo, error: servicoErr } = await supabase
+          .from('servicos')
+          .insert({
+            tenant_id: tenant.id,
+            nome: nome.trim(),
+            grupo: grupo.trim() || 'Geral',
+            descricao_publica: descricao.trim() || null,
+            unidade_duracao: unidadePadrao,
+            modo_ocupacao: modoOcupacaoCalculado,
+            dias_ocupados: maxDiasCalculados,
+            ativo: true,
+          })
+          .select('*')
+          .single();
+
+        if (servicoErr) {
+          // Conflito de unicidade recuperado defensivamente com UPDATE
+          if (
+            servicoErr.code === '23505' ||
+            servicoErr.message?.includes('duplicate key') ||
+            servicoErr.message?.includes('servicos_tenant_id_nome')
+          ) {
+            const { data: recuperados } = await supabase
+              .from('servicos')
+              .select('*')
+              .eq('tenant_id', tenant.id)
+              .ilike('nome', nome.trim())
+              .limit(1);
+
+            if (recuperados && recuperados.length > 0) {
+              servicoData = recuperados[0];
+              await supabase
+                .from('servicos')
+                .update({
+                  ativo: true,
+                  grupo: grupo.trim() || servicoData.grupo,
+                  unidade_duracao: unidadePadrao,
+                  modo_ocupacao: modoOcupacaoCalculado,
+                  dias_ocupados: maxDiasCalculados,
+                })
+                .eq('id', servicoData.id);
+            } else {
+              throw servicoErr;
+            }
+          } else {
+            throw servicoErr;
+          }
+        } else {
+          servicoData = novo;
+        }
+      }
+
+      if (!servicoData) {
+        throw new Error('Não foi possível registrar o serviço.');
+      }
+
+      // 2. Prepara as linhas de preço para todas as categorias
+      const linhasMatriz = categorias.map((cat) => {
+        const catPrecoObj = precosPorCategoria[cat.id];
+        const precoNum = Number((catPrecoObj?.preco || '').replace(',', '.')) || (cat.id === categoriaVeiculoId ? precoBasePadrao : 0);
+        const duracaoMins = converterParaMinutos(
+          Number(catPrecoObj?.duracao) || 60,
+          catPrecoObj?.unidade || unidadePadrao
+        ) || duracaoPadrao;
+
+        return {
+          categoria_id: cat.id,
+          preco_base: precoNum,
+          duracao_minutos: duracaoMins,
+          unidade_duracao: catPrecoObj?.unidade || unidadePadrao,
+          duracao_confirmada: true,
+        };
+      });
+
+      // 3. Salvar matriz de preços via RPC salvar_matriz_precos
+      const { error: rpcPrecoErr } = await supabase.rpc('salvar_matriz_precos', {
+        p_servico: servicoData.id,
+        p_linhas: linhasMatriz,
+      });
+
+      // Se a RPC falhar (por exemplo, permissão estrita ou assinatura), faz fallback via insert direto em servico_precos
+      if (rpcPrecoErr) {
+        console.warn('[ModalServicoRapido] RPC salvar_matriz_precos retornou erro, executando insert direto:', rpcPrecoErr);
+        const promessasPrecos = linhasMatriz.map(async (linha) => {
+          return supabase.from('servico_precos').upsert(
+            {
+              tenant_id: tenant.id,
+              servico_id: servicoData.id,
+              categoria_id: linha.categoria_id,
+              preco_base: linha.preco_base,
+              duracao_minutos: linha.duracao_minutos,
+              duracao_confirmada: true,
+              ativo: true,
+            },
+            { onConflict: 'servico_id,categoria_id' }
+          );
+        });
+        await Promise.all(promessasPrecos);
+      }
+
+      if (jaExistia) {
+        showSuccess(`Serviço "${servicoData.nome}" já existente no catálogo foi atualizado e selecionado!`);
+      } else {
+        showSuccess(`Serviço "${nome.trim()}" cadastrado com preços por categoria!`);
+      }
       onSuccess(servicoData);
       onClose();
 
@@ -237,6 +409,12 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
             autoFocus
             className="min-h-[44px]"
           />
+          {servicosExistentes.some((s) => s.nome.trim().toLowerCase() === nome.trim().toLowerCase()) && (
+            <span className="text-[11px] text-amber-400 font-sans flex items-center gap-1.5 mt-1 bg-amber-500/10 p-1.5 rounded border border-amber-500/30">
+              <Sparkles size={13} className="shrink-0 text-amber-400" />
+              Este serviço já existe no catálogo. Ao salvar, seus preços e durações por categoria serão atualizados e ele será selecionado.
+            </span>
+          )}
         </div>
 
         {/* Grupo / Categoria do Serviço */}
@@ -298,6 +476,26 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
                 <span>Sugerir Portes</span>
               </button>
             </div>
+
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-graphite-800">
+              <span className="text-[11px] text-vapor-400 font-medium">Unidade de tempo padrão:</span>
+              <div className="inline-flex bg-graphite-950 border border-graphite-700 rounded p-0.5">
+                {OPCOES_UNIDADE_DURACAO.map((opt) => (
+                  <button
+                    key={opt.valor}
+                    type="button"
+                    onClick={() => handleMudarUnidadePadrao(opt.valor)}
+                    className={`px-2 py-0.5 text-[10px] rounded font-bold transition-all ${
+                      unidadePadrao === opt.valor
+                        ? 'bg-amber-500 text-graphite-950 shadow-sm'
+                        : 'text-vapor-400 hover:text-vapor-200'
+                    }`}
+                  >
+                    {opt.rotulo}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {loadingCats ? (
@@ -314,6 +512,7 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
                 const isAtual = cat.id === categoriaVeiculoId;
                 const catPreco = precosPorCategoria[cat.id]?.preco || '';
                 const catDuracao = precosPorCategoria[cat.id]?.duracao || '60';
+                const catUnidade = precosPorCategoria[cat.id]?.unidade || unidadePadrao;
 
                 return (
                   <div
@@ -358,10 +557,19 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
                           placeholder="60"
                           value={catDuracao}
                           onChange={(e) => handleDuracaoChange(cat.id, e.target.value)}
-                          className="w-18 pl-6 pr-2 py-1.5 bg-graphite-900 border border-graphite-700 rounded text-xs font-mono text-vapor-100 outline-none focus:border-amber-500"
-                          title="Duração estimada em minutos para esta categoria"
+                          className="w-16 pl-6 pr-1 py-1.5 bg-graphite-900 border border-graphite-700 rounded text-xs font-mono text-vapor-100 outline-none focus:border-amber-500"
+                          title="Duração estimada para esta categoria"
                         />
-                        <span className="text-[10px] text-vapor-400 ml-1">min</span>
+                        <select
+                          value={catUnidade}
+                          onChange={(e) => handleUnidadeChange(cat.id, e.target.value as UnidadeDuracao)}
+                          className="bg-graphite-900 border border-graphite-700 rounded text-[10px] font-sans font-bold text-vapor-300 px-1 py-1 ml-1 outline-none focus:border-amber-500 cursor-pointer"
+                          title="Unidade de medida de tempo"
+                        >
+                          <option value="min">min</option>
+                          <option value="horas">h</option>
+                          <option value="dias">d</option>
+                        </select>
                       </div>
                     </div>
                   </div>
