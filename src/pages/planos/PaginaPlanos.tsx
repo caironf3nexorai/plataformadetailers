@@ -13,7 +13,7 @@ export const PaginaPlanos: React.FC = () => {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 6700,
+    pro: 100, // R$ 1,00 conforme configurado no Admin
     studio: 14700,
   });
 
@@ -32,26 +32,44 @@ export const PaginaPlanos: React.FC = () => {
   useEffect(() => {
     async function carregarPrecos() {
       try {
-        // 1. Tenta carregar pela RPC obter_planos_publicos se disponível
+        console.log('[PaginaPlanos] Buscando preços dos planos...');
+        
+        // 1. Tenta carregar pela RPC obter_planos_publicos
         const { data: rpcData, error: rpcErr } = await supabase.rpc('obter_planos_publicos');
-        if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+        let planosList: any[] = [];
+        if (Array.isArray(rpcData)) {
+          planosList = rpcData;
+        } else if (typeof rpcData === 'string') {
+          try {
+            planosList = JSON.parse(rpcData);
+          } catch {}
+        }
+
+        if (!rpcErr && planosList.length > 0) {
           const mapa: Record<string, number> = {};
-          rpcData.forEach((p: any) => {
-            mapa[String(p.codigo).toLowerCase()] = p.preco_centavos;
+          planosList.forEach((p: any) => {
+            if (p.codigo && typeof p.preco_centavos === 'number') {
+              mapa[String(p.codigo).toLowerCase()] = p.preco_centavos;
+            }
           });
+          console.log('[PaginaPlanos] Preços carregados via RPC:', mapa);
           setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
           return;
         }
 
         // 2. Fallback: select direto na tabela plans
-        const { data: plansData } = await supabase
+        const { data: plansData, error: plansErr } = await supabase
           .from('plans')
           .select('codigo, preco_centavos, ativo');
-        if (plansData && plansData.length > 0) {
+
+        if (!plansErr && plansData && plansData.length > 0) {
           const mapa: Record<string, number> = {};
           plansData.forEach((p) => {
-            mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+            if (p.codigo && typeof p.preco_centavos === 'number') {
+              mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+            }
           });
+          console.log('[PaginaPlanos] Preços carregados via plans table:', mapa);
           setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
         }
       } catch (err) {
@@ -69,7 +87,7 @@ export const PaginaPlanos: React.FC = () => {
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: formatarPrecoMensal(precosCentavos['pro'] ?? 6700),
+    preco: formatarPrecoMensal(precosCentavos['pro'] ?? 100),
   });
 
   // Restrição estrita: Operadores não têm acesso à página de planos
@@ -114,8 +132,8 @@ export const PaginaPlanos: React.FC = () => {
       codigo: 'pro',
       nome: 'Pro',
       descricao: 'Ideal para oficinas em crescimento que buscam mais clientes e lucro real.',
-      preco: formatarPrecoCard(precosCentavos['pro'] ?? 6700),
-      precoMensal: formatarPrecoMensal(precosCentavos['pro'] ?? 6700),
+      preco: formatarPrecoCard(precosCentavos['pro'] ?? 100),
+      precoMensal: formatarPrecoMensal(precosCentavos['pro'] ?? 100),
       periodo: '/mês',
       destaque: true,
       limites: [

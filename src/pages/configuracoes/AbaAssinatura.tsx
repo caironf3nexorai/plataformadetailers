@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { ShieldCheck, Calendar, CreditCard, AlertTriangle, ExternalLink, RefreshCw, XCircle, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Calendar, CreditCard, AlertTriangle, ExternalLink, RefreshCw, XCircle, CheckCircle2, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
@@ -20,7 +20,7 @@ export const AbaAssinatura: React.FC = () => {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 6700,
+    pro: 100, // R$ 1,00 conforme configurado no Admin
     studio: 14700,
   });
 
@@ -36,26 +36,63 @@ export const AbaAssinatura: React.FC = () => {
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: 'R$ 67,00',
+    preco: 'R$ 1,00',
   });
 
   const carregarAssinatura = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('obter_assinatura_tenant');
-      if (error) throw error;
-      setAssinatura(data);
+      // 1. Carregar assinatura do tenant
+      try {
+        const { data, error } = await supabase.rpc('obter_assinatura_tenant');
+        if (!error && data) {
+          setAssinatura(data);
+        }
+      } catch (e) {
+        console.warn('[AbaAssinatura] Erro ao obter assinatura do tenant:', e);
+      }
 
-      // Carrega preços atualizados dos planos
-      const { data: plansData } = await supabase
-        .from('plans')
-        .select('codigo, preco_centavos');
-      if (plansData && plansData.length > 0) {
-        const mapa: Record<string, number> = {};
-        plansData.forEach((p) => {
-          mapa[p.codigo.toLowerCase()] = p.preco_centavos;
-        });
-        setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+      // 2. Carrega preços atualizados dos planos
+      try {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('obter_planos_publicos');
+        let planosList: any[] = [];
+        if (Array.isArray(rpcData)) {
+          planosList = rpcData;
+        } else if (typeof rpcData === 'string') {
+          try { planosList = JSON.parse(rpcData); } catch {}
+        }
+
+        if (!rpcErr && planosList.length > 0) {
+          const mapa: Record<string, number> = {};
+          planosList.forEach((p: any) => {
+            if (p.codigo && typeof p.preco_centavos === 'number') {
+              mapa[String(p.codigo).toLowerCase()] = p.preco_centavos;
+            }
+          });
+          setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+          if (mapa['pro'] !== undefined) {
+            setSelectedPlano((prev) => ({ ...prev, preco: formatarPrecoMensal(mapa['pro']) }));
+          }
+        } else {
+          // Fallback tabela plans
+          const { data: plansData } = await supabase
+            .from('plans')
+            .select('codigo, preco_centavos');
+          if (plansData && plansData.length > 0) {
+            const mapa: Record<string, number> = {};
+            plansData.forEach((p) => {
+              if (p.codigo && typeof p.preco_centavos === 'number') {
+                mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+              }
+            });
+            setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+            if (mapa['pro'] !== undefined) {
+              setSelectedPlano((prev) => ({ ...prev, preco: formatarPrecoMensal(mapa['pro']) }));
+            }
+          }
+        }
+      } catch (errPlans) {
+        console.warn('[AbaAssinatura] Erro ao buscar precos:', errPlans);
       }
     } catch (err: any) {
       console.error('Erro ao carregar assinatura:', err);
@@ -156,7 +193,7 @@ export const AbaAssinatura: React.FC = () => {
             <span className="text-xs text-vapor-400">
               {planoSigla === 'FREE'
                 ? 'R$ 0,00 / mês'
-                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? (planoSigla === 'PRO' ? 6700 : 14700))} / mês`}
+                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? (planoSigla === 'PRO' ? 100 : 14700))} / mês`}
             </span>
           </div>
 
@@ -173,6 +210,45 @@ export const AbaAssinatura: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Banner / Card de Upgrade para contas Free */}
+        {planoSigla === 'FREE' && (
+          <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-graphite-900/60 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <Sparkles size={20} />
+              </div>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-vapor-100 uppercase tracking-wide">
+                    Fazer Upgrade para o Plano PRO
+                  </span>
+                  <Badge tone="amber">RECOMENDADO</Badge>
+                </div>
+                <span className="text-xs text-vapor-400 mt-0.5">
+                  Desbloqueie capacidade ampliada, agendamento online e financeiro completo por apenas{' '}
+                  <strong className="text-amber-400 font-bold font-mono">
+                    {formatarPrecoMensal(precosCentavos['pro'] ?? 100)} / mês
+                  </strong>
+                  .
+                </span>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => {
+                const centavosPro = precosCentavos['pro'] ?? 100;
+                const precoFormatado = formatarPrecoMensal(centavosPro);
+                setSelectedPlano({ codigo: 'pro', nome: 'Pro', preco: precoFormatado });
+                setCheckoutModalOpen(true);
+              }}
+              variant="primary"
+              className="text-xs font-bold shrink-0 shadow-lg shadow-amber-500/10"
+            >
+              Assinar Pro ({formatarPrecoMensal(precosCentavos['pro'] ?? 100)}/mês)
+            </Button>
+          </div>
+        )}
 
         {/* Alerta de Trial */}
         {assinatura?.status === 'trial' && (
@@ -191,14 +267,14 @@ export const AbaAssinatura: React.FC = () => {
 
             <Button
               onClick={() => {
-                const precoPro = formatarPrecoMensal(precosCentavos['pro'] ?? 6700);
+                const precoPro = formatarPrecoMensal(precosCentavos['pro'] ?? 100);
                 setSelectedPlano({ codigo: 'pro', nome: 'Pro', preco: precoPro });
                 setCheckoutModalOpen(true);
               }}
               variant="primary"
               className="text-xs font-bold shrink-0"
             >
-              Assinar Agora
+              Assinar Agora ({formatarPrecoMensal(precosCentavos['pro'] ?? 100)}/mês)
             </Button>
           </div>
         )}
