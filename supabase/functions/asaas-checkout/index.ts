@@ -98,13 +98,24 @@ serve(async (req) => {
 
     // 1. Criar cliente no Asaas se não existir
     if (!asaasCustomerId) {
-      const customerPayload = {
+      const rawPhone = String(tenant?.telefone || profile?.telefone || '').replace(/\D/g, '');
+      const rawCpfCnpj = String(profile?.cpf || tenant?.documento || tenant?.cnpj || '').replace(/\D/g, '');
+
+      const customerPayload: Record<string, any> = {
         name: tenant?.nome || profile?.nome || 'Oficina Detailer',
         email: user.email,
-        phone: tenant?.telefone || profile?.telefone || '',
-        cpfCnpj: profile?.cpf || tenant?.cnpj || '',
         externalReference: tenantId,
       };
+
+      if (rawPhone.length === 11) {
+        customerPayload.mobilePhone = rawPhone;
+      } else if (rawPhone.length === 10) {
+        customerPayload.phone = rawPhone;
+      }
+
+      if (rawCpfCnpj.length === 11 || rawCpfCnpj.length === 14) {
+        customerPayload.cpfCnpj = rawCpfCnpj;
+      }
 
       const resCustomer = await fetch(`${ASAAS_API_URL}/customers`, {
         method: 'POST',
