@@ -96,9 +96,80 @@ serve(async (req) => {
 
     let asaasCustomerId = assExistente?.asaas_customer_id;
 
-    // 1. Criar ou Obter cliente no Asaas
+    // 1. Validador estrito de telefone brasileiro
+    const getValidPhone = (inputPhone: string): { phone?: string; mobilePhone?: string } => {
+      if (!inputPhone) return {};
+      const clean = String(inputPhone).replace(/\D/g, '');
+      if (clean.length !== 10 && clean.length !== 11) return {};
+
+      const ddd = parseInt(clean.substring(0, 2), 10);
+      const validDdds = [
+        11, 12, 13, 14, 15, 16, 17, 18, 19,
+        21, 22, 24, 27, 28,
+        31, 32, 33, 34, 35, 37, 38,
+        41, 42, 43, 44, 45, 46, 47, 48, 49,
+        51, 53, 54, 55,
+        61, 62, 63, 64, 65, 66, 67, 68, 69,
+        71, 73, 74, 75, 77, 79,
+        81, 82, 83, 84, 85, 86, 87, 88, 89,
+        91, 92, 93, 94, 95, 96, 97, 98, 99,
+      ];
+      if (!validDdds.includes(ddd)) return {};
+
+      const numberPart = clean.substring(2);
+      if (/^(\d)\1+$/.test(numberPart)) return {};
+      if (/^(\d)\1+$/.test(clean)) return {};
+      if (numberPart === '123456789' || numberPart === '987654321' || numberPart === '12345678') return {};
+
+      if (clean.length === 11) {
+        if (numberPart[0] !== '9') return {};
+        if (['0', '1'].includes(numberPart[1])) return {};
+        return { mobilePhone: clean };
+      }
+
+      if (clean.length === 10) {
+        if (!['2', '3', '4', '5'].includes(numberPart[0])) return {};
+        return { phone: clean };
+      }
+
+      return {};
+    };
+
+    const getValidCpfCnpj = (inputDoc: string): string | undefined => {
+      if (!inputDoc) return undefined;
+      const clean = String(inputDoc).replace(/\D/g, '');
+      if (clean.length !== 11 && clean.length !== 14) return undefined;
+      if (/^(\d)\1+$/.test(clean)) return undefined;
+      return clean;
+    };
+
+    const candidatePhone = reqTelefone || tenant?.telefone || profile?.telefone || '';
+    const candidateDoc = reqCpfCnpj || profile?.cpf || tenant?.documento || tenant?.cnpj || '';
+
+    const phoneFields = getValidPhone(candidatePhone);
+    const validDoc = getValidCpfCnpj(candidateDoc);
+
+    // No Brasil e no Asaas, CPF ou CNPJ é estritamente obrigatório para emitir faturas de assinatura
+    if (!validDoc) {
+      return new Response(
+        JSON.stringify({ error: 'O CPF ou CNPJ é obrigatório para emissão da cobrança no Asaas. Por favor, preencha o documento no checkout.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Salvar documento no perfil e tenant caso ainda não existisse
+    if (validDoc && (!profile?.cpf || !tenant?.documento)) {
+      if (!profile?.cpf) {
+        await supabase.from('profiles').update({ cpf: validDoc }).eq('id', user.id);
+      }
+      if (!tenant?.documento) {
+        await supabase.from('tenants').update({ documento: validDoc }).eq('id', tenantId);
+      }
+    }
+
+    // 2. Criar ou Obter cliente no Asaas
     if (!asaasCustomerId) {
-      // 1.1 Verificar se já existe cliente cadastrado no Asaas para este tenant
+      // 2.1 Verificar se já existe cliente cadastrado no Asaas para este tenant
       try {
         const checkRes = await fetch(`${ASAAS_API_URL}/customers?externalReference=${tenantId}`, {
           headers: { 'access_token': ASAAS_API_KEY },
@@ -115,7 +186,7 @@ serve(async (req) => {
     }
 
     if (!asaasCustomerId && user.email) {
-      // 1.2 Verificar se já existe cliente por email
+      // 2.2 Verificar se já existe cliente por email
       try {
         const checkEmailRes = await fetch(`${ASAAS_API_URL}/customers?email=${encodeURIComponent(user.email)}`, {
           headers: { 'access_token': ASAAS_API_KEY },
@@ -132,72 +203,13 @@ serve(async (req) => {
     }
 
     if (!asaasCustomerId) {
-      // 1.3 Validador estrito de telefone brasileiro
-      const getValidPhone = (inputPhone: string): { phone?: string; mobilePhone?: string } => {
-        if (!inputPhone) return {};
-        const clean = String(inputPhone).replace(/\D/g, '');
-        if (clean.length !== 10 && clean.length !== 11) return {};
-
-        const ddd = parseInt(clean.substring(0, 2), 10);
-        const validDdds = [
-          11, 12, 13, 14, 15, 16, 17, 18, 19,
-          21, 22, 24, 27, 28,
-          31, 32, 33, 34, 35, 37, 38,
-          41, 42, 43, 44, 45, 46, 47, 48, 49,
-          51, 53, 54, 55,
-          61, 62, 63, 64, 65, 66, 67, 68, 69,
-          71, 73, 74, 75, 77, 79,
-          81, 82, 83, 84, 85, 86, 87, 88, 89,
-          91, 92, 93, 94, 95, 96, 97, 98, 99,
-        ];
-        if (!validDdds.includes(ddd)) return {};
-
-        const numberPart = clean.substring(2);
-        // Rejeitar sequências ou repetições óbvias (ex: 999999999, 111111111, 000000000)
-        if (/^(\d)\1+$/.test(numberPart)) return {};
-        if (/^(\d)\1+$/.test(clean)) return {};
-        if (numberPart === '123456789' || numberPart === '987654321' || numberPart === '12345678') return {};
-
-        // Celular: 11 dígitos, inicia com 9 e segundo dígito não é 0 ou 1
-        if (clean.length === 11) {
-          if (numberPart[0] !== '9') return {};
-          if (['0', '1'].includes(numberPart[1])) return {};
-          return { mobilePhone: clean };
-        }
-
-        // Fixo: 10 dígitos, primeiro dígito do número é 2, 3, 4 ou 5
-        if (clean.length === 10) {
-          if (!['2', '3', '4', '5'].includes(numberPart[0])) return {};
-          return { phone: clean };
-        }
-
-        return {};
-      };
-
-      const getValidCpfCnpj = (inputDoc: string): string | undefined => {
-        if (!inputDoc) return undefined;
-        const clean = String(inputDoc).replace(/\D/g, '');
-        if (clean.length !== 11 && clean.length !== 14) return undefined;
-        if (/^(\d)\1+$/.test(clean)) return undefined;
-        return clean;
-      };
-
-      const candidatePhone = reqTelefone || tenant?.telefone || profile?.telefone || '';
-      const candidateDoc = reqCpfCnpj || profile?.cpf || tenant?.documento || tenant?.cnpj || '';
-
-      const phoneFields = getValidPhone(candidatePhone);
-      const validDoc = getValidCpfCnpj(candidateDoc);
-
       const customerPayload: Record<string, any> = {
         name: tenant?.nome || profile?.nome || 'Oficina Detailer',
         email: user.email,
+        cpfCnpj: validDoc,
         externalReference: tenantId,
         ...phoneFields,
       };
-
-      if (validDoc) {
-        customerPayload.cpfCnpj = validDoc;
-      }
 
       let resCustomer = await fetch(`${ASAAS_API_URL}/customers`, {
         method: 'POST',
@@ -210,21 +222,15 @@ serve(async (req) => {
 
       let customerData = await resCustomer.json();
 
-      // AUTO-RECUPERAÇÃO: se o Asaas recusar telefone ou documento, reenviar sem os campos opcionais que causaram o erro
+      // AUTO-RECUPERAÇÃO: se o Asaas recusar telefone, tentar sem o telefone opcional
       if (!resCustomer.ok && customerData?.errors && Array.isArray(customerData.errors)) {
         const errorCodes = customerData.errors.map((e: any) => String(e.code || ''));
         const hasPhoneError = errorCodes.some((c: string) => c.includes('phone') || c.includes('telefone'));
-        const hasDocError = errorCodes.some((c: string) => c.includes('cpf') || c.includes('cnpj'));
 
-        if (hasPhoneError || hasDocError) {
-          console.warn('[asaas-checkout] Retentando criar cliente sem campos opcionais rejeitados:', customerData.errors);
-          if (hasPhoneError) {
-            delete customerPayload.mobilePhone;
-            delete customerPayload.phone;
-          }
-          if (hasDocError) {
-            delete customerPayload.cpfCnpj;
-          }
+        if (hasPhoneError) {
+          console.warn('[asaas-checkout] Retentando criar cliente sem telefone rejeitado:', customerData.errors);
+          delete customerPayload.mobilePhone;
+          delete customerPayload.phone;
 
           resCustomer = await fetch(`${ASAAS_API_URL}/customers`, {
             method: 'POST',
@@ -239,10 +245,25 @@ serve(async (req) => {
       }
 
       if (!resCustomer.ok) {
-        throw new Error(`Erro ao criar cliente no Asaas: ${JSON.stringify(customerData)}`);
+        const desc = customerData?.errors?.[0]?.description || JSON.stringify(customerData);
+        throw new Error(`Erro ao criar cliente no Asaas: ${desc}`);
       }
 
       asaasCustomerId = customerData.id;
+    } else {
+      // 2.3 Se o cliente já existia, garantir que o CPF/CNPJ está sincronizado no Asaas
+      try {
+        await fetch(`${ASAAS_API_URL}/customers/${asaasCustomerId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'access_token': ASAAS_API_KEY,
+          },
+          body: JSON.stringify({ cpfCnpj: validDoc }),
+        });
+      } catch (errSync) {
+        console.warn('Aviso ao sincronizar CPF com cliente Asaas:', errSync);
+      }
     }
 
     // 2. Criar ou Atualizar Assinatura no Asaas (AJUSTE 2: Alterar existente sem duplicar)
@@ -299,10 +320,12 @@ serve(async (req) => {
 
           subscriptionData = await resSubNew.json();
           if (!resSubNew.ok) {
-            throw new Error(`Erro ao criar assinatura no Asaas: ${JSON.stringify(subscriptionData)}`);
+            const desc = subscriptionData?.errors?.[0]?.description || JSON.stringify(subscriptionData);
+            throw new Error(`Erro ao criar assinatura no Asaas: ${desc}`);
           }
         } else {
-          throw new Error(`Erro ao atualizar assinatura no Asaas: ${JSON.stringify(subscriptionData)}`);
+          const desc = subscriptionData?.errors?.[0]?.description || JSON.stringify(subscriptionData);
+          throw new Error(`Erro ao atualizar assinatura no Asaas: ${desc}`);
         }
       }
     } else {
@@ -333,7 +356,8 @@ serve(async (req) => {
 
       subscriptionData = await resSub.json();
       if (!resSub.ok) {
-        throw new Error(`Erro ao criar assinatura no Asaas: ${JSON.stringify(subscriptionData)}`);
+        const desc = subscriptionData?.errors?.[0]?.description || JSON.stringify(subscriptionData);
+        throw new Error(`Erro ao criar assinatura no Asaas: ${desc}`);
       }
     }
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
-import { formatTelefone } from '../../utils/formatters';
+import { formatTelefone, formatCpfCnpj } from '../../utils/formatters';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -47,7 +47,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           setTelefone(formatTelefone(profile.telefone));
         }
         if (profile?.cpf) {
-          setCpfCnpj(profile.cpf);
+          setCpfCnpj(formatCpfCnpj(profile.cpf));
         }
       } catch (e) {
         console.warn('Erro ao carregar dados do assinante:', e);
@@ -63,6 +63,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     if (!aceitouTermos) {
       showError('É necessário aceitar os Termos de Uso e Política de Privacidade para continuar.');
+      return;
+    }
+
+    const docLimpo = cpfCnpj.replace(/\D/g, '');
+    if (!docLimpo || (docLimpo.length !== 11 && docLimpo.length !== 14)) {
+      showError('O CPF ou CNPJ é obrigatório para emissão da assinatura no Asaas. Por favor, preencha o documento.');
       return;
     }
 
@@ -212,15 +218,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-mono font-bold text-vapor-300 uppercase tracking-wider">
-                    CPF ou CNPJ (Opcional)
+                    CPF ou CNPJ <span className="text-amber-500">*</span>
                   </label>
                   <input
                     type="text"
                     placeholder="000.000.000-00"
                     value={cpfCnpj}
-                    onChange={(e) => setCpfCnpj(e.target.value)}
+                    onChange={(e) => setCpfCnpj(formatCpfCnpj(e.target.value))}
+                    required
                     className="w-full px-3 py-2.5 rounded-xl bg-graphite-950 border border-graphite-700 text-vapor-100 text-xs focus:outline-none focus:border-amber-500 font-sans"
                   />
+                  <span className="text-[10px] text-vapor-400">Obrigatório pelo Asaas para emissão da cobrança</span>
                 </div>
               </div>
 

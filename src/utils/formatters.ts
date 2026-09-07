@@ -181,3 +181,22 @@ export function parseNumeroFlexivel(val: number | string | undefined | null): nu
   const num = parseFloat(str);
   return isNaN(num) ? 0 : num;
 }
+
+/**
+ * Formata CPF (000.000.000-00) ou CNPJ (00.000.000/0000-00)
+ */
+export function formatCpfCnpj(value: string): string {
+  if (!value) return '';
+  const clean = value.replace(/\D/g, '').slice(0, 14);
+  if (clean.length <= 11) {
+    if (clean.length <= 3) return clean;
+    if (clean.length <= 6) return `${clean.slice(0, 3)}.${clean.slice(3)}`;
+    if (clean.length <= 9) return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+    return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9)}`;
+  } else {
+    if (clean.length <= 12) {
+      return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5, 8)}/${clean.slice(8)}`;
+    }
+    return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5, 8)}/${clean.slice(8, 12)}-${clean.slice(12)}`;
+  }
+}
