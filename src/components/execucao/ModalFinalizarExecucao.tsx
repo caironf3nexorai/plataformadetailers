@@ -15,6 +15,7 @@ import {
   Trash2,
   CreditCard,
   Percent,
+  Calendar,
 } from 'lucide-react';
 import type { ExecucaoFoto } from '../../types/execucao';
 import type { ProdutoParaConsumo, ItemConsumoExecucao } from '../../types/estoque';
@@ -59,6 +60,7 @@ interface ItemPagamentoLancado {
   bandeira_codigo?: string;
   taxa_estimada?: boolean;
   total_parcelas: number;
+  numero_parcela?: number;
   valor_bruto: number;
   previsto_para: string;
   observacao?: string;
@@ -142,7 +144,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   const [novoBandeiraCodigo, setNovoBandeiraCodigo] = useState('');
   const [novoParcelas, setNovoParcelas] = useState('1');
   const [novoValor, setNovoValor] = useState('');
-  const [novoVencimento] = useState(new Date().toISOString().split('T')[0]);
+  const [novoVencimento, setNovoVencimento] = useState(new Date().toISOString().split('T')[0]);
   const [taxaInfoAviso, setTaxaInfoAviso] = useState<{ percentual: number; estimada: boolean } | null>(null);
 
 
@@ -592,23 +594,60 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
       }
     }
 
-    setPagamentosLancados((prev) => [
-      ...prev,
-      {
-        id: Math.random().toString(),
-        forma_id: forma.id,
-        forma_nome: forma.nome,
-        forma_tipo: forma.tipo,
-        maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
-        maquininha_nome: maqNome,
-        bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
-        taxa_estimada: taxaEstimada,
-        total_parcelas: parcelas,
-        valor_bruto: val,
-        previsto_para: novoVencimento,
-      },
-    ]);
+    const gerarItensPagamento = (valorTotal: number): ItemPagamentoLancado[] => {
+      if (forma.tipo === 'fiado' && parcelas > 1) {
+        const valorBase = Math.floor((valorTotal / parcelas) * 100) / 100;
+        let centavosRestantes = Math.round((valorTotal - (valorBase * parcelas)) * 100);
 
+        const itens: ItemPagamentoLancado[] = [];
+        const baseDate = new Date(novoVencimento + 'T12:00:00');
+
+        for (let i = 1; i <= parcelas; i++) {
+          const parcelaData = new Date(baseDate);
+          parcelaData.setMonth(parcelaData.getMonth() + (i - 1));
+          const vencStr = parcelaData.toISOString().split('T')[0];
+
+          let valorParcela = valorBase;
+          if (centavosRestantes > 0) {
+            valorParcela = Math.round((valorParcela + 0.01) * 100) / 100;
+            centavosRestantes -= 1;
+          }
+
+          itens.push({
+            id: Math.random().toString(),
+            forma_id: forma.id,
+            forma_nome: forma.nome,
+            forma_tipo: forma.tipo,
+            total_parcelas: parcelas,
+            numero_parcela: i,
+            valor_bruto: valorParcela,
+            previsto_para: vencStr,
+            observacao: `Parcela ${i}/${parcelas} combinada para ${vencStr.split('-').reverse().join('/')}`,
+          });
+        }
+        return itens;
+      }
+
+      return [
+        {
+          id: Math.random().toString(),
+          forma_id: forma.id,
+          forma_nome: forma.nome,
+          forma_tipo: forma.tipo,
+          maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
+          maquininha_nome: maqNome,
+          bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
+          taxa_estimada: taxaEstimada,
+          total_parcelas: parcelas,
+          numero_parcela: 1,
+          valor_bruto: valorTotal,
+          previsto_para: novoVencimento,
+          observacao: forma.tipo === 'fiado' ? `Fiado combinado para ${novoVencimento.split('-').reverse().join('/')}` : undefined,
+        },
+      ];
+    };
+
+    setPagamentosLancados((prev) => [...prev, ...gerarItensPagamento(val)]);
     setNovoValor('');
     setErrorMsg(null);
   };
@@ -649,23 +688,60 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
       }
     }
 
-    setPagamentosLancados((prev) => [
-      ...prev,
-      {
-        id: Math.random().toString(),
-        forma_id: forma.id,
-        forma_nome: forma.nome,
-        forma_tipo: forma.tipo,
-        maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
-        maquininha_nome: maqNome,
-        bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
-        taxa_estimada: taxaEstimada,
-        total_parcelas: parcelas,
-        valor_bruto: diferencaPagamentos,
-        previsto_para: novoVencimento,
-      },
-    ]);
+    const gerarItensPagamento = (valorTotal: number): ItemPagamentoLancado[] => {
+      if (forma.tipo === 'fiado' && parcelas > 1) {
+        const valorBase = Math.floor((valorTotal / parcelas) * 100) / 100;
+        let centavosRestantes = Math.round((valorTotal - (valorBase * parcelas)) * 100);
 
+        const itens: ItemPagamentoLancado[] = [];
+        const baseDate = new Date(novoVencimento + 'T12:00:00');
+
+        for (let i = 1; i <= parcelas; i++) {
+          const parcelaData = new Date(baseDate);
+          parcelaData.setMonth(parcelaData.getMonth() + (i - 1));
+          const vencStr = parcelaData.toISOString().split('T')[0];
+
+          let valorParcela = valorBase;
+          if (centavosRestantes > 0) {
+            valorParcela = Math.round((valorParcela + 0.01) * 100) / 100;
+            centavosRestantes -= 1;
+          }
+
+          itens.push({
+            id: Math.random().toString(),
+            forma_id: forma.id,
+            forma_nome: forma.nome,
+            forma_tipo: forma.tipo,
+            total_parcelas: parcelas,
+            numero_parcela: i,
+            valor_bruto: valorParcela,
+            previsto_para: vencStr,
+            observacao: `Parcela ${i}/${parcelas} combinada para ${vencStr.split('-').reverse().join('/')}`,
+          });
+        }
+        return itens;
+      }
+
+      return [
+        {
+          id: Math.random().toString(),
+          forma_id: forma.id,
+          forma_nome: forma.nome,
+          forma_tipo: forma.tipo,
+          maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
+          maquininha_nome: maqNome,
+          bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
+          taxa_estimada: taxaEstimada,
+          total_parcelas: parcelas,
+          numero_parcela: 1,
+          valor_bruto: valorTotal,
+          previsto_para: novoVencimento,
+          observacao: forma.tipo === 'fiado' ? `Fiado combinado para ${novoVencimento.split('-').reverse().join('/')}` : undefined,
+        },
+      ];
+    };
+
+    setPagamentosLancados((prev) => [...prev, ...gerarItensPagamento(diferencaPagamentos)]);
     setNovoValor('');
     setErrorMsg(null);
   };
@@ -729,7 +805,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
             maquininha_id: p.maquininha_id || null,
             bandeira_codigo: p.bandeira_codigo || null,
             total_parcelas: p.total_parcelas,
-            numero_parcela: 1,
+            numero_parcela: p.numero_parcela || 1,
             valor_bruto: p.valor_bruto,
             previsto_para: p.previsto_para,
             observacao: p.observacao || null,
@@ -1020,7 +1096,9 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                   <div key={p.id} className="p-3.5 rounded-xl bg-graphite-800 border border-graphite-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs font-mono">
                     <div className="flex flex-col gap-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-vapor-100 text-sm">{p.forma_nome} {p.total_parcelas > 1 ? `(${p.total_parcelas}x)` : ''}</span>
+                        <span className="font-bold text-vapor-100 text-sm">
+                          {p.forma_nome} {p.total_parcelas > 1 ? `(${p.numero_parcela ? `Parcela ${p.numero_parcela}/${p.total_parcelas}` : `${p.total_parcelas}x`})` : ''}
+                        </span>
                         {p.maquininha_nome && (
                           <span className="text-[11px] font-sans text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 whitespace-nowrap">
                             {p.maquininha_nome} {p.bandeira_codigo ? `• ${p.bandeira_codigo.toUpperCase()}` : ''}
@@ -1033,6 +1111,9 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                         )}
                       </div>
                       <span className="text-[11px] text-vapor-400">Vencimento: {p.previsto_para.split('-').reverse().join('/')}</span>
+                      {p.observacao && (
+                        <span className="text-[10px] text-vapor-500 italic">{p.observacao}</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between sm:justify-end gap-3 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-graphite-700/60 shrink-0">
                       <span className="font-bold text-amber-400 text-base">{formatarMoeda(p.valor_bruto)}</span>
@@ -1155,6 +1236,34 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                               )}
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {/* Linha para Data de Vencimento / Data Combinada (Especialmente para Fiado / A Prazo) */}
+                      {(formaSelecionada?.tipo === 'fiado' || formaSelecionada?.tipo === 'boleto' || formaSelecionada?.tipo === 'outros') && (
+                        <div className="p-3 bg-graphite-900 border border-amber-500/20 rounded-xl flex flex-col gap-2">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                              <Calendar size={13} />
+                              {parseInt(novoParcelas, 10) > 1 ? 'Data da 1ª Parcela (1º Vencimento)' : 'Data Combinada para Pagamento (Vencimento)'}
+                            </label>
+                            {parseInt(novoParcelas, 10) > 1 && (
+                              <span className="text-[10px] text-vapor-400 font-mono">
+                                Parcelamento mensal (+30 dias)
+                              </span>
+                            )}
+                          </div>
+                          <input
+                            type="date"
+                            value={novoVencimento}
+                            onChange={(e) => setNovoVencimento(e.target.value)}
+                            className="w-full bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-xs text-vapor-100 outline-none focus:border-amber-500 font-mono"
+                          />
+                          <span className="text-[11px] text-vapor-400">
+                            {parseInt(novoParcelas, 10) > 1
+                              ? `Ao finalizar, serão criadas ${novoParcelas} parcelas mensais no módulo Contas a Receber com vencimento a cada 30 dias.`
+                              : 'Este valor não entrará no caixa de hoje e ficará pendente no Contas a Receber até a data combinada.'}
+                          </span>
                         </div>
                       )}
 
