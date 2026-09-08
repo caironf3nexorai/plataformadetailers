@@ -50,6 +50,8 @@ interface OficinaPublica {
   uf?: string | null;
   telefone?: string | null;
   capa_path?: string | null;
+  agendamento_online_ativo?: boolean;
+  sinal_pix_ativo?: boolean;
 }
 
 interface CatalogoPayload {
@@ -340,13 +342,28 @@ export const CatalogoPublico: React.FC = () => {
                                 </span>
                               </div>
 
-                              <Link
-                                to={`/agendar/${slug}/agendamento?servico=${servico.id}${selectedCategoriaId ? `&categoria=${selectedCategoriaId}` : ''}`}
-                                className="px-3.5 py-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-sans text-[12px] font-semibold flex items-center gap-1.5 transition-colors"
-                              >
-                                <span>Solicitar Agendamento</span>
-                                <ChevronRight size={14} />
-                              </Link>
+                              {oficina.agendamento_online_ativo !== false ? (
+                                <Link
+                                  to={`/agendar/${slug}/agendamento?servico=${servico.id}${selectedCategoriaId ? `&categoria=${selectedCategoriaId}` : ''}`}
+                                  className="px-3.5 py-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-sans text-[12px] font-semibold flex items-center gap-1.5 transition-colors"
+                                >
+                                  <span>Solicitar Agendamento</span>
+                                  <ChevronRight size={14} />
+                                </Link>
+                              ) : oficina.telefone ? (
+                                <a
+                                  href={montarLinkWhatsapp(
+                                    oficina.telefone,
+                                    `Olá! Vi o serviço "${servico.nome}" no catálogo online e gostaria de agendar um horário.`
+                                  ) || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3.5 py-1.5 rounded bg-mint-500/10 hover:bg-mint-500/20 text-mint-400 border border-mint-500/30 font-sans text-[12px] font-semibold flex items-center gap-1.5 transition-colors"
+                                >
+                                  <MessageCircle size={14} />
+                                  <span>Agendar via WhatsApp</span>
+                                </a>
+                              ) : null}
                             </div>
                           </div>
                         </Card>

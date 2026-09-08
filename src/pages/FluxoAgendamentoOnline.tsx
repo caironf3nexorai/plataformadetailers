@@ -11,6 +11,7 @@ import { formatarData, formatarDataHora, formatarDataIsoSP, montarTimestampLocal
 import { formatarInformacaoTransbordo } from '../utils/transbordoUtils';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
 import { SeletorHorarioPublico, type SlotHorarioPublico } from '../components/publico/SeletorHorarioPublico';
+import { montarLinkWhatsapp } from '../utils/whatsapp';
 
 interface TenantInfo {
   id: string;
@@ -115,6 +116,7 @@ export function FluxoAgendamentoOnline() {
         const { data, error } = await supabase.rpc('catalogo_agendamento', { p_slug: slug });
         if (error) throw error;
         if (data?.erro) {
+          if (data.oficina) setTenant(data.oficina);
           setErro(data.erro);
           return;
         }
@@ -298,18 +300,42 @@ export function FluxoAgendamentoOnline() {
   }
 
   if (erro || !tenant) {
+    const whatsappLink = tenant?.telefone
+      ? montarLinkWhatsapp(
+          tenant.telefone,
+          `Olá! Acessei o link de agendamento da ${tenant.nome || 'oficina'} e gostaria de informações para agendar um serviço.`
+        )
+      : null;
+
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-100">
-        <div className="max-w-md w-full glass-card p-6 rounded-2xl text-center border border-red-500/20">
-          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-          <h2 className="text-xl font-bold mb-2 text-white">Agendamento Indisponível</h2>
-          <p className="text-slate-400 mb-6 text-sm">{erro || 'Não foi possível carregar as informações desta oficina.'}</p>
-          <button
-            onClick={() => navigate(`/agendar/${slug}`)}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium text-sm transition"
-          >
-            <ChevronLeft className="w-4 h-4" /> Voltar ao Catálogo
-          </button>
+        <div className="max-w-md w-full glass-card p-6 rounded-2xl text-center border border-red-500/20 space-y-4">
+          <AlertCircle className="w-12 h-12 text-red-400 mx-auto" />
+          <div>
+            <h2 className="text-xl font-bold mb-1 text-white">Agendamento Indisponível</h2>
+            <p className="text-slate-400 text-sm">
+              {erro || 'O agendamento online está temporariamente desativado para esta oficina.'}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            {whatsappLink && (
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-medium text-sm transition shadow-md"
+              >
+                <MessageSquare className="w-4 h-4" /> Agendar via WhatsApp
+              </a>
+            )}
+            <button
+              onClick={() => navigate(`/agendar/${slug}`)}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-medium text-sm transition"
+            >
+              <ChevronLeft className="w-4 h-4" /> Voltar ao Catálogo
+            </button>
+          </div>
         </div>
       </div>
     );

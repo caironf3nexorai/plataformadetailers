@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
 import { 
-  Calendar, CreditCard, Save, Info
+  Calendar, CreditCard, Save, Info, AlertTriangle, Lock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { usePlano } from '../../hooks/usePlano';
 import { formatValorMoeda } from '../../utils/precos';
 import { CampoNumerico } from '../ui/CampoNumerico';
 
@@ -26,6 +26,10 @@ interface ConfigAgendamento {
 export function AbaAgendamentoOnline() {
   const { tenant } = useAuth();
   const { showToast } = useToast();
+  const { temFeature, nomePlano } = usePlano();
+  const agendamentoLiberado = temFeature('agendamento_online');
+  const sinalPixLiberado = temFeature('sinal_pix');
+
   const [carregando, setCarregando] = useState<boolean>(true);
   const [salvando, setSalvando] = useState<boolean>(false);
 
@@ -157,19 +161,40 @@ export function AbaAgendamentoOnline() {
 
   return (
     <form onSubmit={handleSalvar} className="space-y-6 max-w-3xl">
+      {/* Alerta de Plano Bloqueado */}
+      {!agendamentoLiberado && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3 text-amber-300 text-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <strong className="block font-bold text-sm text-amber-200">
+              Agendamento Online Não Incluído no Plano {nomePlano}
+            </strong>
+            <p className="text-amber-300/90 leading-relaxed">
+              Esta funcionalidade está desativada nas permissões do seu plano atual. O catálogo online permanecerá acessível para seus clientes, porém direcionará os agendamentos diretamente para o seu WhatsApp.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Bloco 1: Ativação Geral e Confirmação */}
-      <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+      <div className={`p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 ${!agendamentoLiberado ? 'opacity-60' : ''}`}>
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Calendar className="w-5 h-5 text-emerald-400" /> Agendamento Online Público
+              {!agendamentoLiberado && (
+                <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full font-normal inline-flex items-center gap-1">
+                  <Lock size={10} /> Bloqueado no {nomePlano}
+                </span>
+              )}
             </h3>
             <p className="text-xs text-slate-400">Permite que seus clientes agendem serviços diretamente no seu catálogo público.</p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label className={`relative inline-flex items-center ${agendamentoLiberado ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
             <input
               type="checkbox"
-              checked={form.agendamento_online_ativo}
+              disabled={!agendamentoLiberado}
+              checked={agendamentoLiberado && form.agendamento_online_ativo}
               onChange={(e) => setForm({ ...form, agendamento_online_ativo: e.target.checked })}
               className="sr-only peer"
             />
@@ -207,18 +232,24 @@ export function AbaAgendamentoOnline() {
       </div>
 
       {/* Bloco 2: Sinal de Agendamento e Pix */}
-      <div className="p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+      <div className={`p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 ${!sinalPixLiberado ? 'opacity-60' : ''}`}>
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-emerald-400" /> Sinal Pix Estático
+              {!sinalPixLiberado && (
+                <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full font-normal inline-flex items-center gap-1">
+                  <Lock size={10} /> Bloqueado no {nomePlano}
+                </span>
+              )}
             </h3>
             <p className="text-xs text-slate-400">Solicite um sinal em Pix direto na sua conta bancária sem taxas da plataforma.</p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
+          <label className={`relative inline-flex items-center ${sinalPixLiberado ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
             <input
               type="checkbox"
-              checked={form.sinal_ativo}
+              disabled={!sinalPixLiberado}
+              checked={sinalPixLiberado && form.sinal_ativo}
               onChange={(e) => setForm({ ...form, sinal_ativo: e.target.checked })}
               className="sr-only peer"
             />
