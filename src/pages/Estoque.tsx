@@ -21,9 +21,12 @@ import { ModalProduto } from '../components/estoque/ModalProduto';
 import { ModalEntradaEstoque } from '../components/estoque/ModalEntradaEstoque';
 import { ModalAjusteEstoque } from '../components/estoque/ModalAjusteEstoque';
 import { AvisoRecursoForaDoPlano } from '../components/planos/AvisoRecursoForaDoPlano';
+import { BloqueioRecursoPlano } from '../components/planos/BloqueioRecursoPlano';
+import { usePlano } from '../hooks/usePlano';
 
 export const Estoque: React.FC = () => {
   const { tenant, membership } = useAuth();
+  const { temFeature, carregandoPermissoes } = usePlano();
   const podeGerenciar = membership?.role === 'dono' || membership?.role === 'gerente';
 
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -114,6 +117,26 @@ export const Estoque: React.FC = () => {
             </p>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Acesso bloqueado por plano (se funcionalidade desabilitada no plano atual)
+  if (!carregandoPermissoes && !temFeature('estoque')) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader title="Estoque e Custos" />
+        <BloqueioRecursoPlano
+          recurso="Controle de Estoque & Insumos"
+          descricao="O controle de saldo atual, alerta de reposição e baixa automática de produtos por serviço está disponível a partir do Plano Pro. Seus dados e produtos cadastrados anteriormente continuam salvos com segurança."
+          planoMinimo="Pro"
+          beneficios={[
+            'Controle de saldo atual e alerta de estoque mínimo',
+            'Baixa automática por consumo nas ordens de serviço',
+            'Cálculo de custo de produto e insumo por atendimento',
+            'Histórico de compras, notas e ajustes de inventário',
+          ]}
+        />
       </div>
     );
   }

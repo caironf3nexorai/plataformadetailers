@@ -33,12 +33,14 @@ import {
 import { useNavigate, Link } from 'react-router-dom';
 
 import { NavegacaoFinanceiro } from '../components/financeiro/NavegacaoFinanceiro';
-import { AvisoRecursoForaDoPlano } from '../components/planos/AvisoRecursoForaDoPlano';
+import { BloqueioRecursoPlano } from '../components/planos/BloqueioRecursoPlano';
+import { usePlano } from '../hooks/usePlano';
 
 export const Financeiro: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
   const { isDono, isGerente } = usePermissao();
+  const { temFeature, carregandoPermissoes } = usePlano();
 
   const podeVerFinanceiro = isDono || isGerente;
 
@@ -134,6 +136,26 @@ export const Financeiro: React.FC = () => {
     );
   }
 
+  // Acesso bloqueado por plano (se funcionalidade DRE/Financeiro desabilitada no plano atual)
+  if (!carregandoPermissoes && !temFeature('relatorios_dre')) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader title="DRE & Saúde Financeira" />
+        <BloqueioRecursoPlano
+          recurso="Financeiro Completo & DRE"
+          descricao="O módulo de gestão financeira avançada, DRE gerencial em tempo real, rentabilidade por serviço e rateio de comissões está disponível a partir do Plano Pro. Seus lançamentos e recebimentos anteriores continuam salvos com segurança."
+          planoMinimo="Pro"
+          beneficios={[
+            'DRE Gerencial em tempo real (Receitas, Custos e Lucro Líquido)',
+            'Rentabilidade e margem real por serviço executado',
+            'Controle de comissões da equipe com baixa manual',
+            'Contas a Receber e previsão de fluxo de caixa',
+          ]}
+        />
+      </div>
+    );
+  }
+
   const { inicio: inicioFormat, fim: fimFormat } = obterDatasPeriodo(
     filtroPeriodo,
     customInicio || undefined,
@@ -142,7 +164,6 @@ export const Financeiro: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 pb-12">
-      <AvisoRecursoForaDoPlano featureNome="Financeiro Completo e Margens" planoMinimo="Pro" />
       <PageHeader title="DRE & Saúde Financeira" />
       <NavegacaoFinanceiro />
 

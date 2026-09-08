@@ -3,9 +3,33 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { DiluicaoCalculator } from '../features/diluicao/DiluicaoCalculator';
 import { Button } from '../components/ui/Button';
 import { Share2, Check, MessageCircle, ExternalLink, Sparkles } from 'lucide-react';
+import { usePlano } from '../hooks/usePlano';
+import { BloqueioRecursoPlano } from '../components/planos/BloqueioRecursoPlano';
 
 export const DiluicaoInterna: React.FC = () => {
+  const { temFeature, carregandoPermissoes } = usePlano();
   const [copiado, setCopiado] = useState(false);
+
+  if (!carregandoPermissoes && !temFeature('calculadora_diluicao')) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title="Calculadora de Diluição"
+          subtitle="Calibração para snow foam manual e lavadoras de alta pressão"
+        />
+        <BloqueioRecursoPlano
+          recurso="Calculadora de Diluição Profissional"
+          descricao="A calculadora de diluição profissional integrada à oficina está disponível a partir do Plano Pro ou conforme liberação da plataforma."
+          planoMinimo="Pro"
+          beneficios={[
+            'Calibração exata de snow foam manual e de lavadoras',
+            'Dosagem sem desperdício de produtos químicos',
+            'Cálculo de custo de diluição por veículo atendido',
+          ]}
+        />
+      </div>
+    );
+  }
 
   const handleCopiarLink = async () => {
     try {

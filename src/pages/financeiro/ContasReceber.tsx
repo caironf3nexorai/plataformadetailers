@@ -40,12 +40,15 @@ interface ItemContaReceber {
 }
 
 import { NavegacaoFinanceiro } from '../../components/financeiro/NavegacaoFinanceiro';
+import { usePlano } from '../../hooks/usePlano';
+import { BloqueioRecursoPlano } from '../../components/planos/BloqueioRecursoPlano';
 
 export const ContasReceber: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
   const { isDono, isGerente } = usePermissao();
   const { showToast } = useToast();
+  const { temFeature, carregandoPermissoes } = usePlano();
 
   const podeAcessar = isDono || isGerente;
 
@@ -152,6 +155,25 @@ export const ContasReceber: React.FC = () => {
             Voltar para o Painel Operacional
           </Button>
         </Card>
+      </div>
+    );
+  }
+
+  if (!carregandoPermissoes && !temFeature('relatorios_dre')) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader title="Contas a Receber" />
+        <BloqueioRecursoPlano
+          recurso="Contas a Receber & Cobrança"
+          descricao="A gestão de parcelas, crediário próprio, controle de inadimplência e baixas parciais de pagamentos está disponível a partir do Plano Pro."
+          planoMinimo="Pro"
+          beneficios={[
+            'Controle de parcelamentos e crediário sem maquininha',
+            'Alerta automático de clientes com parcelas em atraso',
+            'Baixas parciais com recálculo automático de saldo',
+            'Previsão de entradas e fluxo de recebimento no mês',
+          ]}
+        />
       </div>
     );
   }

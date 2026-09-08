@@ -20,6 +20,7 @@ import {
   X,
   Award,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
@@ -38,6 +39,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   visible: boolean;
+  featureKey?: string;
 }
 
 interface NavGroup {
@@ -49,7 +51,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
   const location = useLocation();
   const { tenant, userTenants, trocarTenant, signOut, profile, membership } = useAuth();
   const { isOperador, podeVerFinanceiro, podeGerirEstoque, podeGerirServicos } = usePermissao();
-  const { nomePlano } = usePlano();
+  const { nomePlano, temFeature } = usePlano();
   const [isPlatformAdminUser, setIsPlatformAdminUser] = useState(false);
   const [isPartnerUser, setIsPartnerUser] = useState(false);
   const [feedbacksNovos, setFeedbacksNovos] = useState(0);
@@ -111,27 +113,27 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
       titulo: 'OPERAÇÃO',
       itens: [
         { path: '/', label: 'Dashboard (Painel)', icon: LayoutDashboard, visible: !isOperador },
-        { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true },
-        { path: '/clientes', label: 'Clientes', icon: Users, visible: true },
-        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro() },
-        { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos() },
-        { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque() },
+        { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true, featureKey: 'agenda' },
+        { path: '/clientes', label: 'Clientes', icon: Users, visible: true, featureKey: 'clientes_veiculos' },
+        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro(), featureKey: 'orcamentos_tres_niveis' },
+        { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos(), featureKey: 'servicos_catalogo' },
+        { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque(), featureKey: 'estoque' },
       ],
     },
     {
       titulo: 'FINANCEIRO & ESTRATÉGIA',
       itens: [
-        { path: '/financeiro', label: 'Financeiro', icon: TrendingUp, visible: podeVerFinanceiro() },
-        { path: '/servicos/precificacao', label: 'Precificação Inteligente', icon: DollarSign, visible: podeVerFinanceiro() },
+        { path: '/financeiro', label: 'Financeiro', icon: TrendingUp, visible: podeVerFinanceiro(), featureKey: 'relatorios_dre' },
+        { path: '/servicos/precificacao', label: 'Precificação Inteligente', icon: DollarSign, visible: podeVerFinanceiro(), featureKey: 'financeiro_custo_hora' },
       ],
     },
     {
       titulo: 'RECURSOS & CONTEÚDO',
       itens: [
-        { path: '/treinamentos', label: 'Academia Detailer', icon: GraduationCap, visible: true },
-        { path: '/arquivos-digitais', label: 'Arquivos Digitais', icon: FolderArchive, visible: podeGerirServicos() },
-        { path: '/diluicao', label: 'Calculadora de Diluição', icon: FlaskConical, visible: true },
-        { path: '/indique', label: 'Indique e Ganhe', icon: Gift, visible: true },
+        { path: '/treinamentos', label: 'Academia Detailer', icon: GraduationCap, visible: true, featureKey: 'treinamentos' },
+        { path: '/arquivos-digitais', label: 'Arquivos Digitais', icon: FolderArchive, visible: podeGerirServicos(), featureKey: 'arquivos_digitais' },
+        { path: '/diluicao', label: 'Calculadora de Diluição', icon: FlaskConical, visible: true, featureKey: 'calculadora_diluicao' },
+        { path: '/indique', label: 'Indique e Ganhe', icon: Gift, visible: true, featureKey: 'programa_indicacao' },
       ],
     },
     {
@@ -298,6 +300,8 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
                       return reactRouterActive;
                     };
 
+                    const isBloqueado = Boolean(item.featureKey && !temFeature(item.featureKey));
+
                     return (
                       <NavLink
                         key={item.path}
@@ -309,6 +313,8 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
                           return `relative flex items-center gap-3 px-3 py-2.5 rounded-lg min-h-[42px] font-sans text-[13.5px] transition-colors ${
                             active
                               ? 'text-amber-500 font-medium bg-graphite-800 border border-amber-500/30'
+                              : isBloqueado
+                              ? 'text-vapor-400/80 hover:text-vapor-200 hover:bg-graphite-800/40'
                               : 'text-vapor-300 hover:text-vapor-100 hover:bg-graphite-800/60'
                           }`;
                         }}
@@ -317,8 +323,13 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
                           const active = isItemActive(isActive);
                           return (
                             <>
-                              <item.icon size={18} className={active ? 'text-amber-500' : 'text-vapor-400'} />
-                              <span className="truncate">{item.label}</span>
+                              <item.icon size={18} className={active ? 'text-amber-500' : isBloqueado ? 'text-vapor-400/70' : 'text-vapor-400'} />
+                              <span className="truncate flex-1">{item.label}</span>
+                              {isBloqueado && (
+                                <span title="Recurso exclusivo do Plano Pro">
+                                  <Lock size={13} className="text-amber-500/80 ml-auto shrink-0" />
+                                </span>
+                              )}
                             </>
                           );
                         }}

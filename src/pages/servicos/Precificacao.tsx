@@ -27,6 +27,8 @@ import {
   ShieldAlert,
   Sparkles
 } from 'lucide-react';
+import { usePlano } from '../../hooks/usePlano';
+import { BloqueioRecursoPlano } from '../../components/planos/BloqueioRecursoPlano';
 
 interface PrecificacaoItem {
   servico_preco_id: string;
@@ -75,6 +77,7 @@ interface MatrizResultado {
 }
 
 export const Precificacao: React.FC = () => {
+  const { temFeature, carregandoPermissoes } = usePlano();
   const [data, setData] = useState<MatrizResultado | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +221,28 @@ export const Precificacao: React.FC = () => {
 
     return true;
   });
+
+  if (!carregandoPermissoes && !temFeature('financeiro_custo_hora')) {
+    return (
+      <div className="flex flex-col gap-4 max-w-6xl mx-auto pb-12 px-2 sm:px-4">
+        <PageHeader 
+          title="Precificação Inteligente & Margem Real" 
+          subtitle="Ranking de oportunidade financeira: entenda os custos reais da sua oficina em frases diretas e simule o ganho de cada reajuste."
+        />
+        <BloqueioRecursoPlano
+          recurso="Precificação Inteligente & Custo/Hora"
+          descricao="A análise de viabilidade, sugestão de preços com base no custo real da sua estrutura e margem de lucro ideal requer o Plano Pro."
+          planoMinimo="Pro"
+          beneficios={[
+            'Cálculo exato de custo por hora da sua oficina',
+            'Detecção automática de serviços que estão dando prejuízo',
+            'Simulação de preço alvo com margem de lucro garantida',
+            'Aplicação em lote de tabelas de preços inteligentes',
+          ]}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 max-w-6xl mx-auto pb-12 px-2 sm:px-4">

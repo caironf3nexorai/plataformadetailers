@@ -19,6 +19,7 @@ import {
   Building2,
   Award,
   Sparkles,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
@@ -33,6 +34,7 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   visible: boolean;
+  featureKey?: string;
   badge?: string | number;
 }
 
@@ -45,7 +47,7 @@ export const SidebarNav: React.FC = () => {
   const location = useLocation();
   const { tenant, userTenants, trocarTenant, signOut, profile, membership } = useAuth();
   const { isOperador, podeVerFinanceiro, podeGerirEstoque, podeGerirServicos } = usePermissao();
-  const { nomePlano } = usePlano();
+  const { nomePlano, temFeature } = usePlano();
   const [isPlatformAdminUser, setIsPlatformAdminUser] = useState(false);
   const [isPartnerUser, setIsPartnerUser] = useState(false);
   const [feedbacksNovos, setFeedbacksNovos] = useState(0);
@@ -95,27 +97,27 @@ export const SidebarNav: React.FC = () => {
       titulo: 'OPERAÇÃO',
       itens: [
         { path: '/', label: 'Dashboard', icon: LayoutDashboard, visible: !isOperador },
-        { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true },
-        { path: '/clientes', label: 'Clientes', icon: Users, visible: true },
-        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro() },
-        { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos() },
-        { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque() },
+        { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true, featureKey: 'agenda' },
+        { path: '/clientes', label: 'Clientes', icon: Users, visible: true, featureKey: 'clientes_veiculos' },
+        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro(), featureKey: 'orcamentos_tres_niveis' },
+        { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos(), featureKey: 'servicos_catalogo' },
+        { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque(), featureKey: 'estoque' },
       ],
     },
     {
       titulo: 'FINANCEIRO & ESTRATÉGIA',
       itens: [
-        { path: '/financeiro', label: 'Financeiro', icon: TrendingUp, visible: podeVerFinanceiro() },
-        { path: '/servicos/precificacao', label: 'Precificação', icon: DollarSign, visible: podeVerFinanceiro() },
+        { path: '/financeiro', label: 'Financeiro', icon: TrendingUp, visible: podeVerFinanceiro(), featureKey: 'relatorios_dre' },
+        { path: '/servicos/precificacao', label: 'Precificação', icon: DollarSign, visible: podeVerFinanceiro(), featureKey: 'financeiro_custo_hora' },
       ],
     },
     {
       titulo: 'RECURSOS & CONTEÚDO',
       itens: [
-        { path: '/treinamentos', label: 'Academia Detailer', icon: GraduationCap, visible: true },
-        { path: '/arquivos-digitais', label: 'Arquivos Digitais', icon: FolderArchive, visible: podeGerirServicos() },
-        { path: '/diluicao', label: 'Diluição', icon: FlaskConical, visible: true },
-        { path: '/indique', label: 'Indique e Ganhe', icon: Gift, visible: true },
+        { path: '/treinamentos', label: 'Academia Detailer', icon: GraduationCap, visible: true, featureKey: 'treinamentos' },
+        { path: '/arquivos-digitais', label: 'Arquivos Digitais', icon: FolderArchive, visible: podeGerirServicos(), featureKey: 'arquivos_digitais' },
+        { path: '/diluicao', label: 'Diluição', icon: FlaskConical, visible: true, featureKey: 'calculadora_diluicao' },
+        { path: '/indique', label: 'Indique e Ganhe', icon: Gift, visible: true, featureKey: 'programa_indicacao' },
       ],
     },
     {
@@ -255,6 +257,8 @@ export const SidebarNav: React.FC = () => {
                     return reactRouterActive;
                   };
 
+                  const isBloqueado = Boolean(item.featureKey && !temFeature(item.featureKey));
+
                   return (
                     <NavLink
                       key={item.path}
@@ -265,6 +269,8 @@ export const SidebarNav: React.FC = () => {
                         return `relative flex items-center gap-3 px-6 py-2.5 min-h-[40px] font-sans text-[13.5px] transition-colors ${
                           active
                             ? 'text-amber-500 font-medium bg-graphite-700/40'
+                            : isBloqueado
+                            ? 'text-vapor-400/80 hover:text-vapor-200 hover:bg-graphite-700/10'
                             : 'text-vapor-400 hover:text-vapor-100 hover:bg-graphite-700/20'
                         }`;
                       }}
@@ -276,8 +282,13 @@ export const SidebarNav: React.FC = () => {
                             {active && (
                               <div className="absolute left-0 top-0 bottom-0 w-[2.5px] bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]" />
                             )}
-                            <item.icon size={18} className={active ? 'text-amber-500' : 'text-vapor-400'} />
-                            <span className="truncate">{item.label}</span>
+                            <item.icon size={18} className={active ? 'text-amber-500' : isBloqueado ? 'text-vapor-400/70' : 'text-vapor-400'} />
+                            <span className="truncate flex-1">{item.label}</span>
+                            {isBloqueado && (
+                              <span title="Recurso exclusivo do Plano Pro">
+                                <Lock size={12} className="text-amber-500/80 ml-auto shrink-0" />
+                              </span>
+                            )}
                           </>
                         );
                       }}
