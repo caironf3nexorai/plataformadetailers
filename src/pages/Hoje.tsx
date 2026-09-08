@@ -46,7 +46,7 @@ export const Hoje: React.FC = () => {
   const navigate = useNavigate();
   const { tenant, membership } = useAuth();
   const { podeVerValor } = usePermissao();
-  const { showError } = useToast();
+  const { showError, showSuccess } = useToast();
   const { activeMilestone, dismissMilestone, checkMilestone } = useMilestoneCheck();
   const isGestor = membership?.role === 'dono' || membership?.role === 'gerente';
 
@@ -362,9 +362,11 @@ export const Hoje: React.FC = () => {
         p_agendamento: agendamentoId
       });
       if (error) throw error;
+      showSuccess('Pagamento do sinal confirmado com sucesso!');
       await fetchHojeData();
     } catch (err: any) {
       console.error('[Hoje] Erro ao registrar sinal pago:', err);
+      showError(err.message || 'Erro ao registrar sinal pago');
     }
   };
 
@@ -754,36 +756,42 @@ export const Hoje: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                  {ag.status === 'aguardando_confirmacao' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleConfirmarOnline(ag.id)}
-                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold text-xs rounded-lg transition"
-                      >
-                        Confirmar Horário
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRecusarOnline(ag.id)}
-                        className="px-3 py-1.5 bg-flare-500/20 hover:bg-flare-500/30 text-flare-400 border border-flare-500/30 font-semibold text-xs rounded-lg transition"
-                      >
-                        Recusar
-                      </button>
-                    </>
-                  )}
+                {isGestor ? (
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    {ag.status === 'aguardando_confirmacao' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmarOnline(ag.id)}
+                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold text-xs rounded-lg transition"
+                        >
+                          Confirmar Horário
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRecusarOnline(ag.id)}
+                          className="px-3 py-1.5 bg-flare-500/20 hover:bg-flare-500/30 text-flare-400 border border-flare-500/30 font-semibold text-xs rounded-lg transition"
+                        >
+                          Recusar
+                        </button>
+                      </>
+                    )}
 
-                  {ag.sinal_status === 'pendente' && (
-                    <button
-                      type="button"
-                      onClick={() => handleRegistrarSinalPago(ag.id)}
-                      className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold text-xs rounded-lg transition flex items-center gap-1"
-                    >
-                      <CheckCircle2 size={14} /> Confirmar Sinal Pago
-                    </button>
-                  )}
-                </div>
+                    {ag.sinal_status === 'pendente' && (
+                      <button
+                        type="button"
+                        onClick={() => handleRegistrarSinalPago(ag.id)}
+                        className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold text-xs rounded-lg transition flex items-center gap-1"
+                      >
+                        <CheckCircle2 size={14} /> Confirmar Sinal Pago
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-vapor-400 italic">
+                    Aguardando confirmação da gestão
+                  </div>
+                )}
               </Card>
             ))}
           </div>
