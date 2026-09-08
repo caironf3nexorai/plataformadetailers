@@ -293,14 +293,19 @@ export const CatalogoPublico: React.FC = () => {
                       if (servico.sob_consulta) {
                         precoDisplay = 'Sob avaliação';
                       } else if (selectedCategoriaId) {
-                        const matchPreco = servico.precos.find((p) => p.categoria_id === selectedCategoriaId);
-                        if (matchPreco && matchPreco.preco_base !== null && matchPreco.preco_base !== undefined) {
-                          precoDisplay = formatValorMoeda(Number(matchPreco.preco_base));
+                        const matchPreco = servico.precos?.find((p) => p.categoria_id === selectedCategoriaId);
+                        const rawPreco = matchPreco?.preco_base;
+                        const numPreco = rawPreco !== null && rawPreco !== undefined && rawPreco !== ''
+                          ? Number(typeof rawPreco === 'string' ? rawPreco.replace(',', '.') : rawPreco)
+                          : NaN;
+
+                        if (!isNaN(numPreco) && numPreco > 0) {
+                          precoDisplay = `R$ ${formatValorMoeda(numPreco)}`;
                         } else {
                           precoDisplay = 'Sob consulta';
                         }
                       } else {
-                        precoDisplay = formatFaixaPreco(servico.precos as any);
+                        precoDisplay = formatFaixaPreco(servico.precos, servico.sob_consulta);
                       }
 
                       return (

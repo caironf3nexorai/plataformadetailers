@@ -2,11 +2,21 @@
  * Formata um valor numérico para o padrão de moeda pt-BR sem o símbolo "R$".
  */
 export const formatValorMoeda = (valor: number): string => {
+  if (valor === null || valor === undefined || isNaN(valor) || !isFinite(valor)) {
+    return '0';
+  }
   return valor.toLocaleString('pt-BR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
 };
+
+export type PrecoItem =
+  | number
+  | string
+  | null
+  | undefined
+  | { preco_base?: number | string | null; preco?: number | string | null; valor?: number | string | null };
 
 /**
  * Retorna a faixa de preço descritiva para exibição no catálogo ou lista.
@@ -17,16 +27,37 @@ export const formatValorMoeda = (valor: number): string => {
  * - Preços variados: "A partir de R$ X a R$ Y"
  */
 export const formatFaixaPreco = (
-  precos: (number | null)[],
+  precos: PrecoItem[] | null | undefined,
   sobConsulta: boolean = false
 ): string => {
   if (sobConsulta) {
     return 'Sob avaliação';
   }
 
-  const validPrices = precos
-    .filter((p): p is number => p !== null && p !== undefined)
-    .map((p) => Number(p));
+  if (!precos || !Array.isArray(precos)) {
+    return 'Preço não definido';
+  }
+
+  const validPrices: number[] = [];
+
+  for (const item of precos) {
+    if (item === null || item === undefined) continue;
+
+    let valorBruto: any = item;
+    if (typeof item === 'object') {
+      valorBruto = item.preco_base ?? item.preco ?? item.valor;
+    }
+
+    if (valorBruto === null || valorBruto === undefined || valorBruto === '') continue;
+
+    const num = typeof valorBruto === 'number'
+      ? valorBruto
+      : Number(String(valorBruto).replace(',', '.'));
+
+    if (!isNaN(num) && isFinite(num) && num > 0) {
+      validPrices.push(num);
+    }
+  }
 
   if (validPrices.length === 0) {
     return 'Preço não definido';

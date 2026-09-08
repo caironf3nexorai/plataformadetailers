@@ -39,6 +39,35 @@ describe('formatFaixaPreco', () => {
     const resultado = formatFaixaPreco(precosComNulos, false);
     expect(resultado).toBe('A partir de R$ 40');
   });
+
+  it('deve suportar lista de objetos com preco_base e calcular faixas corretamente', () => {
+    const precosObjetos = [
+      { categoria_id: 'cat-1', preco_base: 50 },
+      { categoria_id: 'cat-2', preco_base: 80 },
+      { categoria_id: 'cat-3', preco_base: null }
+    ];
+    const resultado = formatFaixaPreco(precosObjetos as any, false);
+    expect(resultado).toBe('A partir de R$ 50 a R$ 80');
+  });
+
+  it('deve suportar lista de objetos com o mesmo preco_base em todas as categorias', () => {
+    const precosObjetos = [
+      { categoria_id: 'cat-1', preco_base: 50 },
+      { categoria_id: 'cat-2', preco_base: 50 }
+    ];
+    const resultado = formatFaixaPreco(precosObjetos as any, false);
+    expect(resultado).toBe('A partir de R$ 50');
+  });
+
+  it('não deve retornar NaN mesmo com valores corrompidos ou strings', () => {
+    const precosCorrompidos = [
+      { categoria_id: 'cat-1', preco_base: 'invalido' },
+      { categoria_id: 'cat-2', preco_base: undefined }
+    ];
+    const resultado = formatFaixaPreco(precosCorrompidos as any, false);
+    expect(resultado).toBe('Preço não definido');
+    expect(resultado).not.toContain('NaN');
+  });
 });
 
 describe('formatDuracao', () => {
