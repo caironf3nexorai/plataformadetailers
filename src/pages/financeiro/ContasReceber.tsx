@@ -7,8 +7,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
-import { formatarMoeda } from '../../utils/formatters';
-import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
+import { formatarMoeda, parseNumeroFlexivel } from '../../utils/formatters';
+import { Modal } from '../../components/ui/Modal';
+import { CampoNumerico } from '../../components/ui/CampoNumerico';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -59,7 +60,14 @@ export const ContasReceber: React.FC = () => {
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'vencidos' | 'a_vencer'>('todos');
   const [baixandoId, setBaixandoId] = useState<string | null>(null);
-  const [itemParaBaixar, setItemParaBaixar] = useState<{ id: string; clienteNome: string; valor: number } | null>(null);
+  const [itemParaBaixar, setItemParaBaixar] = useState<{
+    id: string;
+    clienteNome: string;
+    valor: number;
+    parcelaInfo: string;
+    vencimento: string;
+  } | null>(null);
+  const [valorPagoInput, setValorPagoInput] = useState<string>('');
 
   const fetchContasReceber = async () => {
     if (!tenant || !podeAcessar) return;
@@ -91,22 +99,36 @@ export const ContasReceber: React.FC = () => {
     fetchContasReceber();
   }, [tenant?.id]);
 
-  const handleSolicitarBaixa = (id: string, clienteNome: string, valor: number) => {
-    setItemParaBaixar({ id, clienteNome, valor });
+  const handleSolicitarBaixa = (item: ItemContaReceber) => {
+    setItemParaBaixar({
+      id: item.id,
+      clienteNome: item.cliente_nome,
+      valor: item.valor_bruto,
+      parcelaInfo: item.total_parcelas > 1 ? `Parcela ${item.numero_parcela}/${item.total_parcelas}` : 'À vista (1/1)',
+      vencimento: new Date(item.previsto_para + 'T00:00:00').toLocaleDateString('pt-BR'),
+    });
+    setValorPagoInput(item.valor_bruto.toFixed(2).replace('.', ','));
   };
 
   const handleConfirmarBaixa = async () => {
     if (!itemParaBaixar) return;
     const { id } = itemParaBaixar;
+    const valPago = parseNumeroFlexivel(valorPagoInput);
+    if (valPago <= 0) {
+      showToast('O valor recebido deve ser maior que zero.', 'error');
+      return;
+    }
+
     setBaixandoId(id);
     try {
-      const { error } = await supabase.rpc('dar_baixa_recebimento', {
+      const { data, error } = await supabase.rpc('dar_baixa_recebimento', {
         p_recebimento_id: id,
+        p_valor_pago: valPago,
       });
 
       if (error) throw error;
 
-      showToast('Baixa efetuada com sucesso!', 'success');
+      showToast(data?.mensagem || 'Baixa efetuada com sucesso!', 'success');
       setItemParaBaixar(null);
       await fetchContasReceber();
     } catch (err: any) {
@@ -388,7 +410,7 @@ export const ContasReceber: React.FC = () => {
                       <td className="py-3.5 px-3 text-center">
                         <Button
                           variant="primary"
-                          onClick={() => handleSolicitarBaixa(item.id, item.cliente_nome, item.valor_bruto)}
+                          onClick={() => handleSolicitarBaixa(item)}
                           disabled={baixandoId === item.id}
                           className="text-xs px-3 py-1 bg-mint-500 hover:bg-mint-400 text-graphite-950 font-bold border-none"
                         >
@@ -404,18 +426,107 @@ export const ContasReceber: React.FC = () => {
         )}
       </Card>
 
-      {/* Modal de Confirmação para Baixa de Recebimento */}
-      <ModalConfirmacao
-        isOpen={Boolean(itemParaBaixar)}
-        onClose={() => setItemParaBaixar(null)}
-        onConfirm={handleConfirmarBaixa}
-        titulo="Confirmar Baixa de Recebimento"
-        mensagem={`Deseja confirmar o recebimento de ${itemParaBaixar ? formatarMoeda(itemParaBaixar.valor) : ''} do cliente ${itemParaBaixar?.clienteNome || ''}? Esta ação marcará a parcela como paga e atualizará os saldos financeiros imediatamente.`}
-        textoConfirmar="Confirmar Baixa"
-        textoCancelar="Cancelar"
-        variant="info"
-        loading={baixandoId !== null}
-      />
+      {/* Modal Inteligente de Baixa com Ajuste de Valor */}
+      {itemParaBaixar && (
+        <Modal
+          isOpen={Boolean(itemParaBaixar)}
+          onClose={() => setItemParaBaixar(null)}
+          title="Confirmar Recebimento"
+          maxWidth="md"
+          footer={
+            <div className="flex items-center justify-end gap-3 w-full">
+              <Button
+                variant="secondary"
+                onClick={() => setItemParaBaixar(null)}
+                disabled={baixandoId !== null}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmarBaixa}
+                disabled={baixandoId !== null}
+                className="bg-mint-500 hover:bg-mint-400 text-graphite-950 font-bold"
+              >
+                {baixandoId ? 'Registrando...' : 'Confirmar Recebimento'}
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4 py-1">
+            {/* Detalhes do Cliente e Parcela */}
+            <div className="p-3.5 bg-graphite-950 rounded-xl border border-graphite-800 flex flex-col gap-1 text-xs">
+              <div className="flex justify-between items-center text-vapor-300 font-medium">
+                <span>Cliente:</span>
+                <span className="font-bold text-vapor-100 text-sm">{itemParaBaixar.clienteNome}</span>
+              </div>
+              <div className="flex justify-between items-center text-vapor-400">
+                <span>Cobrança:</span>
+                <span className="font-mono text-vapor-200">{itemParaBaixar.parcelaInfo} • Vencimento {itemParaBaixar.vencimento}</span>
+              </div>
+              <div className="flex justify-between items-center text-vapor-400 pt-1 border-t border-graphite-850">
+                <span>Valor Previsto da Parcela:</span>
+                <span className="font-mono font-bold text-vapor-100">{formatarMoeda(itemParaBaixar.valor)}</span>
+              </div>
+            </div>
+
+            {/* Input do Valor Efetivamente Pago */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-vapor-200 uppercase tracking-wider">
+                Valor Recebido no Caixa (R$)
+              </label>
+              <CampoNumerico
+                prefix="R$"
+                placeholder="0,00"
+                value={valorPagoInput}
+                onChange={(_val, str) => setValorPagoInput(str)}
+                wrapperClassName="min-h-[44px] bg-graphite-950"
+                className="text-lg font-bold text-mint-400"
+              />
+              <span className="text-[11px] text-vapor-400">
+                Informe o valor real pago pelo cliente. Se for diferente do valor previsto, o sistema ajustará a próxima parcela automaticamente.
+              </span>
+            </div>
+
+            {/* Cálculo da Diferença ao Vivo */}
+            {(() => {
+              const valPago = parseNumeroFlexivel(valorPagoInput);
+              const dif = Math.round((valPago - itemParaBaixar.valor) * 100) / 100;
+
+              if (dif > 0) {
+                return (
+                  <div className="p-3 bg-mint-500/10 border border-mint-500/30 rounded-xl flex items-start gap-2.5 text-xs text-mint-300">
+                    <CheckCircle2 size={16} className="text-mint-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block font-bold">Pagamento a mais (+ {formatarMoeda(dif)})</strong>
+                      <span>O valor excedente de {formatarMoeda(dif)} será abatido automaticamente da próxima parcela deste cliente.</span>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (dif < 0 && valPago > 0) {
+                const falta = Math.abs(dif);
+                return (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs text-amber-300">
+                    <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="block font-bold">Pagamento parcial (falta {formatarMoeda(falta)})</strong>
+                      <span>O valor restante de {formatarMoeda(falta)} será somado e transferido para a próxima parcela deste cliente.</span>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="p-2.5 bg-graphite-950/60 rounded-xl border border-graphite-800 text-xs text-vapor-400 text-center font-mono">
+                  ✓ Pagamento no valor integral exato da parcela ({formatarMoeda(itemParaBaixar.valor)})
+                </div>
+              );
+            })()}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
