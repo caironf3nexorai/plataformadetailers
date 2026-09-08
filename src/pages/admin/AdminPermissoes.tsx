@@ -8,7 +8,8 @@ import {
   Check, 
   X,
   Layers,
-  Plus
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 interface FeatureItem {
@@ -45,6 +46,10 @@ export const AdminPermissoes: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [showConfirmSave, setShowConfirmSave] = useState(false);
+
+  // Exclusão de funcionalidade do catálogo
+  const [featureParaExcluir, setFeatureParaExcluir] = useState<FeatureItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchFeatures = async () => {
     try {
@@ -159,6 +164,32 @@ export const AdminPermissoes: React.FC = () => {
     }
   };
 
+  const executeExcluirFeature = async () => {
+    if (!featureParaExcluir) return;
+    setDeleting(true);
+    setMsg(null);
+    try {
+      const { error } = await supabase.rpc('admin_excluir_feature_catalogo', {
+        p_chave: featureParaExcluir.chave
+      });
+      if (error) throw error;
+
+      setMsg({
+        type: 'success',
+        text: `Funcionalidade "${featureParaExcluir.nome}" excluída com sucesso!`
+      });
+      setFeatureParaExcluir(null);
+      await fetchFeatures();
+    } catch (err: any) {
+      setMsg({
+        type: 'error',
+        text: 'Erro ao excluir funcionalidade: ' + (err.message || err)
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Group features by category 'grupo'
   const grupos = Array.from(new Set(catalogo.map((c) => c.grupo)));
 
@@ -246,11 +277,25 @@ export const AdminPermissoes: React.FC = () => {
                   {catalogo.filter((c) => c.grupo === grupo).map((feat) => (
                     <tr key={feat.chave} className="hover:bg-slate-800/40 transition">
                       <td className="px-6 py-3.5">
-                        <div className="font-semibold text-white">{feat.nome}</div>
-                        {feat.descricao && (
-                          <div className="text-xs text-slate-400 mt-0.5">{feat.descricao}</div>
-                        )}
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">key: {feat.chave}</div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-white">{feat.nome}</div>
+                            {feat.descricao && (
+                              <div className="text-xs text-slate-400 mt-0.5">{feat.descricao}</div>
+                            )}
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">key: {feat.chave}</div>
+                          </div>
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setFeatureParaExcluir(feat)}
+                              title="Excluir funcionalidade do catálogo"
+                              className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition shrink-0"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       {['free', 'pro', 'studio'].map((planCode) => {
@@ -396,6 +441,21 @@ export const AdminPermissoes: React.FC = () => {
         variant="warning"
         loading={saving}
       />
+
+      {/* Modal de Confirmação para Excluir Funcionalidade */}
+      {featureParaExcluir && (
+        <ModalConfirmacao
+          isOpen={!!featureParaExcluir}
+          onClose={() => setFeatureParaExcluir(null)}
+          onConfirm={executeExcluirFeature}
+          titulo="Excluir Funcionalidade do Catálogo"
+          mensagem={`Tem certeza que deseja excluir a funcionalidade "${featureParaExcluir.nome}" (chave: ${featureParaExcluir.chave})? Ela será removida da matriz de permissões de todos os planos imediatamente.`}
+          textoConfirmar="Sim, Excluir"
+          textoCancelar="Cancelar"
+          variant="danger"
+          loading={deleting}
+        />
+      )}
     </div>
   );
 };
