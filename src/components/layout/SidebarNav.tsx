@@ -99,7 +99,7 @@ export const SidebarNav: React.FC = () => {
         { path: '/', label: 'Dashboard', icon: LayoutDashboard, visible: !isOperador },
         { path: '/agenda', label: 'Agenda', icon: CalendarDays, visible: true, featureKey: 'agenda' },
         { path: '/clientes', label: 'Clientes', icon: Users, visible: true, featureKey: 'clientes_veiculos' },
-        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro(), featureKey: 'orcamentos_tres_niveis' },
+        { path: '/orcamentos', label: 'Orçamentos', icon: FileText, visible: podeVerFinanceiro() },
         { path: '/servicos', label: 'Serviços', icon: SprayCan, visible: podeGerirServicos(), featureKey: 'servicos_catalogo' },
         { path: '/estoque', label: 'Estoque', icon: Package, visible: podeGerirEstoque(), featureKey: 'estoque' },
       ],

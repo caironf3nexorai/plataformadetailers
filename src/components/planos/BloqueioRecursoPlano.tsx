@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Lock, Sparkles, ChevronRight, ArrowLeft, ShieldAlert } from 'lucide-react';
+import { Lock, Sparkles, ChevronRight, ArrowLeft } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';

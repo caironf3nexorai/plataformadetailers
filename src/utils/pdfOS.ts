@@ -63,10 +63,12 @@ export interface PDFOSData {
   desconto?: number;
   forma_pagamento?: string | null;
 
-  // Assinaturas
+  // Assinaturas e Termos
   assinaturaClienteUrl?: string | null;
   assinaturaClienteNome?: string | null;
   assinaturaTecnicoNome?: string | null;
+  termoResponsabilidade?: string | null;
+  termoGarantia?: string | null;
 }
 
 /**
@@ -380,8 +382,25 @@ export async function gerarPDFOS(
     y += boxHeight + 5;
   }
 
-  // 6. Bloco de Assinaturas (Cliente e Oficina)
-  if (y + 36 > 270) {
+  // 6. Bloco de Termos e Assinaturas (Cliente e Oficina)
+  const termoRespCustom = data.termoResponsabilidade;
+  const termoGarCustom = data.termoGarantia;
+
+  let termoTxt = termoRespCustom
+    ? `Declaração de Responsabilidade & Ciência: ${termoRespCustom}`
+    : '"Declaro que os serviços discriminados nesta Ordem de Serviço foram contratados e/ou vistoriados de acordo com os termos estabelecidos."';
+
+  if (termoGarCustom) {
+    termoTxt += `\n[Garantia do Atendimento: ${termoGarCustom}]`;
+  }
+
+  doc.setFontSize(6.8);
+  doc.setFont('helvetica', 'italic');
+  const splitTermo = doc.splitTextToSize(termoTxt, usableWidth - 10);
+  const termosHeight = 7 + splitTermo.length * 3.1;
+  const totalBoxHeight = Math.max(38, termosHeight + 22);
+
+  if (y + totalBoxHeight > 270) {
     doc.addPage();
     y = 15;
   }
@@ -389,47 +408,42 @@ export async function gerarPDFOS(
   doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
   doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
   doc.setLineWidth(0.25);
-  doc.roundedRect(pageMargin, y, usableWidth, 34, 2, 2, 'FD');
+  doc.roundedRect(pageMargin, y, usableWidth, totalBoxHeight, 2, 2, 'FD');
 
-  // Termo curto de entrega e garantia
-  doc.setFontSize(7.2);
-  doc.setFont('helvetica', 'italic');
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-  const termoTxt = '"Declaro que os serviços discriminados nesta Ordem de Serviço foram contratados e/ou vistoriados de acordo com os termos estabelecidos."';
-  const splitTermo = doc.splitTextToSize(termoTxt, usableWidth - 10);
   splitTermo.forEach((line: string, idx: number) => {
-    doc.text(line, pageMargin + 5, y + 5.5 + idx * 3.5);
+    doc.text(line, pageMargin + 5, y + 5 + idx * 3.1);
   });
 
-  const sigY = y + 14;
+  const sigY = y + termosHeight + 2;
   const colW = (usableWidth - 16) / 2;
 
   // Linha 1: Assinatura do Cliente
   doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
   doc.setLineWidth(0.3);
-  doc.line(pageMargin + 5, sigY + 9, pageMargin + 5 + colW, sigY + 9);
+  doc.line(pageMargin + 5, sigY + 8, pageMargin + 5 + colW, sigY + 8);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-  doc.text(data.assinaturaClienteNome || data.clienteNome, pageMargin + 5 + colW / 2, sigY + 13, { align: 'center' });
+  doc.text(data.assinaturaClienteNome || data.clienteNome, pageMargin + 5 + colW / 2, sigY + 12, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-  doc.text('Assinatura do Cliente', pageMargin + 5 + colW / 2, sigY + 16.5, { align: 'center' });
+  doc.text('Assinatura do Cliente', pageMargin + 5 + colW / 2, sigY + 15.5, { align: 'center' });
 
   // Linha 2: Assinatura da Oficina / Responsável
   const col2StartX = rightMarginX - 5 - colW;
-  doc.line(col2StartX, sigY + 9, col2StartX + colW, sigY + 9);
+  doc.line(col2StartX, sigY + 8, col2StartX + colW, sigY + 8);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-  doc.text(data.assinaturaTecnicoNome || data.responsavel_nome || data.oficinaNome, col2StartX + colW / 2, sigY + 13, { align: 'center' });
+  doc.text(data.assinaturaTecnicoNome || data.responsavel_nome || data.oficinaNome, col2StartX + colW / 2, sigY + 12, { align: 'center' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-  doc.text('Responsável Técnico / Oficina', col2StartX + colW / 2, sigY + 16.5, { align: 'center' });
+  doc.text('Responsável Técnico / Oficina', col2StartX + colW / 2, sigY + 15.5, { align: 'center' });
 
   // Rodapé padrão em todas as páginas
   const totalPaginas = doc.getNumberOfPages();

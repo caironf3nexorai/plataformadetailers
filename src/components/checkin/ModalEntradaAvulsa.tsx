@@ -4,7 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { User, Car, Wrench, Plus, ChevronDown, Check, RotateCcw } from 'lucide-react';
+import { User, Car, Wrench, Plus, ChevronDown, Check, RotateCcw, ShieldCheck } from 'lucide-react';
 import { SeletorServicos, type ItemSelecionado } from '../servicos/SeletorServicos';
 import { AlertaErro } from '../ui/AlertaErro';
 import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
@@ -29,12 +29,14 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
   const [servicos, setServicos] = useState<any[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
   const [categorias, setCategorias] = useState<any[]>([]);
+  const [termosGarantia, setTermosGarantia] = useState<any[]>([]);
 
   // Seleções
   const [selectedCliente, setSelectedCliente] = useState<string>('');
   const [selectedVeiculo, setSelectedVeiculo] = useState<string>('');
   const [selectedCategoriaObj, setSelectedCategoriaObj] = useState<any | null>(null);
   const [selectedItens, setSelectedItens] = useState<ItemSelecionado[]>([]);
+  const [selectedTermoGarantia, setSelectedTermoGarantia] = useState<string>('');
 
   // Estados de Criação Rápida
   const [showNovoCliente, setShowNovoCliente] = useState(false);
@@ -68,6 +70,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
     setSelectedVeiculo('');
     setSelectedCategoriaObj(categorias.length > 0 ? categorias[0] : null);
     setSelectedItens([]);
+    setSelectedTermoGarantia('');
     setNovoClienteData(null);
     setNovoVeiculoData(null);
     setShowNovoCliente(false);
@@ -187,6 +190,18 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
       setCategorias(catData || []);
       if (catData && catData.length > 0) {
         setSelectedCategoriaObj(catData[0]);
+      }
+
+      // Buscar Termos de Garantia da Oficina
+      try {
+        const { data: tmData } = await supabase
+          .from('termos_garantia')
+          .select('id, titulo, tipo, conteudo')
+          .eq('tenant_id', tenant.id)
+          .order('created_at', { ascending: true });
+        setTermosGarantia(tmData || []);
+      } catch (e) {
+        console.warn('Erro ao carregar termos de garantia na entrada:', e);
       }
     } catch (err: any) {
       setError(err.message);
@@ -447,14 +462,43 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
         preco: i.preco !== undefined ? Number(i.preco) : undefined,
       }));
 
-      const { data: agendamentoId, error: rpcError } = await supabase.rpc('entrada_avulsa', {
-        p_cliente: clienteIdFinal,
-        p_veiculo: veiculoIdFinal,
-        p_itens: payloadItens,
-        p_categoria: selectedCategoriaObj.id,
-      });
+      let agendamentoId: string | null = null;
+      try {
+        const { data: rpcId, error: rpcError } = await supabase.rpc('entrada_avulsa', {
+          p_cliente: clienteIdFinal,
+          p_veiculo: veiculoIdFinal,
+          p_itens: payloadItens,
+          p_categoria: selectedCategoriaObj.id,
+          p_observacoes: null,
+          p_termo_garantia_id: selectedTermoGarantia || null,
+        });
 
-      if (rpcError) throw rpcError;
+        if (rpcError) throw rpcError;
+        agendamentoId = rpcId;
+      } catch (errFirst: any) {
+        // Fallback caso a assinatura antiga da RPC ainda esteja em cache no Supabase
+        const { data: fallbackId, error: fallbackErr } = await supabase.rpc('entrada_avulsa', {
+          p_cliente: clienteIdFinal,
+          p_veiculo: veiculoIdFinal,
+          p_itens: payloadItens,
+          p_categoria: selectedCategoriaObj.id,
+        });
+        if (fallbackErr) throw fallbackErr;
+        agendamentoId = fallbackId;
+
+        // Atualiza os termos diretamente se selecionados
+        if (agendamentoId) {
+          const termoObj = termosGarantia.find((t) => t.id === selectedTermoGarantia);
+          try {
+            await supabase.from('agendamentos').update({
+              termo_garantia_id: selectedTermoGarantia || null,
+              termo_garantia_texto: termoObj?.conteudo || null,
+            }).eq('id', agendamentoId);
+          } catch (updateErr) {
+            console.warn('Fallback update agendamento termos:', updateErr);
+          }
+        }
+      }
 
       limparDraft();
       onClose();
@@ -757,6 +801,43 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
                 </div>
               </div>
             )}
+
+            {/* SELEÇÃO DO TERMO DE GARANTIA DO ATENDIMENTO (BALCÃO) */}
+            <div className="p-3.5 bg-graphite-900 border border-graphite-700 rounded-lg flex flex-col gap-2.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={18} className="text-amber-400" />
+                  <span className="text-xs font-bold text-vapor-100 uppercase tracking-wide">
+                    Termo de Garantia do Atendimento (Opcional)
+                  </span>
+                </div>
+                {selectedTermoGarantia && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    Garantia Vinculada
+                  </span>
+                )}
+              </div>
+
+              <select
+                value={selectedTermoGarantia}
+                onChange={(e) => setSelectedTermoGarantia(e.target.value)}
+                className="w-full bg-graphite-950 border border-graphite-700 rounded-lg p-2.5 text-vapor-100 font-sans text-xs outline-none focus:border-amber-500"
+              >
+                <option value="">Sem termo de garantia específico</option>
+                {termosGarantia.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.titulo} ({t.tipo})
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex items-center gap-1.5 text-[11px] text-vapor-400 font-sans">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span>
+                  O <strong>Termo Fixo de Responsabilidade</strong> (falhas ocultas, pertences e manobras) será anexado automaticamente a esta entrada.
+                </span>
+              </div>
+            </div>
 
             <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-[12px]">
               Ao registrar a entrada, o atendimento será criado com status <strong>'confirmado'</strong> e você será direcionado imediatamente para a vistoria de entrada.

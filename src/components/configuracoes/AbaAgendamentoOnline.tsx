@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { 
   Calendar, CreditCard, Save, Info, AlertTriangle, Lock
 } from 'lucide-react';

@@ -158,6 +158,14 @@ export interface OrcamentoPublicoData {
     aplicado_em?: string | null;
     aplicado_por_nome?: string | null;
   } | null;
+  incluir_termos?: boolean;
+  termo_responsabilidade?: string | null;
+  termo_garantia?: {
+    id: string;
+    tipo: string;
+    titulo: string;
+    conteudo: string;
+  } | null;
   oficina: {
     tenant_id?: string;
     nome: string;

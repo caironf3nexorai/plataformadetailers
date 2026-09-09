@@ -18,6 +18,7 @@ import {
 import { formatarData, formatarHora } from '../utils/datas';
 import { formatarNomeVista, formatarNomeAvaria } from '../utils/checkin';
 import type { VistaDiagrama, TipoAvaria } from '../types/checkin';
+import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
 
 interface VistoriaPublicaData {
   oficina: {
@@ -60,6 +61,8 @@ interface VistoriaPublicaData {
   assinante_nome?: string;
   aceite_tipo?: string;
   enviado_em?: string;
+  termo_responsabilidade?: string;
+  termo_garantia?: string;
   erro?: string;
 }
 
@@ -529,6 +532,30 @@ export const VistoriaPublica: React.FC = () => {
             </div>
           ) : (
             <div className="flex flex-col gap-5">
+              {/* Termo Fixo de Responsabilidade */}
+              <div className="p-3.5 bg-graphite-900 border border-amber-500/30 rounded-xl flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 text-amber-400 font-bold font-sans text-[12px] uppercase">
+                  <ShieldCheck size={16} />
+                  <span>Termo de Responsabilidade & Falhas Ocultas</span>
+                </div>
+                <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-32 overflow-y-auto pr-1">
+                  {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                </p>
+              </div>
+
+              {/* Termo de Garantia Específica (se houver) */}
+              {data.termo_garantia && (
+                <div className="p-3.5 bg-graphite-900 border border-emerald-500/30 rounded-xl flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold font-sans text-[12px] uppercase">
+                    <Sparkles size={16} />
+                    <span>Termo de Garantia do Serviço</span>
+                  </div>
+                  <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-32 overflow-y-auto pr-1">
+                    {data.termo_garantia}
+                  </p>
+                </div>
+              )}
+
               {/* Nome do Assinante */}
               <div className="flex flex-col gap-2">
                 <label className="font-sans text-[13px] text-vapor-200 font-semibold">

@@ -16,22 +16,29 @@ import {
   Save,
   Sparkles,
   Copy,
+  FileText,
+  RotateCcw,
 } from 'lucide-react';
 import type {
   TermoGarantia,
   TipoTermoGarantia,
 } from '../../types/termos';
-import { TIPOS_TERMOS_GARANTIA } from '../../types/termos';
+import { TIPOS_TERMOS_GARANTIA, TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
 
 export const AbaTermosGarantia: React.FC = () => {
   const { tenant } = useAuth();
   const { showSuccess, showError } = useToast();
 
+  // Termo Fixo de Responsabilidade & Falhas Ocultas (Tenant)
+  const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
+  const [salvandoResponsabilidade, setSalvandoResponsabilidade] = useState<boolean>(false);
+
+  // Termos Variáveis de Garantia (Serviços)
   const [termos, setTermos] = useState<TermoGarantia[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [tipoFiltro, setTipoFiltro] = useState<string>('todos');
 
-  // Modal de Criação / Edição
+  // Modal de Criação / Edição de Garantia
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [termoEditando, setTermoEditando] = useState<TermoGarantia | null>(null);
   const [tipo, setTipo] = useState<TipoTermoGarantia>('polimento');
@@ -45,6 +52,26 @@ export const AbaTermosGarantia: React.FC = () => {
     if (!tenant) return;
     setLoading(true);
     try {
+      // 1. Carrega o termo fixo de responsabilidade do tenant
+      try {
+        const { data: tenantData } = await supabase
+          .from('tenants')
+          .select('termo_responsabilidade')
+          .eq('id', tenant.id)
+          .single();
+
+        if (tenantData?.termo_responsabilidade) {
+          setTermoResponsabilidade(tenantData.termo_responsabilidade);
+        } else {
+          const salvosLocal = localStorage.getItem(`termo_responsabilidade_${tenant.id}`);
+          setTermoResponsabilidade(salvosLocal || (tenant as any)?.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO);
+        }
+      } catch (err) {
+        const salvosLocal = localStorage.getItem(`termo_responsabilidade_${tenant.id}`);
+        setTermoResponsabilidade(salvosLocal || TERMO_RESPONSABILIDADE_PADRAO);
+      }
+
+      // 2. Carrega os termos variáveis de garantia
       const { data, error } = await supabase
         .from('termos_garantia')
         .select('*')
@@ -52,7 +79,6 @@ export const AbaTermosGarantia: React.FC = () => {
         .order('created_at', { ascending: true });
 
       if (error) {
-        // Se a tabela ainda não tiver dados ou erro de RLS, tenta carregar do localStorage
         const salvosLocal = localStorage.getItem(`termos_garantia_${tenant.id}`);
         if (salvosLocal) {
           setTermos(JSON.parse(salvosLocal));
@@ -71,6 +97,39 @@ export const AbaTermosGarantia: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSalvarResponsabilidade = async () => {
+    if (!tenant) return;
+    if (!termoResponsabilidade.trim()) {
+      showError('O termo de responsabilidade não pode ficar em branco.');
+      return;
+    }
+
+    setSalvandoResponsabilidade(true);
+    try {
+      const textoFinal = termoResponsabilidade.trim();
+      const { error } = await supabase
+        .from('tenants')
+        .update({ termo_responsabilidade: textoFinal })
+        .eq('id', tenant.id);
+
+      if (error) {
+        console.warn('Fallback salvando termo de responsabilidade localmente:', error);
+      }
+      localStorage.setItem(`termo_responsabilidade_${tenant.id}`, textoFinal);
+      showSuccess('Termo Fixo de Responsabilidade atualizado com sucesso!');
+    } catch (err: any) {
+      console.error('[Salvar Termo Responsabilidade Error]:', err);
+      showError('Erro ao salvar termo de responsabilidade: ' + (err?.message || err));
+    } finally {
+      setSalvandoResponsabilidade(false);
+    }
+  };
+
+  const handleRestaurarPadraoResponsabilidade = () => {
+    setTermoResponsabilidade(TERMO_RESPONSABILIDADE_PADRAO);
+    showSuccess('Texto padrão jurídico restaurado. Clique em "Salvar Termo Fixo" para confirmar.');
   };
 
   useEffect(() => {
@@ -209,7 +268,78 @@ export const AbaTermosGarantia: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl">
-      {/* Header explicativo da aba */}
+      {/* 1. TERMO FIXO DE RESPONSABILIDADE & FALHAS OCULTAS DA OFICINA */}
+      <div className="bg-graphite-900 border border-graphite-700 rounded-xl p-5 flex flex-col gap-4 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
+              <FileText size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-sm font-bold text-vapor-100 uppercase tracking-wide">
+                  Termo Fixo de Responsabilidade & Falhas Ocultas
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  FIXO EM TODA A OFICINA
+                </span>
+              </div>
+              <p className="font-sans text-xs text-vapor-400 mt-0.5">
+                Aplicado automaticamente em 100% dos veículos: orçamentos, vistorias de entrada e ordens de serviço. Protege sua oficina contra alegações de falhas preexistentes, danos camuflados por sujeira, pertences não retirados e autoriza testes de rodagem e manobras.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRestaurarPadraoResponsabilidade}
+              className="text-xs h-9 px-3 text-vapor-300 hover:text-vapor-100"
+              title="Restaurar o modelo jurídico recomendado"
+            >
+              <RotateCcw size={13} className="mr-1.5" />
+              <span>Restaurar Padrão</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSalvarResponsabilidade}
+              disabled={salvandoResponsabilidade}
+              className="text-xs font-bold h-9 px-4 flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950"
+            >
+              <Save size={14} />
+              <span>{salvandoResponsabilidade ? 'Salvando...' : 'Salvar Termo Fixo'}</span>
+            </Button>
+          </div>
+        </div>
+
+        <textarea
+          rows={5}
+          value={termoResponsabilidade}
+          onChange={(e) => setTermoResponsabilidade(e.target.value)}
+          placeholder="Texto do termo geral de responsabilidade da sua oficina..."
+          className="w-full bg-graphite-950/80 border border-graphite-700/80 rounded-lg p-3 text-vapor-100 placeholder-vapor-600 font-sans text-xs leading-relaxed outline-none focus:border-amber-500 transition-colors"
+        />
+
+        <div className="flex items-center justify-between text-[11px] font-mono text-vapor-400 pt-1 border-t border-graphite-800">
+          <span>{termoResponsabilidade.length} caracteres</span>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(termoResponsabilidade);
+              showSuccess('Termo de Responsabilidade copiado!');
+            }}
+            className="flex items-center gap-1 text-amber-400 hover:text-amber-300"
+          >
+            <Copy size={12} />
+            <span>Copiar Termo</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. TERMOS VARIÁVEIS DE GARANTIA POR SERVIÇO */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-amber-500/10 via-graphite-900 to-graphite-900 p-5 rounded-xl border border-amber-500/30 shadow-md">
         <div className="flex items-center gap-3.5">
           <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
@@ -217,10 +347,10 @@ export const AbaTermosGarantia: React.FC = () => {
           </div>
           <div>
             <h2 className="font-display text-lg font-bold text-vapor-100 uppercase tracking-wide">
-              Termos de Garantia Personalizados
+              Termos de Garantia Específicos (Variáveis por Serviço)
             </h2>
             <p className="font-sans text-xs text-vapor-300 leading-relaxed max-w-2xl">
-              Crie termos jurídicos e operacionais separados por tipo de serviço (Polimento, Lavagem de Motor, Vitrificação, Microreparos, etc.). Eles podem ser selecionados para inserção automática nos orçamentos e impressões em PDF.
+              Crie termos técnicos separados por serviço (Polimento, Lavagem de Motor, Vitrificação, Microreparos, etc.). Eles podem ser selecionados nos orçamentos, na entrada de balcão e impressos na OS e Vistoria.
             </p>
           </div>
         </div>

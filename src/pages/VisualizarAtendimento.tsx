@@ -23,6 +23,7 @@ import {
   Eye,
   X,
   AlertCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
@@ -30,6 +31,7 @@ import { formatarDataHora } from '../utils/datas';
 import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
 import { gerarPDFOS } from '../utils/pdfOS';
 import { getEvidenciaSignedUrl, baixarFoto } from '../utils/evidencias';
+import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
 
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -58,6 +60,8 @@ export const VisualizarAtendimento: React.FC = () => {
   const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; data?: string } | null>(null);
   const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
   const [modalAvisoSemVistoriaOpen, setModalAvisoSemVistoriaOpen] = useState(false);
+  const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
+  const [termoGarantia, setTermoGarantia] = useState<{ titulo?: string; texto?: string } | null>(null);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
     if (!agendamento || !tenant) return;
@@ -164,6 +168,8 @@ export const VisualizarAtendimento: React.FC = () => {
           desconto: Number(agendamento.desconto_valor || 0),
           forma_pagamento: agendamento.forma_pagamento,
           assinaturaClienteNome: agendamento.cliente?.nome,
+          termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
+          termoGarantia: termoGarantia?.texto || null,
         },
         undefined,
         acao
@@ -253,6 +259,25 @@ export const VisualizarAtendimento: React.FC = () => {
         const currentAgend = execData?.agendamentos || agendOnlyData;
         if (currentAgend) {
           setAgendamento(currentAgend);
+
+          const termoResp = (currentAgend as any).termo_responsabilidade_texto ||
+            (tenant as any)?.termo_responsabilidade ||
+            (tenant?.id ? localStorage.getItem(`tenant_termo_responsabilidade_${tenant.id}`) : null) ||
+            TERMO_RESPONSABILIDADE_PADRAO;
+          setTermoResponsabilidade(termoResp);
+
+          if ((currentAgend as any).termo_garantia_texto) {
+            setTermoGarantia({ texto: (currentAgend as any).termo_garantia_texto });
+          } else if ((currentAgend as any).termo_garantia_id) {
+            const { data: tgData } = await supabase
+              .from('termos_garantia')
+              .select('titulo, conteudo')
+              .eq('id', (currentAgend as any).termo_garantia_id)
+              .maybeSingle();
+            if (tgData) {
+              setTermoGarantia({ titulo: tgData.titulo, texto: tgData.conteudo });
+            }
+          }
         }
         if (execData) {
           setExecucao(execData);
@@ -1047,6 +1072,42 @@ export const VisualizarAtendimento: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* BLOCO 7: TERMOS LEGAIS E GARANTIA DO ATENDIMENTO */}
+      <Card className="p-4 flex flex-col gap-3 bg-graphite-900 border-graphite-700">
+        <div className="flex items-center gap-2 border-b border-graphite-800 pb-2">
+          <ShieldCheck size={18} className="text-amber-400" />
+          <h2 className="font-display text-[14px] font-bold text-vapor-100 uppercase tracking-wider">
+            Termos Legais e Garantia do Atendimento
+          </h2>
+        </div>
+
+        <div className="flex flex-col gap-3 pt-1">
+          {/* Termo Fixo de Responsabilidade */}
+          <div className="p-3 bg-graphite-800/80 rounded border border-graphite-700 flex flex-col gap-1.5">
+            <span className="text-[11px] text-amber-400 font-sans font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldCheck size={14} />
+              Termo Fixo de Responsabilidade & Falhas Ocultas da Oficina
+            </span>
+            <p className="font-sans text-[12px] text-vapor-300 leading-relaxed max-h-32 overflow-y-auto pr-1">
+              {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+            </p>
+          </div>
+
+          {/* Termo de Garantia Específica (se houver) */}
+          {termoGarantia?.texto && (
+            <div className="p-3 bg-graphite-800/80 rounded border border-emerald-500/30 flex flex-col gap-1.5">
+              <span className="text-[11px] text-emerald-400 font-sans font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={14} />
+                Termo de Garantia do Atendimento {termoGarantia.titulo ? `(${termoGarantia.titulo})` : ''}
+              </span>
+              <p className="font-sans text-[12px] text-vapor-300 leading-relaxed max-h-32 overflow-y-auto pr-1">
+                {termoGarantia.texto}
+              </p>
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* Modal Lightbox de Foto */}
       {fotoModal && (

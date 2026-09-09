@@ -22,8 +22,10 @@ import {
   ChevronRight,
   Calendar,
   Trash2,
-  Clock
+  Clock,
+  Lock,
 } from 'lucide-react';
+import { usePlano } from '../hooks/usePlano';
 import type { Orcamento } from '../types/orcamento';
 import type { Cliente, Veiculo, CategoriaVeiculo } from '../types/clientes';
 import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../utils/orcamento';
@@ -35,6 +37,8 @@ export const Orcamentos: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
   const { showError, showSuccess } = useToast();
+  const { temFeature, nomePlano } = usePlano();
+  const temTresNiveis = temFeature('orcamentos_tres_niveis');
 
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -57,13 +61,19 @@ export const Orcamentos: React.FC = () => {
 
   // Modo de Entrada: Cliente Existente vs Cadastro Rápido Base
   const [modoEntrada, setModoEntrada] = useState<'existente' | 'rapido'>('existente');
-  const [modoOrcamento, setModoOrcamento] = useState<'3_niveis' | 'simples'>('3_niveis');
+  const [modoOrcamento, setModoOrcamento] = useState<'3_niveis' | 'simples'>(temTresNiveis ? '3_niveis' : 'simples');
   const [novoNome, setNovoNome] = useState<string>('');
   const [novoTelefone, setNovoTelefone] = useState<string>('');
   const [novoModelo, setNovoModelo] = useState<string>('');
   const [novaCor, setNovaCor] = useState<string>('');
   const [novaPlaca, setNovaPlaca] = useState<string>('');
   const [validadeDias, setValidadeDias] = useState<number>(tenant?.orcamento_validade_dias || 7);
+
+  useEffect(() => {
+    if (!temTresNiveis && modoOrcamento === '3_niveis') {
+      setModoOrcamento('simples');
+    }
+  }, [temTresNiveis, modoOrcamento]);
 
   const fetchOrcamentos = async () => {
     if (!tenant) return;
@@ -242,7 +252,8 @@ export const Orcamentos: React.FC = () => {
 
       if (error) throw error;
       if (newId) {
-        const updatePayload: any = { modo_orcamento: modoOrcamento };
+        const finalModo = (!temTresNiveis && modoOrcamento === '3_niveis') ? 'simples' : modoOrcamento;
+        const updatePayload: any = { modo_orcamento: finalModo };
         if (validadeDias && validadeDias !== 7) {
           updatePayload.validade_dias = validadeDias;
         }
@@ -470,9 +481,49 @@ export const Orcamentos: React.FC = () => {
       ) : (
         <div className="flex flex-col gap-3">
           {orcamentosFiltrados.map((orc) => {
-            // Pega o nível destacado (Recomendado) ou o primeiro para exibir o valor de referência
-            const nivelDestaque = orc.niveis?.find((n) => n.destaque) || orc.niveis?.find((n) => n.nivel === 'recomendado') || orc.niveis?.[0];
-            const valorReferencia = nivelDestaque ? nivelDestaque.valor_total : 0;
+            const isSimples = orc.modo_orcamento === 'simples';
+
+            // Determina qual nível exibir como referência e qual o rótulo
+            let nivelExibicao: any;
+            let labelValor = 'Total:';
+
+            if (orc.status === 'aprovado' && orc.nivel_aprovado) {
+              nivelExibicao = orc.niveis?.find((n) => n.nivel === orc.nivel_aprovado);
+              labelValor = 'Aprovado:';
+            } else if (isSimples) {
+              // No modo simples, a proposta está em 'essencial' (ou no nível com serviços/valor)
+              nivelExibicao = 
+                orc.niveis?.find((n) => n.nivel === 'essencial') ||
+                orc.niveis?.find((n) => (n.valor_total || 0) > 0) ||
+                orc.niveis?.[0];
+              labelValor = 'Total:';
+            } else {
+              // No modo 3 níveis: prioriza o recomendado se tiver valor; senão busca qualquer nível com valor
+              const recNivel = orc.niveis?.find((n) => n.destaque) || orc.niveis?.find((n) => n.nivel === 'recomendado');
+              if (recNivel && (recNivel.valor_total || 0) > 0) {
+                nivelExibicao = recNivel;
+                labelValor = 'Rec.:';
+              } else {
+                const comValor = orc.niveis?.find((n) => (n.valor_total || 0) > 0);
+                if (comValor) {
+                  nivelExibicao = comValor;
+                  labelValor = (comValor.nivel === 'recomendado' || comValor.destaque) ? 'Rec.:' : 'Total:';
+                } else {
+                  nivelExibicao = recNivel || orc.niveis?.[0];
+                  labelValor = 'Rec.:';
+                }
+              }
+            }
+
+            const valorBruto = nivelExibicao ? Number(nivelExibicao.valor_total) || 0 : 0;
+            let valorEfetivo = valorBruto;
+            if (orc.desconto_valor && orc.desconto_tipo && valorBruto > 0) {
+              if (orc.desconto_tipo === 'porcentagem') {
+                valorEfetivo = Math.max(0, valorBruto * (1 - orc.desconto_valor / 100));
+              } else if (orc.desconto_tipo === 'valor_fixo') {
+                valorEfetivo = Math.max(0, valorBruto - orc.desconto_valor);
+              }
+            }
 
             return (
               <Card
@@ -521,20 +572,28 @@ export const Orcamentos: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Lado Direito: Status, Valor Recomendado e Setinha */}
+                {/* Lado Direito: Status, Valor de Referência e Setinha */}
                 <div className="flex items-center gap-4 shrink-0 justify-between sm:justify-end">
                   <div className="flex flex-col items-end gap-1">
                     <Badge tone={getBadgeToneFromStatusOrcamento(orc.status)}>
                       {getLabelFromStatusOrcamento(orc.status)}
                     </Badge>
 
-                    <span className="font-mono text-[13px] text-vapor-300">
-                      Rec.: <strong className="text-amber-400">{formatarMoeda(valorReferencia)}</strong>
-                    </span>
-                    {nivelDestaque?.duracao_total && nivelDestaque.duracao_total > 0 ? (
+                    <div className="flex items-center gap-1 font-mono text-[13px] text-vapor-300">
+                      <span>{labelValor}</span>
+                      {valorEfetivo < valorBruto ? (
+                        <>
+                          <span className="text-vapor-500 line-through text-[11px]">{formatarMoeda(valorBruto)}</span>
+                          <strong className="text-amber-400">{formatarMoeda(valorEfetivo)}</strong>
+                        </>
+                      ) : (
+                        <strong className="text-amber-400">{formatarMoeda(valorEfetivo)}</strong>
+                      )}
+                    </div>
+                    {nivelExibicao?.duracao_total && nivelExibicao.duracao_total > 0 ? (
                       <span className="font-mono text-[11px] text-vapor-400 flex items-center gap-1">
                         <Clock size={11} className="text-vapor-500" />
-                        {formatarDuracao(nivelDestaque.duracao_total)}
+                        {formatarDuracao(nivelExibicao.duracao_total)}
                       </span>
                     ) : null}
                   </div>
@@ -719,14 +778,27 @@ export const Orcamentos: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-0.5">
               <button
                 type="button"
-                onClick={() => setModoOrcamento('3_niveis')}
-                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition ${
+                onClick={() => {
+                  if (!temTresNiveis) {
+                    showError(`A proposta em 3 Níveis (Essencial, Recomendado e Premium) é exclusiva a partir do Plano Pro. Seu plano atual é ${nomePlano}.`);
+                    return;
+                  }
+                  setModoOrcamento('3_niveis');
+                }}
+                className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition relative ${
                   modoOrcamento === '3_niveis'
                     ? 'bg-amber-500/15 border-amber-500 text-amber-400 font-semibold shadow-sm'
                     : 'bg-graphite-800/80 border-graphite-700 text-vapor-400 hover:text-vapor-200'
                 }`}
               >
-                <span className="text-[13px] font-bold">Orçamento em 3 Níveis</span>
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-[13px] font-bold">Orçamento em 3 Níveis</span>
+                  {!temTresNiveis && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      <Lock size={10} /> PRO
+                    </span>
+                  )}
+                </div>
                 <span className="text-[11px] text-vapor-400 mt-0.5">
                   Essencial, Recomendado e Premium (maior conversão)
                 </span>

@@ -5,6 +5,7 @@ import { fetchImageAsBase64, obterAssinaturaBase64, getEvidenciaSignedUrl } from
 import { cabecalhoDocumento, rodapeDocumento, hexToRgb } from './pdf';
 import { formatarDuracao } from './agenda';
 import type { TipoNivelOrcamento } from '../types/orcamento';
+import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
 
 export interface PDFOrcamentoItemData {
   servico_nome: string;
@@ -74,6 +75,7 @@ export interface PDFOrcamentoData {
   fotos?: Array<{ url: string; path?: string; tipo?: 'antes' | 'depois'; descricao?: string; created_at?: string }>;
   incluirTermos?: boolean;
   termosGarantia?: string | null;
+  termoResponsabilidade?: string | null;
 
   // Assinatura do Usuário/Oficina
   assinaturaUsuarioUrl?: string | null;
@@ -530,34 +532,68 @@ export async function gerarPDFOrcamento(
     }
   }
 
-  // 6. Termos de Garantia (se marcado incluirTermos)
-  if (data.incluirTermos && data.termosGarantia && data.termosGarantia.trim()) {
-    const splitTermos = doc.splitTextToSize(data.termosGarantia.trim(), usableWidth - 10);
-    const termosBoxH = Math.max(14, 7 + splitTermos.length * 3.8);
+  // 6. Termos Contratuais (Responsabilidade e Garantia)
+  if (data.incluirTermos !== false) {
+    // 6.1 Termo Fixo de Responsabilidade & Falhas Ocultas (Geral da Oficina)
+    const textoResp = (data.termoResponsabilidade && data.termoResponsabilidade.trim()) || TERMO_RESPONSABILIDADE_PADRAO;
+    if (textoResp) {
+      const splitResp = doc.splitTextToSize(textoResp.trim(), usableWidth - 10);
+      const respBoxH = Math.max(14, 7 + splitResp.length * 3.6);
 
-    if (y + termosBoxH > 275) {
-      doc.addPage();
-      y = 15;
+      if (y + respBoxH > 275) {
+        doc.addPage();
+        y = 15;
+      }
+
+      doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+      doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(pageMargin, y, usableWidth, respBoxH, 1.5, 1.5, 'FD');
+
+      doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TERMO DE RESPONSABILIDADE, FALHAS OCULTAS E CONDIÇÕES GERAIS:', pageMargin + 5, y + 5);
+
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+      doc.setFontSize(6.8);
+      doc.setFont('helvetica', 'normal');
+      splitResp.forEach((line: string, idx: number) => {
+        doc.text(line, pageMargin + 5, y + 8.8 + idx * 3.4);
+      });
+
+      y += respBoxH + 3.5;
     }
 
-    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
-    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(pageMargin, y, usableWidth, termosBoxH, 1.5, 1.5, 'FD');
+    // 6.2 Termo Variável de Garantia Específica do Serviço
+    if (data.termosGarantia && data.termosGarantia.trim()) {
+      const splitTermos = doc.splitTextToSize(data.termosGarantia.trim(), usableWidth - 10);
+      const termosBoxH = Math.max(14, 7 + splitTermos.length * 3.6);
 
-    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'bold');
-    doc.text('TERMOS DE GARANTIA E CONDIÇÕES:', pageMargin + 5, y + 5);
+      if (y + termosBoxH > 275) {
+        doc.addPage();
+        y = 15;
+      }
 
-    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-    doc.setFontSize(7.2);
-    doc.setFont('helvetica', 'normal');
-    splitTermos.forEach((line: string, idx: number) => {
-      doc.text(line, pageMargin + 5, y + 9.2 + idx * 3.6);
-    });
+      doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+      doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(pageMargin, y, usableWidth, termosBoxH, 1.5, 1.5, 'FD');
 
-    y += termosBoxH + 4.5;
+      doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TERMO DE GARANTIA DO SERVIÇO E COBERTURAS:', pageMargin + 5, y + 5);
+
+      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+      doc.setFontSize(6.8);
+      doc.setFont('helvetica', 'normal');
+      splitTermos.forEach((line: string, idx: number) => {
+        doc.text(line, pageMargin + 5, y + 8.8 + idx * 3.4);
+      });
+
+      y += termosBoxH + 4;
+    }
   }
 
   // 7. Bloco de Assinaturas (Digital ou Linhas Físicas para Impressão Manual)

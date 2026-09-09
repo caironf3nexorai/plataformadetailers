@@ -38,12 +38,14 @@ import {
   RotateCcw,
   Pencil,
   UserCheck,
+  Lock,
 } from 'lucide-react';
+import { usePlano } from '../../hooks/usePlano';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
 import { ModalAlterarClienteOrcamento } from '../../components/orcamentos/ModalAlterarClienteOrcamento';
 import type { Orcamento, TipoNivelOrcamento } from '../../types/orcamento';
 import type { Servico } from '../../types/servicos';
-import type { TermoGarantia } from '../../types/termos';
+import { type TermoGarantia, TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
 import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
 import { formatarDuracao } from '../../utils/agenda';
@@ -65,6 +67,8 @@ export const DetalheOrcamento: React.FC = () => {
   const navigate = useNavigate();
   const { tenant, membership } = useAuth();
   const { showSuccess, showError, showToast } = useToast();
+  const { temFeature, nomePlano } = usePlano();
+  const temTresNiveis = temFeature('orcamentos_tres_niveis');
 
   const canManageDiscount = membership?.role === 'dono' || membership?.role === 'gerente';
 
@@ -192,9 +196,10 @@ export const DetalheOrcamento: React.FC = () => {
   const [incluirFotos, setIncluirFotos] = useState<boolean>(true);
   const [incluirTermos, setIncluirTermos] = useState<boolean>(true);
 
-  // Termos de Garantia e Validade
+  // Termos de Garantia, Responsabilidade e Validade
   const [termosDisponiveis, setTermosDisponiveis] = useState<TermoGarantia[]>([]);
   const [termoGarantiaSelecionado, setTermoGarantiaSelecionado] = useState<string>('');
+  const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
   const [validadeDiasOrcamento, setValidadeDiasOrcamento] = useState<number>(7);
 
   // Modal de Novo Serviço Rápido
@@ -311,6 +316,25 @@ export const DetalheOrcamento: React.FC = () => {
         const salvosLocal = localStorage.getItem(`termos_garantia_${tenant.id}`);
         if (salvosLocal) setTermosDisponiveis(JSON.parse(salvosLocal));
       }
+
+      // Carrega o termo fixo de responsabilidade da oficina (Geral)
+      let termoResp = (tenant as any)?.termo_responsabilidade;
+      if (!termoResp) {
+        try {
+          const { data: tData } = await supabase
+            .from('tenants')
+            .select('termo_responsabilidade')
+            .eq('id', tenant.id)
+            .single();
+          if (tData?.termo_responsabilidade) termoResp = tData.termo_responsabilidade;
+        } catch (err) {
+          console.warn('[DetalheOrcamento] Erro ao carregar termo_responsabilidade do tenant:', err);
+        }
+      }
+      if (!termoResp) {
+        termoResp = localStorage.getItem(`termo_responsabilidade_${tenant.id}`) || TERMO_RESPONSABILIDADE_PADRAO;
+      }
+      setTermoResponsabilidade(termoResp);
 
       // Carrega fotos de avaliação do veículo para este orçamento
       let fotosCarregadas: any[] = [];
@@ -1229,7 +1253,8 @@ export const DetalheOrcamento: React.FC = () => {
             descricao: f.descricao,
           })),
           incluirTermos,
-          termosGarantia: termoEscolhido?.conteudo || tenant.pdf_texto_rodape,
+          termoResponsabilidade: termoResponsabilidade || (tenant as any)?.termo_responsabilidade || localStorage.getItem(`termo_responsabilidade_${tenant.id}`) || TERMO_RESPONSABILIDADE_PADRAO,
+          termosGarantia: termoEscolhido?.conteudo || undefined,
           desconto: orcamento.desconto_valor && orcamento.desconto_tipo ? {
             tipo: orcamento.desconto_tipo,
             valor: orcamento.desconto_valor,
@@ -1622,12 +1647,12 @@ export const DetalheOrcamento: React.FC = () => {
                 }}
                 className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
               />
-              <span className="font-semibold">Termos de Garantia no PDF</span>
+              <span className="font-semibold">Termos Legais e Garantia no PDF</span>
             </label>
           </div>
         </div>
 
-        {/* SELETORES: VALIDADE DO ORÇAMENTO E TERMO ESPECÍFICO */}
+        {/* SELETORES: VALIDADE DO ORÇAMENTO, TERMO GERAL E TERMO ESPECÍFICO */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-vapor-300">
@@ -1679,8 +1704,11 @@ export const DetalheOrcamento: React.FC = () => {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-vapor-300 flex items-center justify-between">
-              <span>Termo de Garantia Selecionado:</span>
-              <ShieldCheck size={14} className="text-amber-400" />
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck size={14} className="text-amber-400" />
+                Termo Específico de Garantia:
+              </span>
+              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-bold">Variável</span>
             </label>
             <select
               value={termoGarantiaSelecionado}
@@ -1701,6 +1729,25 @@ export const DetalheOrcamento: React.FC = () => {
               ))}
             </select>
           </div>
+        </div>
+
+        {/* CARD DO TERMO GERAL DE RESPONSABILIDADE & FALHAS OCULTAS (FIXO DA OFICINA) */}
+        <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-graphite-950/80 border border-graphite-800">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-vapor-200 flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-cyan-400" />
+              Termo Fixo de Responsabilidade, Falhas Ocultas & Condições Gerais
+            </span>
+            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20 font-bold">
+              Aplicado Automaticamente
+            </span>
+          </div>
+          <p className="text-[11px] text-vapor-400 leading-relaxed italic bg-graphite-900/60 p-2.5 rounded border border-graphite-800 max-h-24 overflow-y-auto">
+            "{termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}"
+          </p>
+          <span className="text-[10px] text-vapor-500">
+            • Este termo geral acompanha a proposta comercial, vistoria e ordem de serviço para proteção jurídica contra falhas preexistentes.
+          </span>
         </div>
 
         {/* GALERIA DE FOTOS DE AVALIAÇÃO (ANTES E DEPOIS) COM DATA IMUTÁVEL */}
@@ -1947,7 +1994,14 @@ export const DetalheOrcamento: React.FC = () => {
         <button
           type="button"
           onClick={async () => {
-            const novoModo = (orcamento as any)?.modo_orcamento === 'simples' ? '3_niveis' : 'simples';
+            const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+            const novoModo = isSimples ? '3_niveis' : 'simples';
+
+            if (novoModo === '3_niveis' && !temTresNiveis) {
+              showError(`A proposta em 3 Níveis (Essencial, Recomendado e Premium) é exclusiva a partir do Plano Pro. Seu plano atual é ${nomePlano}.`);
+              return;
+            }
+
             await supabase.from('orcamentos').update({ modo_orcamento: novoModo }).eq('id', orcamento.id);
             setOrcamento((prev) => prev ? { ...prev, modo_orcamento: novoModo } : null);
 
@@ -1963,9 +2017,20 @@ export const DetalheOrcamento: React.FC = () => {
             }
             showSuccess(novoModo === 'simples' ? 'Alternado para Orçamento Simples' : 'Alternado para Orçamento em 3 Níveis');
           }}
-          className="text-xs font-bold text-vapor-300 hover:text-amber-400 underline transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-vapor-300 hover:text-amber-400 underline transition-colors"
         >
-          {(orcamento as any)?.modo_orcamento === 'simples' ? 'Ativar Apresentação em 3 Níveis' : 'Mudar para Orçamento Simples'}
+          {(orcamento as any)?.modo_orcamento === 'simples' ? (
+            <>
+              <span>Ativar Apresentação em 3 Níveis</span>
+              {!temTresNiveis && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 no-underline">
+                  <Lock size={10} /> PRO
+                </span>
+              )}
+            </>
+          ) : (
+            'Mudar para Orçamento Simples'
+          )}
         </button>
       </div>
 

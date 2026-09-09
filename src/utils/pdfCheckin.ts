@@ -40,6 +40,8 @@ interface PDFCheckinData {
   pdfTextoObservacoesOrcamento?: string | null;
   pdfTextoRodape?: string | null;
   pdfOcultarMarcaDagua?: boolean | null;
+  termoResponsabilidade?: string | null;
+  termoGarantia?: string | null;
 }
 
 /**
@@ -841,16 +843,33 @@ export async function gerarPDFCheckin(
     y = 15;
   }
 
+  const termoRespCustom = (data as any).termoResponsabilidade || (checkin as any).termo_responsabilidade_texto;
+  const termoGarCustom = (data as any).termoGarantia || (checkin as any).termo_garantia_texto;
+  
+  let termoTxt = termoRespCustom 
+    ? `Declaração de Responsabilidade & Vistoria: ${termoRespCustom}`
+    : '"Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega, isentando a oficina de danos preexistentes ou falhas ocultas."';
+
+  if (termoGarCustom) {
+    termoTxt += `\n[Garantia do Atendimento: ${termoGarCustom}]`;
+  }
+
+  const termoLines = doc.splitTextToSize(termoTxt, usableWidth - 68);
+  const sigBoxHeight = Math.max(34, 10 + termoLines.length * 3.1);
+
+  if (y + sigBoxHeight > 275) {
+    doc.addPage();
+    y = 15;
+  }
+
   doc.setFillColor(39, 39, 42); // graphite-800
-  doc.roundedRect(pageMargin, y, usableWidth, 32, 2, 2, 'F');
+  doc.roundedRect(pageMargin, y, usableWidth, sigBoxHeight, 2, 2, 'F');
 
   doc.setTextColor(200, 200, 200);
-  doc.setFontSize(7.5);
+  doc.setFontSize(6.8);
   doc.setFont('helvetica', 'italic');
-  const termoTxt = '"Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega."';
-  const termoLines = doc.splitTextToSize(termoTxt, usableWidth - 68);
   termoLines.forEach((line: string, idx: number) => {
-    doc.text(line, pageMargin + 4, y + 6 + idx * 3.5);
+    doc.text(line, pageMargin + 4, y + 5 + idx * 3.1);
   });
 
   const sigPathOrData = checkin.assinatura_path || (checkin as any).assinatura_url || (checkin as any).assinatura_base64;

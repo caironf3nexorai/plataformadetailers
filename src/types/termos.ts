@@ -77,3 +77,6 @@ export const TIPOS_TERMOS_GARANTIA: OpcaoTipoTermo[] = [
       'Ex: Todos os serviços executados em nossa oficina seguem os mais altos padrões de detalhamento automotivo, com garantia de satisfação e conformidade legal prevista no CDC.',
   },
 ];
+
+export const TERMO_RESPONSABILIDADE_PADRAO = 
+  'Declaro estar ciente de que o veículo discriminado será submetido aos procedimentos e serviços especializados contratados. Declaro que procedi com a retirada de todos os objetos de valor e pertences pessoais do interior do veículo, isentando a oficina de qualquer responsabilidade sobre itens não expressamente relacionados na vistoria de entrada. Estou ciente de que avarias preexistentes, repinturas anteriores fragilizadas, verniz com espessura reduzida, ressecamento de componentes plásticos/borrachas/chicotes elétricos e microrriscos camuflados por sujidade pesada podem se tornar evidentes durante ou após a execução dos trabalhos técnicos. Autorizo a realização de testes de rodagem estritamente necessários para validação e controle de qualidade dos serviços executados, bem como declaro ciência dos prazos estipulados para retirada do veículo após notificação de conclusão, sob pena de incidência de taxas diárias de permanência em pátio.';

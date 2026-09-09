@@ -31,6 +31,7 @@ import { formatarDuracao } from '../utils/agenda';
 import { getFotoPublicUrl } from '../utils/imagens';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../utils/pdfOrcamento';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
+import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
 
 export const OrcamentoPublico: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -260,6 +261,9 @@ export const OrcamentoPublico: React.FC = () => {
         pdfTextoObservacoesOrcamento: data.oficina?.pdf_texto_observacoes_orcamento || undefined,
         pdfTextoRodape: (data.oficina as any)?.pdf_texto_rodape || undefined,
         pdfOcultarMarcaDagua: (data.oficina as any)?.pdf_ocultar_marca_dagua ?? undefined,
+        incluirTermos: data.incluir_termos ?? true,
+        termoResponsabilidade: data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
+        termosGarantia: data.termo_garantia?.conteudo || undefined,
       });
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao gerar PDF:', err);
@@ -842,21 +846,56 @@ export const OrcamentoPublico: React.FC = () => {
         })()}
 
         {/* CARD DE OBSERVAÇÕES E TERMOS DO ORÇAMENTO */}
-        {(data.observacoes || data.oficina?.pdf_texto_observacoes_orcamento) && (
-          <Card className="p-5 bg-graphite-900 border border-graphite-800 rounded-2xl flex flex-col gap-3 mt-4 shadow-xl">
-            <div className="flex items-center gap-2 text-amber-400 font-sans font-bold text-[14px] uppercase tracking-wide">
-              <FileText size={16} />
-              <span>Observações & Termos da Proposta</span>
+        {(data.observacoes || (data.incluir_termos ?? true) || data.termo_garantia) && (
+          <Card className="p-5 bg-graphite-900 border border-graphite-800 rounded-2xl flex flex-col gap-4 mt-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-graphite-800 pb-2.5">
+              <div className="flex items-center gap-2 text-amber-400 font-sans font-bold text-[14px] uppercase tracking-wide">
+                <ShieldCheck size={18} />
+                <span>Termos, Condições & Garantia da Proposta</span>
+              </div>
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Acompanha a OS e Vistoria
+              </span>
             </div>
+
+            {/* Observações específicas da proposta */}
             {data.observacoes && (
-              <div className="font-sans text-[13px] text-vapor-200 whitespace-pre-wrap leading-relaxed bg-graphite-950 p-3.5 rounded-xl border border-graphite-800">
-                {data.observacoes}
+              <div className="flex flex-col gap-1">
+                <span className="font-bold text-xs text-vapor-300">Observações da Oficina:</span>
+                <div className="font-sans text-[13px] text-vapor-200 whitespace-pre-wrap leading-relaxed bg-graphite-950 p-3.5 rounded-xl border border-graphite-800">
+                  {data.observacoes}
+                </div>
               </div>
             )}
-            {data.oficina?.pdf_texto_observacoes_orcamento && data.oficina.pdf_texto_observacoes_orcamento !== data.observacoes && (
-              <div className="font-sans text-[12px] text-vapor-400 whitespace-pre-wrap leading-relaxed border-t border-graphite-800 pt-3 mt-1">
-                <span className="font-bold text-vapor-300 block mb-1">Termos e Condições Gerais:</span>
-                {data.oficina.pdf_texto_observacoes_orcamento}
+
+            {/* Termo Fixo de Responsabilidade & Falhas Ocultas */}
+            {(data.incluir_termos ?? true) && (
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-xs text-vapor-300 flex items-center gap-1.5">
+                  <FileText size={13} className="text-amber-400" />
+                  <span>Termo Fixo de Responsabilidade & Falhas Ocultas:</span>
+                </span>
+                <p className="font-sans text-xs text-vapor-400 leading-relaxed whitespace-pre-line bg-graphite-950/80 p-3 rounded-xl border border-graphite-800">
+                  {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                </p>
+              </div>
+            )}
+
+            {/* Termo Variável de Garantia (se houver vinculado) */}
+            {data.termo_garantia && (
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-graphite-800">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                    <ShieldCheck size={14} />
+                    <span>Garantia do Serviço: {data.termo_garantia.titulo}</span>
+                  </span>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-graphite-800 text-vapor-300">
+                    {data.termo_garantia.tipo}
+                  </span>
+                </div>
+                <p className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/20">
+                  {data.termo_garantia.conteudo}
+                </p>
               </div>
             )}
           </Card>
@@ -996,6 +1035,28 @@ export const OrcamentoPublico: React.FC = () => {
               placeholder="Digite seu nome completo"
               className="bg-graphite-900 border border-graphite-700 rounded-lg px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500"
             />
+          </div>
+
+          {/* TERMOS DE RESPONSABILIDADE E GARANTIA PARA CIÊNCIA ANTES DA ASSINATURA */}
+          <div className="p-3 bg-graphite-950 border border-graphite-800 rounded-lg flex flex-col gap-2 max-h-36 overflow-y-auto text-xs text-vapor-300 leading-relaxed shadow-inner">
+            <div className="flex items-center gap-1.5 text-amber-400 font-bold uppercase tracking-wider text-[11px]">
+              <ShieldCheck size={14} />
+              <span>Ciência dos Termos e Condições:</span>
+            </div>
+            <p className="whitespace-pre-line text-vapor-400 text-[11.5px]">
+              {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+            </p>
+
+            {data.termo_garantia && (
+              <div className="pt-2 mt-1 border-t border-graphite-800 flex flex-col gap-1">
+                <span className="font-bold text-amber-400 text-[11px] uppercase tracking-wide">
+                  Garantia: {data.termo_garantia.titulo}
+                </span>
+                <p className="whitespace-pre-line text-vapor-300 text-[11.5px]">
+                  {data.termo_garantia.conteudo}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5">

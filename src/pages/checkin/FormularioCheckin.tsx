@@ -28,7 +28,9 @@ import {
   CheckCircle2,
   Printer,
   FileDown,
+  ShieldCheck,
 } from 'lucide-react';
+import { TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
 
 export const FormularioCheckin: React.FC = () => {
   const { agendamentoId } = useParams<{ agendamentoId: string }>();
@@ -97,6 +99,8 @@ export const FormularioCheckin: React.FC = () => {
   const [linkEnviado, setLinkEnviado] = useState(false);
   const [gerandoPdfManual, setGerandoPdfManual] = useState(false);
   const [pdfProgressManual, setPdfProgressManual] = useState('');
+  const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
+  const [termoGarantia, setTermoGarantia] = useState<{ titulo?: string; texto?: string } | null>(null);
 
   const handleEnviarLinkRemoto = async () => {
     if (!checkin || !agendamento) return;
@@ -190,6 +194,9 @@ export const FormularioCheckin: React.FC = () => {
           id,
           inicio,
           status,
+          termo_garantia_id,
+          termo_responsabilidade_texto,
+          termo_garantia_texto,
           cliente:clientes(id, nome, telefone),
           veiculo:veiculos(id, modelo, placa, cor, marca),
           servico:servicos(id, nome)
@@ -201,6 +208,27 @@ export const FormularioCheckin: React.FC = () => {
       setAgendamento(agData);
       setVeiculoCor((agData.veiculo as any)?.cor || '');
       setAssinaturaNome((agData.cliente as any)?.nome || '');
+
+      // Resolver Termo de Responsabilidade (Snapshot -> Tenant -> LocalStorage -> Padrão)
+      const termoRespEfetivo = (agData as any).termo_responsabilidade_texto ||
+        (tenant as any).termo_responsabilidade ||
+        (tenant?.id ? localStorage.getItem(`tenant_termo_responsabilidade_${tenant.id}`) : null) ||
+        TERMO_RESPONSABILIDADE_PADRAO;
+      setTermoResponsabilidade(termoRespEfetivo);
+
+      // Resolver Termo de Garantia (Snapshot -> Termos Garantia DB)
+      if ((agData as any).termo_garantia_texto) {
+        setTermoGarantia({ texto: (agData as any).termo_garantia_texto });
+      } else if ((agData as any).termo_garantia_id) {
+        const { data: tgData } = await supabase
+          .from('termos_garantia')
+          .select('titulo, conteudo')
+          .eq('id', (agData as any).termo_garantia_id)
+          .maybeSingle();
+        if (tgData) {
+          setTermoGarantia({ titulo: tgData.titulo, texto: tgData.conteudo });
+        }
+      }
 
       // Se o atendimento já foi concluído/finalizado, bloqueia nova vistoria de entrada
       if (agData.status === 'concluido') {
@@ -576,6 +604,8 @@ export const FormularioCheckin: React.FC = () => {
           pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento,
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
+          termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
+          termoGarantia: termoGarantia?.texto || null,
         },
         (msg) => setPdfProgressManual(msg)
       );
@@ -1109,8 +1139,32 @@ export const FormularioCheckin: React.FC = () => {
           {/* FLUXO PRESENCIAL */}
           {modoAssinatura === 'presencial' && (
             <div className="flex flex-col gap-5 pt-2">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-300 font-sans text-[13px] leading-relaxed italic">
-                "Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega."
+              {/* Termo Fixo de Responsabilidade */}
+              <div className="p-3.5 bg-graphite-900 border border-amber-500/30 rounded-xl flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 text-amber-400 font-bold font-sans text-[12px] uppercase">
+                  <ShieldCheck size={16} />
+                  <span>Termo de Responsabilidade & Falhas Ocultas da Oficina</span>
+                </div>
+                <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-28 overflow-y-auto pr-1">
+                  {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                </p>
+              </div>
+
+              {/* Termo de Garantia do Serviço (se houver) */}
+              {termoGarantia?.texto && (
+                <div className="p-3.5 bg-graphite-900 border border-emerald-500/30 rounded-xl flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold font-sans text-[12px] uppercase">
+                    <Sparkles size={16} />
+                    <span>Termo de Garantia do Atendimento {termoGarantia.titulo ? `(${termoGarantia.titulo})` : ''}</span>
+                  </div>
+                  <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-28 overflow-y-auto pr-1">
+                    {termoGarantia.texto}
+                  </p>
+                </div>
+              )}
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-300 font-sans text-[12px] leading-relaxed italic">
+                "Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega e aceito os termos estipulados."
               </div>
 
               <div className="flex flex-col gap-2">
@@ -1147,6 +1201,25 @@ export const FormularioCheckin: React.FC = () => {
                 <p className="font-sans text-[13px] text-vapor-300 leading-relaxed">
                   Ao concluir neste modo, a vistoria será <strong>destravada no sistema</strong> sem exigir assinatura digital na tela, liberando a execução do serviço. O PDF oficial com campos para assinatura física no papel será gerado automaticamente.
                 </p>
+              </div>
+
+              {/* Prévia dos Termos que constarão no Documento */}
+              <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-xl flex flex-col gap-2">
+                <span className="font-sans text-[11px] text-vapor-400 font-bold uppercase tracking-wider">
+                  Termos incluídos na impressão do documento:
+                </span>
+                <div className="flex flex-col gap-1.5 text-[11.5px] text-vapor-300">
+                  <div className="flex items-start gap-1.5">
+                    <ShieldCheck size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                    <span><strong>Termo de Responsabilidade & Falhas Ocultas:</strong> Fixo e obrigatório</span>
+                  </div>
+                  {termoGarantia?.texto && (
+                    <div className="flex items-start gap-1.5">
+                      <Sparkles size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+                      <span><strong>Garantia do Serviço:</strong> {termoGarantia.titulo || 'Garantia personalizada'}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col gap-2">
