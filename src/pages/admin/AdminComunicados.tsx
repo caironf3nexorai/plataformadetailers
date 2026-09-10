@@ -142,7 +142,7 @@ export const AdminComunicados: React.FC = () => {
     setTitulo('');
     setMensagem('');
     setTipo('brinde');
-    setBadgeText('🎁 PRESENTE DO DIA DO DETAILER');
+    setBadgeTexto('🎁 PRESENTE DO DIA DO DETAILER');
     setCorTema('amber');
     setImagemUrl('');
     setAcaoTipo('brinde_dias');
@@ -163,7 +163,7 @@ export const AdminComunicados: React.FC = () => {
     setTitulo(c.titulo);
     setMensagem(c.mensagem);
     setTipo(c.tipo);
-    setBadgeText(c.badge_texto || '');
+    setBadgeTexto(c.badge_texto || '');
     setCorTema(c.cor_tema);
     setImagemUrl(c.imagem_url || '');
     setAcaoTipo(c.acao_tipo);
@@ -536,12 +536,12 @@ export const AdminComunicados: React.FC = () => {
                       const novoTipo = e.target.value as any;
                       setTipo(novoTipo);
                       if (novoTipo === 'brinde') {
-                        setBadgeText('🎁 PRESENTE EXCLUSIVO DO DIA DO DETAILER');
+                        setBadgeTexto('🎁 PRESENTE EXCLUSIVO DO DIA DO DETAILER');
                         setAcaoTipo('brinde_dias');
                         setAcaoLabel('Resgatar Meu Presente 🎁');
                         setDiasBonus('15');
                       } else if (novoTipo === 'promocao') {
-                        setBadgeText('🔥 OFERTA LIMITADA');
+                        setBadgeTexto('🔥 OFERTA LIMITADA');
                         setAcaoTipo('cupom');
                         setAcaoLabel('Aproveitar Desconto 🏷️');
                       }

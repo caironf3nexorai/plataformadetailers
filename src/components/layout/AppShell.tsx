@@ -5,9 +5,8 @@ import { BottomNav } from './BottomNav';
 import { TopBar } from './TopBar';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { BotaoFeedbackFlutuante } from '../feedback/BotaoFeedbackFlutuante';
-import { AtrasoBanner } from './AtrasoBanner';
-import { TrialBanner } from './TrialBanner';
 import { ModalComunicadoGlobal } from '../comunicados/ModalComunicadoGlobal';
+import { ModalAvisoAssinatura } from '../assinatura/ModalAvisoAssinatura';
 import { supabase } from '../../lib/supabase';
 
 export const AppShell: React.FC = () => {
@@ -31,17 +30,8 @@ export const AppShell: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-graphite-900 text-vapor-100 flex w-full max-w-full flex-col selection:bg-amber-500 selection:text-graphite-950">
-      {/* Banners Globais de Assinatura no Topo */}
-      {assinatura?.status === 'atrasada' && (
-        <AtrasoBanner
-          diasParaRebaixamento={assinatura.dias_para_rebaixamento ?? 5}
-          urlPagamentoAsaas={assinatura.url_pagamento_asaas}
-        />
-      )}
-
-      {assinatura?.status === 'trial' && (
-        <TrialBanner diasRestantes={assinatura.dias_trial_restantes ?? 14} />
-      )}
+      {/* Modal Popup de Aviso de Plano Vencendo / Pagamento em Atraso */}
+      <ModalAvisoAssinatura assinatura={assinatura} />
 
       <div className="flex flex-1 w-full max-w-full">
         {/* Sidebar fixa no Desktop (>= 1024px) */}
