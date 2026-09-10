@@ -506,317 +506,347 @@ export const AdminComunicados: React.FC = () => {
 
       {/* Modal de Criação / Edição */}
       {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-2xl p-6 shadow-2xl relative my-8">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
-              <div className="flex items-center space-x-2">
-                <Megaphone className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white uppercase tracking-wide">
-                  {comunicadoEmEdicao ? 'Editar Comunicado / Brinde' : 'Criar Novo Comunicado Global'}
-                </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-3xl w-full max-w-4xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Faixa Iluminada de Topo */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 shrink-0" />
+
+            {/* Cabeçalho Fixo */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0 bg-slate-900/90">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white uppercase tracking-wide">
+                    {comunicadoEmEdicao ? 'Editar Comunicado / Brinde' : 'Criar Novo Comunicado Global'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Configure os dados do aviso, presente ou promoção que será exibido aos detailers.
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setModalAberto(false)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+                className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={salvarComunicado} className="space-y-4">
-              {/* Tipo e Cor do Tema */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Tipo do Comunicado
-                  </label>
-                  <select
-                    value={tipo}
-                    onChange={e => {
-                      const novoTipo = e.target.value as any;
-                      setTipo(novoTipo);
-                      if (novoTipo === 'brinde') {
-                        setBadgeTexto('🎁 PRESENTE EXCLUSIVO DO DIA DO DETAILER');
-                        setAcaoTipo('brinde_dias');
-                        setAcaoLabel('Resgatar Meu Presente 🎁');
-                        setDiasBonus('15');
-                      } else if (novoTipo === 'promocao') {
-                        setBadgeTexto('🔥 OFERTA LIMITADA');
-                        setAcaoTipo('cupom');
-                        setAcaoLabel('Aproveitar Desconto 🏷️');
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="brinde">Brinde / Presente Especial 🎁</option>
-                    <option value="promocao">Promoção / Desconto 🔥</option>
-                    <option value="novidade">Novidade da Plataforma ✨</option>
-                    <option value="aviso">Aviso / Notícia Geral 📢</option>
-                    <option value="alerta">Alerta Importante ⚠️</option>
-                  </select>
-                </div>
+            {/* Formulário com Corpo Rolável */}
+            <form onSubmit={salvarComunicado} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-6 overflow-y-auto flex-1 space-y-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* COLUNA ESQUERDA: Mensagem & Visual */}
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-800 pb-2">
+                      <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                        1. Conteúdo e Visual
+                      </span>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Cor de Destaque
-                  </label>
-                  <select
-                    value={corTema}
-                    onChange={e => setCorTema(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="amber">Âmbar Detailer (Dourado)</option>
-                    <option value="emerald">Esmeralda (Verde Sucesso)</option>
-                    <option value="purple">Roxo VIP (Especial)</option>
-                    <option value="blue">Azul Tecnologia</option>
-                    <option value="rose">Rubro Alerta</option>
-                  </select>
-                </div>
-              </div>
+                    {/* Tipo e Cor do Tema */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                          Tipo do Comunicado
+                        </label>
+                        <select
+                          value={tipo}
+                          onChange={e => {
+                            const novoTipo = e.target.value as any;
+                            setTipo(novoTipo);
+                            if (novoTipo === 'brinde') {
+                              setBadgeTexto('🎁 PRESENTE EXCLUSIVO DO DIA DO DETAILER');
+                              setAcaoTipo('brinde_dias');
+                              setAcaoLabel('Resgatar Meu Presente 🎁');
+                              setDiasBonus('15');
+                            } else if (novoTipo === 'promocao') {
+                              setBadgeTexto('🔥 OFERTA LIMITADA');
+                              setAcaoTipo('cupom');
+                              setAcaoLabel('Aproveitar Desconto 🏷️');
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="brinde">Brinde / Presente 🎁</option>
+                          <option value="promocao">Promoção / Desconto 🔥</option>
+                          <option value="novidade">Novidade ✨</option>
+                          <option value="aviso">Aviso / Notícia 📢</option>
+                          <option value="alerta">Alerta Importante ⚠️</option>
+                        </select>
+                      </div>
 
-              {/* Badge de Topo */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Badge de Destaque no Topo (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: 🎁 PRESENTE DO DIA DO DETAILER"
-                  value={badgeTexto}
-                  onChange={e => setBadgeTexto(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                          Cor de Destaque
+                        </label>
+                        <select
+                          value={corTema}
+                          onChange={e => setCorTema(e.target.value as any)}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="amber">Âmbar (Dourado)</option>
+                          <option value="emerald">Esmeralda (Verde)</option>
+                          <option value="purple">Roxo VIP</option>
+                          <option value="blue">Azul Tecnologia</option>
+                          <option value="rose">Rubro Alerta</option>
+                        </select>
+                      </div>
+                    </div>
 
-              {/* Título */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Título do Comunicado *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Parabéns Detailer! Você ganhou 15 dias de Plano Pro grátis"
-                  value={titulo}
-                  onChange={e => setTitulo(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-amber-500"
-                />
-              </div>
+                    {/* Badge de Topo */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Badge de Topo (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 🎁 PRESENTE DO DIA DO DETAILER"
+                        value={badgeTexto}
+                        onChange={e => setBadgeTexto(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
 
-              {/* Mensagem */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Mensagem Completa *
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Descreva a mensagem, detalhes do brinde ou informações importantes..."
-                  value={mensagem}
-                  onChange={e => setMensagem(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+                    {/* Título */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Título Principal *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ex: Parabéns Detailer! Você ganhou 15 dias de Plano Pro grátis"
+                        value={titulo}
+                        onChange={e => setTitulo(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
 
-              {/* Banner Imagem URL */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  URL da Imagem / Banner Ilustrativo (Opcional)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://exemplo.com/banner-promocional.jpg"
-                  value={imagemUrl}
-                  onChange={e => setImagemUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                />
-              </div>
+                    {/* Mensagem */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Mensagem Completa *
+                      </label>
+                      <textarea
+                        required
+                        rows={4}
+                        placeholder="Descreva a mensagem ou detalhes do presente com clareza..."
+                        value={mensagem}
+                        onChange={e => setMensagem(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
 
-              {/* Bloco de Ação / Resgate */}
-              <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl space-y-3">
-                <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1.5">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Configuração da Ação de Resgate / Botão</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Tipo de Ação
-                    </label>
-                    <select
-                      value={acaoTipo}
-                      onChange={e => setAcaoTipo(e.target.value as any)}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="nenhuma">Nenhuma ação (Apenas ler e fechar)</option>
-                      <option value="brinde_dias">Resgatar Dias Bônus de Plano (+Dias)</option>
-                      <option value="cupom">Vincular a Cupom de Desconto</option>
-                      <option value="link">Abrir Link Externo ou Interno</option>
-                    </select>
+                    {/* Banner Imagem URL */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        URL da Imagem / Banner (Opcional)
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://exemplo.com/banner.jpg"
+                        value={imagemUrl}
+                        onChange={e => setImagemUrl(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Texto do Botão
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Resgatar Meu Presente 🎁"
-                      value={acaoLabel}
-                      onChange={e => setAcaoLabel(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                    />
+                  {/* COLUNA DIREITA: Ação / Resgate & Envio */}
+                  <div className="space-y-4">
+                    <div className="border-b border-slate-800 pb-2">
+                      <span className="text-xs font-black text-amber-400 uppercase tracking-wider">
+                        2. Ação de Resgate e Envio
+                      </span>
+                    </div>
+
+                    {/* Bloco de Ação / Resgate */}
+                    <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3">
+                      <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center space-x-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Configurar Botão / Resgate</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            Tipo de Ação
+                          </label>
+                          <select
+                            value={acaoTipo}
+                            onChange={e => setAcaoTipo(e.target.value as any)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                          >
+                            <option value="nenhuma">Apenas ler e fechar</option>
+                            <option value="brinde_dias">Dias Bônus Pro (+Dias)</option>
+                            <option value="cupom">Cupom de Desconto</option>
+                            <option value="link">Abrir Link</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            Texto do Botão
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Resgatar Presente 🎁"
+                            value={acaoLabel}
+                            onChange={e => setAcaoLabel(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sub-configurações específicas */}
+                      {acaoTipo === 'brinde_dias' && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            Dias Bônus a Creditar *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            placeholder="Ex: 15"
+                            value={diasBonus}
+                            onChange={e => setDiasBonus(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      )}
+
+                      {acaoTipo === 'cupom' && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            Selecionar Cupom Cadastrado *
+                          </label>
+                          <select
+                            value={cupomId}
+                            onChange={e => setCupomId(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                          >
+                            <option value="">Selecione um cupom ativo...</option>
+                            {cuponsDisponiveis.map(c => (
+                              <option key={c.id} value={c.id}>
+                                {c.codigo} — {c.desconto_tipo === 'percentual' ? `${c.desconto_valor}% OFF` : `R$ ${c.desconto_valor} OFF`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {acaoTipo === 'link' && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            URL de Destino *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: /planos ou https://..."
+                            value={acaoLink}
+                            onChange={e => setAcaoLink(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Segmentação & Datas */}
+                    <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                          Público-Alvo
+                        </label>
+                        <select
+                          value={publicoAlvo}
+                          onChange={e => setPublicoAlvo(e.target.value as any)}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="todos">Todas as Oficinas</option>
+                          <option value="free">Apenas Plano Free</option>
+                          <option value="pro">Apenas Plano Pro</option>
+                          <option value="studio">Apenas Plano Studio</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            Início da Exibição
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={dataInicio}
+                            onChange={e => setDataInicio(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                            Fim da Exibição
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={dataFim}
+                            onChange={e => setDataFim(e.target.value)}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Checkboxes de Ativação */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="comunicadoAtivo"
+                          checked={ativo}
+                          onChange={e => setAtivo(e.target.checked)}
+                          className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                        />
+                        <label htmlFor="comunicadoAtivo" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                          Disparo Imediato (Colocar no ar agora)
+                        </label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="comunicadoObrigatorio"
+                          checked={obrigatorio}
+                          onChange={e => setObrigatorio(e.target.checked)}
+                          className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500 w-4 h-4"
+                        />
+                        <label htmlFor="comunicadoObrigatorio" className="text-xs text-slate-300 font-semibold cursor-pointer">
+                          Exigir confirmação de leitura (sem botão X)
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {/* Sub-configurações específicas */}
-                {acaoTipo === 'brinde_dias' && (
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Quantidade de Dias Bônus a Creditar *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="1"
-                      placeholder="Ex: 15"
-                      value={diasBonus}
-                      onChange={e => setDiasBonus(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">
-                      Ao clicar em resgatar, a oficina ganha esses dias bônus estendidos automaticamente em sua assinatura ou trial.
-                    </span>
-                  </div>
-                )}
-
-                {acaoTipo === 'cupom' && (
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Selecione o Cupom da Central de Cupons *
-                    </label>
-                    <select
-                      value={cupomId}
-                      onChange={e => setCupomId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                    >
-                      <option value="">Selecione um cupom ativo...</option>
-                      {cuponsDisponiveis.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.codigo} — {c.desconto_tipo === 'percentual' ? `${c.desconto_valor}% OFF` : `R$ ${c.desconto_valor} OFF`}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] text-slate-500 mt-1 block">
-                      O usuário poderá copiar o cupom com 1 clique ou ir direto para o checkout com desconto aplicado.
-                    </span>
-                  </div>
-                )}
-
-                {acaoTipo === 'link' && (
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      URL de Destino *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: /planos ou https://wa.me/..."
-                      value={acaoLink}
-                      onChange={e => setAcaoLink(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                )}
               </div>
 
-              {/* Segmentação & Datas */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Público-Alvo
-                  </label>
-                  <select
-                    value={publicoAlvo}
-                    onChange={e => setPublicoAlvo(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="todos">Todas as Oficinas</option>
-                    <option value="free">Apenas Plano Free</option>
-                    <option value="pro">Apenas Plano Pro</option>
-                    <option value="studio">Apenas Plano Studio</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Início da Exibição
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={dataInicio}
-                    onChange={e => setDataInicio(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Fim da Exibição (Opcional)
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={dataFim}
-                    onChange={e => setDataFim(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              {/* Checkboxes de Ativação */}
-              <div className="flex items-center space-x-6 pt-2">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="comunicadoAtivo"
-                    checked={ativo}
-                    onChange={e => setAtivo(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500 w-4 h-4"
-                  />
-                  <label htmlFor="comunicadoAtivo" className="text-xs text-slate-300 font-semibold cursor-pointer">
-                    Disparo Imediato (Ativar na plataforma agora)
-                  </label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="comunicadoObrigatorio"
-                    checked={obrigatorio}
-                    onChange={e => setObrigatorio(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500 w-4 h-4"
-                  />
-                  <label htmlFor="comunicadoObrigatorio" className="text-xs text-slate-300 font-semibold cursor-pointer">
-                    Exigir Confirmação de Leitura (sem botão X)
-                  </label>
-                </div>
-              </div>
-
-              {/* Botões */}
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+              {/* Rodapé Fixo */}
+              <div className="flex items-center justify-end space-x-3 px-6 py-4 border-t border-slate-800 bg-slate-900/90 shrink-0">
                 <button
                   type="button"
                   onClick={() => setModalAberto(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={salvando}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition disabled:opacity-50"
                 >
-                  {salvando ? 'Salvando...' : comunicadoEmEdicao ? 'Salvar Alterações' : 'Disparar Comunicado Global'}
+                  {salvando ? 'Salvando...' : comunicadoEmEdicao ? 'Salvar Alterações' : 'Disparar Comunicado'}
                 </button>
               </div>
             </form>
