@@ -38,7 +38,7 @@ serve(async (req) => {
       });
     }
 
-    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj } = await req.json();
+    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj, cupom: reqCupom } = await req.json();
 
     if (!['pro', 'studio'].includes(plano)) {
       return new Response(JSON.stringify({ error: 'Plano inválido para checkout' }), {
@@ -84,8 +84,30 @@ serve(async (req) => {
       .maybeSingle();
 
     const precoCentavos = planRow?.preco_centavos ?? (plano === 'pro' ? 6700 : 14700);
-    const valorReais = Number((precoCentavos / 100).toFixed(2));
-    const valorCentavos = precoCentavos;
+    let valorReais = Number((precoCentavos / 100).toFixed(2));
+    let valorCentavos = precoCentavos;
+    let cupomAplicado: any = null;
+
+    // Validar e aplicar Cupom de Desconto se fornecido
+    if (reqCupom && String(reqCupom).trim()) {
+      try {
+        const { data: cupomRes, error: cupomErr } = await supabase.rpc('validar_cupom', {
+          p_codigo: String(reqCupom).trim(),
+          p_plano: plano,
+        });
+
+        if (!cupomErr && cupomRes?.valido) {
+          cupomAplicado = cupomRes;
+          valorReais = Number(cupomRes.valor_final);
+          valorCentavos = Math.round(valorReais * 100);
+          console.log(`[Checkout Asaas] Cupom ${cupomRes.codigo} aplicado. De R$ ${cupomRes.valor_original} por R$ ${valorReais}`);
+        } else if (cupomRes?.mensagem) {
+          console.warn('[Checkout Asaas] Cupom não aplicado:', cupomRes.mensagem);
+        }
+      } catch (errCupom) {
+        console.warn('[Checkout Asaas] Falha ao validar cupom:', errCupom);
+      }
+    }
 
     // Buscar se a oficina já possui registro em assinaturas
     const { data: assExistente } = await supabase
@@ -431,6 +453,24 @@ serve(async (req) => {
       updated_at: new Date().toISOString(),
     });
 
+    // 5. Registrar uso do cupom na tabela se aplicado com sucesso
+    if (cupomAplicado?.id) {
+      try {
+        await supabase.rpc('registrar_uso_cupom', {
+          p_cupom_id: cupomAplicado.id,
+          p_tenant_id: tenantId,
+          p_plano: plano,
+          p_valor_original: cupomAplicado.valor_original,
+          p_valor_desconto: cupomAplicado.valor_desconto,
+          p_valor_final: valorReais,
+          p_asaas_payment_id: null,
+          p_asaas_subscription_id: subscriptionData.id,
+        });
+      } catch (errRegCupom) {
+        console.warn('Aviso ao registrar uso de cupom via RPC:', errRegCupom);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -438,6 +478,12 @@ serve(async (req) => {
         paymentUrl,
         status: subscriptionData.status,
         pix: pixData,
+        cupomAplicado: cupomAplicado ? {
+          codigo: cupomAplicado.codigo,
+          desconto_valor: cupomAplicado.desconto_valor,
+          desconto_tipo: cupomAplicado.desconto_tipo,
+          valor_final: valorReais,
+        } : null,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

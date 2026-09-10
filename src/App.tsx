@@ -71,6 +71,8 @@ const AdminIndicacoes = lazyWithRetry(() => import('./pages/admin/AdminIndicacoe
 const AdminParceiros = lazyWithRetry(() => import('./pages/admin/AdminParceiros').then(m => ({ default: m.AdminParceiros })));
 const AdminPrecificacaoReferencia = lazyWithRetry(() => import('./pages/admin/AdminPrecificacaoReferencia').then(m => ({ default: m.AdminPrecificacaoReferencia })));
 const AdminTreinamentos = lazyWithRetry(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
+const AdminComunicados = lazyWithRetry(() => import('./pages/admin/AdminComunicados').then(m => ({ default: m.AdminComunicados })));
+const AdminCupons = lazyWithRetry(() => import('./pages/admin/AdminCupons').then(m => ({ default: m.AdminCupons })));
 const LoginParceiro = lazyWithRetry(() => import('./pages/parceiro/LoginParceiro').then(m => ({ default: m.LoginParceiro })));
 const PainelParceiro = lazyWithRetry(() => import('./pages/parceiro/PainelParceiro').then(m => ({ default: m.PainelParceiro })));
 
@@ -127,6 +129,8 @@ function App() {
             >
               <Route index element={<Navigate to="/admin/oficinas" replace />} />
               <Route path="oficinas" element={<AdminOficinas />} />
+              <Route path="comunicados" element={<AdminComunicados />} />
+              <Route path="cupons" element={<AdminCupons />} />
               <Route path="assinaturas" element={<AdminAssinaturas />} />
               <Route path="referencias-preco" element={<AdminPrecificacaoReferencia />} />
               <Route path="indicacoes" element={<AdminIndicacoes />} />

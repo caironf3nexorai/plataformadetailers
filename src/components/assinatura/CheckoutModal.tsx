@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X, Copy, Check } from 'lucide-react';
+import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X, Copy, Check, Ticket, Tag } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,6 +11,7 @@ interface CheckoutModalProps {
   planoCodigo: 'pro' | 'studio';
   planoNome: string;
   precoMensal: string;
+  cupomInicial?: string;
   onSuccess?: () => void;
 }
 
@@ -20,6 +21,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   planoCodigo,
   planoNome,
   precoMensal,
+  cupomInicial,
   onSuccess,
 }) => {
   const { showSuccess, showError } = useToast();
@@ -34,6 +36,49 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [pagamentoConfirmado, setPagamentoConfirmado] = useState(false);
 
+  // Estados de Cupom de Desconto
+  const [codigoCupom, setCodigoCupom] = useState(cupomInicial || '');
+  const [cupomAplicado, setCupomAplicado] = useState<any>(null);
+  const [validandoCupom, setValidandoCupom] = useState(false);
+  const [erroCupom, setErroCupom] = useState<string | null>(null);
+
+  const handleValidarCupom = async (codigoParaValidar?: string) => {
+    const cod = (codigoParaValidar || codigoCupom).trim().toUpperCase();
+    if (!cod) {
+      showError('Informe o código do cupom.');
+      return;
+    }
+    setValidandoCupom(true);
+    setErroCupom(null);
+    try {
+      const { data, error } = await supabase.rpc('validar_cupom', {
+        p_codigo: cod,
+        p_plano: planoCodigo,
+      });
+      if (error) throw error;
+      if (!data?.valido) {
+        setErroCupom(data?.mensagem || 'Cupom inválido.');
+        setCupomAplicado(null);
+        showError(data?.mensagem || 'Cupom inválido.');
+      } else {
+        setCupomAplicado(data);
+        setErroCupom(null);
+        showSuccess(`Cupom ${data.codigo} aplicado com sucesso!`);
+      }
+    } catch (err: any) {
+      setErroCupom(err.message || 'Erro ao validar cupom.');
+      showError(err.message || 'Erro ao validar cupom.');
+    } finally {
+      setValidandoCupom(false);
+    }
+  };
+
+  const handleRemoverCupom = () => {
+    setCupomAplicado(null);
+    setCodigoCupom('');
+    setErroCupom(null);
+  };
+
   // Carregar telefone/documento do usuário/oficina ao abrir
   useEffect(() => {
     if (!isOpen) {
@@ -41,7 +86,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setPixData(null);
       setPaymentUrl(null);
       setLoading(false);
+      setCupomAplicado(null);
+      setCodigoCupom(cupomInicial || '');
+      setErroCupom(null);
       return;
+    }
+
+    if (cupomInicial) {
+      setCodigoCupom(cupomInicial);
+      handleValidarCupom(cupomInicial);
     }
 
     const carregarDadosUsuario = async () => {
@@ -165,6 +218,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           term_version: 'v1.0-2026-08',
           telefone: telefone ? telefone.replace(/\D/g, '') : undefined,
           cpfCnpj: cpfCnpj ? cpfCnpj.replace(/\D/g, '') : undefined,
+          cupom: cupomAplicado ? cupomAplicado.codigo : (codigoCupom ? codigoCupom.trim().toUpperCase() : undefined),
         }),
       });
 
@@ -205,9 +259,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <h3 className="text-base font-bold text-vapor-100 uppercase tracking-wide">
                 Checkout Seguro • Plano {planoNome}
               </h3>
-              <p className="text-xs text-vapor-400 font-mono">
-                {precoMensal} / mês • Cobrança Recorrente Asaas
-              </p>
+              {cupomAplicado ? (
+                <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                  <span className="text-xs text-vapor-400 font-mono line-through">
+                    {precoMensal}
+                  </span>
+                  <span className="text-xs text-emerald-400 font-mono font-bold">
+                    R$ {Number(cupomAplicado.valor_final).toFixed(2)} / mês
+                  </span>
+                  <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                    {cupomAplicado.codigo} • {cupomAplicado.desconto_tipo === 'percentual' ? `${cupomAplicado.desconto_valor}% OFF` : `R$ ${cupomAplicado.desconto_valor} OFF`}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-xs text-vapor-400 font-mono">
+                  {precoMensal} / mês • Cobrança Recorrente Asaas
+                </p>
+              )}
             </div>
           </div>
           <button
@@ -383,6 +451,73 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               </div>
 
+              {/* Seção de Cupom de Desconto */}
+              <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-graphite-950/60 border border-graphite-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono font-bold text-vapor-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Ticket size={14} className="text-amber-500" />
+                    <span>Possui um Cupom de Desconto?</span>
+                  </label>
+                  {cupomAplicado && (
+                    <button
+                      type="button"
+                      onClick={handleRemoverCupom}
+                      className="text-[11px] text-rose-400 hover:underline"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+
+                {cupomAplicado ? (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                      <div>
+                        <span className="text-xs font-mono font-bold text-white uppercase tracking-wider block">
+                          {cupomAplicado.codigo} aplicado!
+                        </span>
+                        <span className="text-[11px] text-emerald-400">
+                          {cupomAplicado.desconto_tipo === 'percentual'
+                            ? `${cupomAplicado.desconto_valor}% de desconto na mensalidade`
+                            : `R$ ${cupomAplicado.desconto_valor} de desconto na mensalidade`}
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-black text-emerald-400">
+                      R$ {Number(cupomAplicado.valor_final).toFixed(2)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Ex: DETAILER20"
+                      value={codigoCupom}
+                      onChange={(e) => {
+                        setCodigoCupom(e.target.value.toUpperCase());
+                        setErroCupom(null);
+                      }}
+                      className="flex-1 px-3 py-2 rounded-xl bg-graphite-950 border border-graphite-700 text-vapor-100 text-xs font-mono uppercase focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleValidarCupom()}
+                      disabled={validandoCupom || !codigoCupom.trim()}
+                      className="px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-xs uppercase tracking-wider transition disabled:opacity-50"
+                    >
+                      {validandoCupom ? 'Validando...' : 'Aplicar'}
+                    </button>
+                  </div>
+                )}
+
+                {erroCupom && (
+                  <p className="text-[11px] text-rose-400 font-medium">
+                    {erroCupom}
+                  </p>
+                )}
+              </div>
+
               {/* Dados do Assinante para NF / Asaas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
@@ -466,7 +601,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </>
                 ) : (
                   <>
-                    Ir para Pagamento no Asaas ({precoMensal})
+                    Ir para Pagamento no Asaas ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal})
                   </>
                 )}
               </button>

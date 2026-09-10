@@ -15,7 +15,9 @@ import {
   Gift,
   Award,
   TrendingUp,
-  Tv
+  Tv,
+  Megaphone,
+  Ticket
 } from 'lucide-react';
 import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 import { LogoNuvemWash } from '../ui/LogoNuvemWash';
@@ -46,6 +48,8 @@ export const AdminLayout: React.FC = () => {
 
   const navItems = [
     { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
+    { label: 'Quadro de Avisos', path: '/admin/comunicados', icon: Megaphone },
+    { label: 'Cupons', path: '/admin/cupons', icon: Ticket },
     { label: 'Assinaturas & MRR', path: '/admin/assinaturas', icon: DollarSign },
     { label: 'Treinamentos', path: '/admin/treinamentos', icon: Tv },
     { label: 'Ref. Mercado', path: '/admin/referencias-preco', icon: TrendingUp },

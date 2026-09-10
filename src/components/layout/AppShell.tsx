@@ -7,6 +7,7 @@ import { MobileNavDrawer } from './MobileNavDrawer';
 import { BotaoFeedbackFlutuante } from '../feedback/BotaoFeedbackFlutuante';
 import { AtrasoBanner } from './AtrasoBanner';
 import { TrialBanner } from './TrialBanner';
+import { ModalComunicadoGlobal } from '../comunicados/ModalComunicadoGlobal';
 import { supabase } from '../../lib/supabase';
 
 export const AppShell: React.FC = () => {
@@ -79,6 +80,9 @@ export const AppShell: React.FC = () => {
 
           {/* Botão Flutuante de Feedback */}
           <BotaoFeedbackFlutuante />
+
+          {/* Modal Global de Comunicados, Banners e Brindes */}
+          <ModalComunicadoGlobal />
         </div>
       </div>
     </div>
