@@ -262,23 +262,23 @@ export const Financeiro: React.FC = () => {
       ) : resumo ? (
         <>
           {/* 2. CASCATA DE RESULTADO FINANCEIRO (DRE RESUMIDA) */}
-          <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-6">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold text-vapor-100 flex items-center gap-2">
-                <Layers size={20} className="text-amber-500" />
-                Demonstrativo de Resultado (Cascata de Lucro)
+          <Card className="p-4 sm:p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4 sm:gap-6 overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h3 className="font-display text-base sm:text-lg font-bold text-vapor-100 flex items-center gap-2">
+                <Layers size={20} className="text-amber-500 shrink-0" />
+                <span>Demonstrativo de Resultado <span className="text-vapor-400 font-normal text-xs sm:text-sm">(Cascata de Lucro)</span></span>
               </h3>
-              <Badge tone="vapor">Mês de Competência</Badge>
+              <Badge tone="vapor" className="self-start sm:self-auto text-[11px]">Mês de Competência</Badge>
             </div>
 
-            <div className="flex flex-col gap-3 font-sans">
+            <div className="flex flex-col gap-2.5 sm:gap-3 font-sans">
               {/* Linha 1: Faturamento */}
-              <div className="flex items-center justify-between p-3.5 rounded-lg bg-graphite-950 border border-graphite-800">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 sm:p-3.5 rounded-lg bg-graphite-950 border border-graphite-800">
+                <div className="flex items-baseline gap-2 flex-wrap">
                   <span className="font-bold text-vapor-100 text-sm">Faturamento Bruto</span>
-                  <span className="text-xs text-vapor-400">(Preço cobrado aos clientes)</span>
+                  <span className="text-[11px] sm:text-xs text-vapor-400">(Preço cobrado aos clientes)</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
                   {resumo.comparativo.variacao_faturamento !== 0 && (
                     <span
                       className={`text-xs font-mono flex items-center gap-0.5 ${
@@ -290,82 +290,89 @@ export const Financeiro: React.FC = () => {
                       {resumo.comparativo.variacao_faturamento}% vs anterior
                     </span>
                   )}
-                  <span className="font-mono text-lg font-bold text-vapor-100">
+                  <span className="font-mono text-base sm:text-lg font-bold text-vapor-100">
                     {formatarMoeda(resumo.faturamento)}
                   </span>
                 </div>
               </div>
 
               {/* Linha 2: Custos de Produtos */}
-              <div className="flex items-center justify-between px-4 py-2 text-xs text-vapor-400 border-l-2 border-flare-500/50 pl-4">
-                <span>− Consumo de Produtos (Custo Direto)</span>
-                <span className="font-mono text-flare-300 font-semibold">
+              <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 text-xs text-vapor-400 border-l-2 border-flare-500/50 pl-3 sm:pl-4">
+                <span className="truncate sm:overflow-visible">− Consumo de Produtos (Custo Direto)</span>
+                <span className="font-mono text-flare-300 font-semibold whitespace-nowrap shrink-0">
                   − {formatarMoeda(resumo.custo_produtos)}
                 </span>
               </div>
 
               {/* Linha 3: Comissões */}
-              <div className="flex items-center justify-between px-4 py-2 text-xs text-vapor-400 border-l-2 border-flare-500/50 pl-4">
+              <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 text-xs text-vapor-400 border-l-2 border-flare-500/50 pl-3 sm:pl-4">
                 <span>− Comissões da Equipe</span>
-                <span className="font-mono text-flare-300 font-semibold">
+                <span className="font-mono text-flare-300 font-semibold whitespace-nowrap shrink-0">
                   − {formatarMoeda(resumo.custo_comissao)}
                 </span>
               </div>
 
               {/* Linha 4: Lucro Bruto */}
-              <div className="flex items-center justify-between p-3.5 rounded-lg bg-graphite-800/80 border border-graphite-700 my-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-vapor-200 text-sm">Lucro Bruto</span>
-                  <Badge tone={resumo.margem_bruta >= 50 ? 'mint' : 'amber'}>
+              <div className="flex items-center justify-between gap-2 p-3 sm:p-3.5 rounded-lg bg-graphite-800/80 border border-graphite-700 my-1">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5">
+                  <span className="font-bold text-vapor-200 text-sm whitespace-nowrap">Lucro Bruto</span>
+                  <Badge tone={resumo.margem_bruta >= 50 ? 'mint' : 'amber'} className="text-[10.5px] sm:text-xs w-fit">
                     Margem Bruta: {resumo.margem_bruta}%
                   </Badge>
                 </div>
-                <span className="font-mono text-md font-bold text-vapor-100">
+                <span className="font-mono text-base sm:text-md font-bold text-vapor-100 shrink-0">
                   {formatarMoeda(resumo.lucro_bruto)}
                 </span>
               </div>
 
               {/* Linha 5: Rateio de Estrutura */}
-              <div className="flex items-center justify-between px-4 py-2 text-xs text-vapor-400 border-l-2 border-amber-500/50 pl-4">
-                <span className="flex items-center gap-1.5">
-                  − Custo de Estrutura Rateado ({formatarTempoTrabalhado(resumo.minutos_trabalhados ?? resumo.horas_trabalhadas, resumo.minutos_trabalhados !== undefined)} × {formatarMoeda(resumo.custo_hora_medio)}/h)
-                </span>
-                <span className="font-mono text-amber-400 font-semibold">
+              <div className="flex items-start sm:items-center justify-between gap-2 px-3 sm:px-4 py-2 text-xs text-vapor-400 border-l-2 border-amber-500/50 pl-3 sm:pl-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
+                  <span className="whitespace-nowrap">− Custo de Estrutura Rateado</span>
+                  <span className="text-[11px] text-vapor-500 truncate sm:overflow-visible">
+                    ({formatarTempoTrabalhado(resumo.minutos_trabalhados ?? resumo.horas_trabalhadas, resumo.minutos_trabalhados !== undefined)} × {formatarMoeda(resumo.custo_hora_medio)}/h)
+                  </span>
+                </div>
+                <span className="font-mono text-amber-400 font-semibold whitespace-nowrap shrink-0">
                   − {formatarMoeda(resumo.custo_estrutura)}
                 </span>
               </div>
 
               {/* Linha 6: LUCRO LÍQUIDO REAL (DESTAQUE MÁXIMO) */}
               <div
-                className={`flex items-center justify-between p-5 rounded-xl border-2 transition-all mt-2 ${
+                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl border-2 transition-all mt-2 ${
                   resumo.lucro_liquido >= 0
                     ? 'bg-mint-500/10 border-mint-500/40 shadow-lg shadow-mint-500/5'
                     : 'bg-flare-500/10 border-flare-500/40 shadow-lg shadow-flare-500/5'
                 }`}
               >
-                <div className="flex flex-col gap-1">
-                  <span className="font-display text-sm uppercase tracking-wider font-bold text-vapor-100 flex items-center gap-2">
-                    <Award size={18} className={resumo.lucro_liquido >= 0 ? 'text-mint-400' : 'text-flare-400'} />
-                    Lucro Líquido Real (O que sobra no bolso)
-                  </span>
-                  <span className="text-xs text-vapor-400">
+                <div className="flex flex-col gap-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Award size={20} className={`shrink-0 ${resumo.lucro_liquido >= 0 ? 'text-mint-400' : 'text-flare-400'}`} />
+                    <span className="font-display text-sm sm:text-base uppercase tracking-wider font-bold text-vapor-100">
+                      Lucro Líquido Real
+                    </span>
+                    <span className="text-xs text-vapor-400 font-sans font-medium hidden sm:inline">
+                      (O que sobra no bolso)
+                    </span>
+                  </div>
+                  <span className="text-xs text-vapor-400 leading-relaxed">
+                    <span className="sm:hidden font-medium text-vapor-300">(O que sobra no bolso) — </span>
                     Resultado final após pagar produtos, equipe e a estrutura da oficina.
                   </span>
                 </div>
 
-                <div className="flex flex-col items-end gap-1">
-                  <div className="flex items-center gap-3">
-                    <Badge tone={resumo.lucro_liquido >= 0 ? 'mint' : 'flare'}>
-                      Margem Líquida: {resumo.margem_liquida}%
-                    </Badge>
-                    <span
-                      className={`font-mono text-2xl font-black ${
-                        resumo.lucro_liquido >= 0 ? 'text-mint-400' : 'text-flare-400'
-                      }`}
-                    >
-                      {formatarMoeda(resumo.lucro_liquido)}
-                    </span>
-                  </div>
+                <div className="flex items-center sm:flex-col sm:items-end justify-between sm:justify-center gap-2 pt-3 sm:pt-0 border-t border-graphite-700/50 sm:border-t-0 shrink-0">
+                  <Badge tone={resumo.lucro_liquido >= 0 ? 'mint' : 'flare'} className="text-xs">
+                    Margem Líquida: {resumo.margem_liquida}%
+                  </Badge>
+                  <span
+                    className={`font-mono text-xl sm:text-2xl font-black tracking-tight whitespace-nowrap ${
+                      resumo.lucro_liquido >= 0 ? 'text-mint-400' : 'text-flare-400'
+                    }`}
+                  >
+                    {formatarMoeda(resumo.lucro_liquido)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -420,7 +427,7 @@ export const Financeiro: React.FC = () => {
           </div>
 
           {/* 4. RENTABILIDADE POR SERVIÇO (TABELA DE LUCRO POR HORA) */}
-          <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4">
+          <Card className="p-4 sm:p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4 overflow-hidden">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="font-display text-lg font-bold text-vapor-100 flex items-center gap-2">
                 <TrendingUp size={20} className="text-mint-400" />
@@ -503,7 +510,7 @@ export const Financeiro: React.FC = () => {
 
           {/* 5. COMISSÕES A PAGAR (EXCLUSIVO PARA DONO) */}
           {isDono && (
-            <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4">
+            <Card className="p-4 sm:p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4 overflow-hidden">
               <div className="flex items-center justify-between">
                 <h3 className="font-display text-lg font-bold text-vapor-100 flex items-center gap-2">
                   <Users size={20} className="text-amber-500" />
@@ -533,7 +540,7 @@ export const Financeiro: React.FC = () => {
           )}
 
           {/* 6. ATENDIMENTOS FINALIZADOS DO PERÍODO */}
-          <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4">
+          <Card className="p-4 sm:p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-4 overflow-hidden">
             <h3 className="font-display text-lg font-bold text-vapor-100 flex items-center gap-2">
               <Clock size={20} className="text-vapor-300" />
               Atendimentos do Período ({atendimentosPeriodo.length})
