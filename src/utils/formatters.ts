@@ -200,3 +200,6 @@ export function formatCpfCnpj(value: string): string {
     return `${clean.slice(0, 2)}.${clean.slice(2, 5)}.${clean.slice(5, 8)}/${clean.slice(8, 12)}-${clean.slice(12)}`;
   }
 }
+
+// Re-exporta helpers de formatação de data para conveniência
+export { formatarData, formatarHora, formatarDataHora } from './datas';

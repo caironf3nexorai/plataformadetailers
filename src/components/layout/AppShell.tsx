@@ -46,8 +46,9 @@ export const AppShell: React.FC = () => {
           
           {/* Conteúdo Principal com compensação de altura para barras mobile */}
           <main 
-            className="flex-1 p-4 pt-[76px] pb-[88px] lg:p-8 lg:pt-8 w-full max-w-5xl mx-auto"
+            className="flex-1 p-4 pb-[88px] lg:p-8 lg:pt-8 w-full max-w-5xl mx-auto"
             style={{
+              paddingTop: 'calc(76px + env(safe-area-inset-top, 0px))',
               paddingBottom: 'calc(80px + max(12px, env(safe-area-inset-bottom, 0px)))',
             }}
           >

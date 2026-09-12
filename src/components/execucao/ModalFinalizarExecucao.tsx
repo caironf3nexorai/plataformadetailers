@@ -75,7 +75,8 @@ interface ModalFinalizarExecucaoProps {
   placaVeiculo: string;
   tempoFormatado?: string;
   pendingRequiredCount: number;
-  pendingRequiredNames: string[];
+  pendingRequiredNames?: string[];
+  onMarcarTodosPendentes?: () => Promise<void>;
   agendamentoItens: Array<{ id: string; servico_nome: string; preco_aplicado?: number; preco_estimado?: number; valor_estimado?: number }>;
   fotosSaidaExistentes: ExecucaoFoto[];
   onSuccess: () => void;
@@ -99,6 +100,8 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   placaVeiculo,
   tempoFormatado: _tempoProp,
   pendingRequiredCount,
+  pendingRequiredNames = [],
+  onMarcarTodosPendentes,
   agendamentoItens,
   fotosSaidaExistentes: _fotosSaidaExistentes,
   onSuccess,
@@ -117,6 +120,42 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   const [observacoes] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [localPendingCount, setLocalPendingCount] = useState(pendingRequiredCount);
+  const [marcandoTodos, setMarcandoTodos] = useState(false);
+  const [ignorarPendencias, setIgnorarPendencias] = useState(false);
+  const [expandirPendentes, setExpandirPendentes] = useState(false);
+
+  useEffect(() => {
+    setLocalPendingCount(pendingRequiredCount);
+  }, [pendingRequiredCount]);
+
+  const handleMarcarTodosPendentes = async () => {
+    setMarcandoTodos(true);
+    setErrorMsg(null);
+    try {
+      if (onMarcarTodosPendentes) {
+        await onMarcarTodosPendentes();
+      } else if (execucaoId) {
+        const { error: updErr } = await supabase
+          .from('execucao_itens')
+          .update({
+            concluido: true,
+            concluido_em: new Date().toISOString(),
+          })
+          .eq('execucao_id', execucaoId)
+          .eq('obrigatorio', true)
+          .eq('concluido', false);
+        if (updErr) throw updErr;
+      }
+      setLocalPendingCount(0);
+    } catch (err: any) {
+      console.error('[handleMarcarTodosPendentes error]:', err);
+      setErrorMsg('Não foi possível marcar os itens pendentes automaticamente.');
+    } finally {
+      setMarcandoTodos(false);
+    }
+  };
 
   const [itensPreco, setItensPreco] = useState<ItemPreco[]>([]);
 
@@ -891,13 +930,59 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
           </div>
         </div>
 
-        {pendingRequiredCount > 0 && (
+        {localPendingCount > 0 && (
           <div className="p-4 bg-flare-400/10 border border-flare-400/30 rounded-lg flex flex-col gap-3 text-flare-400">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2 font-semibold text-[14px]">
                 <AlertTriangle size={18} className="shrink-0" />
-                <span>{pendingRequiredCount} item(ns) obrigatório(s) pendente(s)</span>
+                <span>{localPendingCount} item(ns) obrigatório(s) pendente(s)</span>
               </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {pendingRequiredNames && pendingRequiredNames.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setExpandirPendentes((prev) => !prev)}
+                    className="text-xs text-vapor-300 hover:text-vapor-100 underline decoration-dotted transition-colors"
+                  >
+                    {expandirPendentes ? 'Ocultar itens' : 'Ver quais são'}
+                  </button>
+                )}
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={marcandoTodos}
+                  onClick={handleMarcarTodosPendentes}
+                  className="text-xs h-7 px-2.5 bg-flare-400/20 hover:bg-flare-400/30 text-vapor-100 border-flare-400/40"
+                >
+                  {marcandoTodos ? 'Marcando...' : 'Marcar todos como feitos'}
+                </Button>
+              </div>
+            </div>
+
+            {expandirPendentes && pendingRequiredNames && pendingRequiredNames.length > 0 && (
+              <div className="text-[12px] bg-graphite-950/80 p-3 rounded-md border border-flare-400/20 flex flex-col gap-1 max-h-48 overflow-y-auto">
+                <span className="font-semibold text-vapor-200">Etapas pendentes:</span>
+                <ul className="list-disc list-inside space-y-1 text-vapor-300">
+                  {pendingRequiredNames.map((nome, idx) => (
+                    <li key={idx} className="leading-snug">{nome}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-flare-400/20 flex items-center justify-between">
+              <label className="flex items-center gap-2 text-[12.5px] text-vapor-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={ignorarPendencias}
+                  onChange={(e) => setIgnorarPendencias(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-500 bg-graphite-900 border-graphite-700 focus:ring-0 cursor-pointer"
+                />
+                <span>Liberar finalização sem preencher checklist obrigatório</span>
+              </label>
             </div>
           </div>
         )}
@@ -1337,7 +1422,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
             type="button"
             variant="primary"
             onClick={handleConcluir}
-            disabled={loading || (!modoDefinirValorOnly && pendingRequiredCount > 0) || (podeVerValor && saldoRestante > 0 && diferencaPagamentos > 0.01)}
+            disabled={loading || (!modoDefinirValorOnly && localPendingCount > 0 && !ignorarPendencias) || (podeVerValor && saldoRestante > 0 && diferencaPagamentos > 0.01)}
             className={`${podeVerValor && saldoRestante > 0 && diferencaPagamentos > 0.01 ? 'sm:w-1/2' : 'w-full'} min-h-[56px] text-[16px] font-bold tracking-wide uppercase shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
           >
             {loading ? 'Salvando...' : (

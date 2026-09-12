@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
@@ -16,7 +17,8 @@ import {
   Edit2,
   Shield,
   LogIn,
-  Award
+  Award,
+  Trash2
 } from 'lucide-react';
 
 interface TenantItem {
@@ -105,6 +107,58 @@ export const AdminOficinas: React.FC = () => {
   const [parceiroPixChave, setParceiroPixChave] = useState('');
   const [salvandoParceiro, setSalvandoParceiro] = useState(false);
 
+  // Estados para Modal de Exclusão de Oficina e Liberação de E-mail
+  const [modalExcluirOpen, setModalExcluirOpen] = useState(false);
+  const [tenantParaExcluir, setTenantParaExcluir] = useState<{ id: string; nome: string; slug: string } | null>(null);
+  const [excluirAuthUsers, setExcluirAuthUsers] = useState(true);
+  const [confirmacaoNome, setConfirmacaoNome] = useState('');
+  const [excluindoOficina, setExcluindoOficina] = useState(false);
+
+  const handleAbrirModalExcluir = (id: string, nome: string, slug: string) => {
+    setTenantParaExcluir({ id, nome, slug });
+    setConfirmacaoNome('');
+    setExcluirAuthUsers(true);
+    setModalExcluirOpen(true);
+  };
+
+  const handleConfirmarExclusao = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenantParaExcluir) return;
+
+    if (confirmacaoNome.trim().toLowerCase() !== tenantParaExcluir.nome.trim().toLowerCase()) {
+      showError(`Digite exatamente "${tenantParaExcluir.nome}" para confirmar.`);
+      return;
+    }
+
+    setExcluindoOficina(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_excluir_oficina_e_usuario', {
+        p_tenant_id: tenantParaExcluir.id,
+        p_excluir_auth_users: excluirAuthUsers,
+      });
+
+      if (error) throw error;
+
+      const emailsMsg = data?.emails_liberados?.length 
+        ? ` E-mails liberados: ${data.emails_liberados.join(', ')}`
+        : '';
+      showSuccess(`Oficina "${tenantParaExcluir.nome}" excluída com sucesso!${emailsMsg}`);
+      
+      setModalExcluirOpen(false);
+      setTenantParaExcluir(null);
+      if (selectedTenantId === tenantParaExcluir.id) {
+        setSelectedTenantId(null);
+        setDetailData(null);
+      }
+      fetchTenants();
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao excluir oficina:', err);
+      showError('Erro ao excluir oficina', err);
+    } finally {
+      setExcluindoOficina(false);
+    }
+  };
+
   const fetchTenants = async () => {
     try {
       setLoading(true);
@@ -178,7 +232,7 @@ export const AdminOficinas: React.FC = () => {
       setModalAdminTarget(null);
     } catch (err: any) {
       console.error('[AdminOficinas] Erro ao promover administrador:', err);
-      showError(err.message || 'Erro ao promover usuário a administrador');
+      showError('Erro ao promover usuário a administrador', err);
     } finally {
       setSalvandoAdmin(false);
     }
@@ -226,7 +280,7 @@ export const AdminOficinas: React.FC = () => {
       setModalParceiroTarget(null);
     } catch (err: any) {
       console.error('[AdminOficinas] Erro ao cadastrar parceiro:', err);
-      showError(err.message || 'Erro ao cadastrar parceiro comercial');
+      showError('Erro ao cadastrar parceiro comercial', err);
     } finally {
       setSalvandoParceiro(false);
     }
@@ -270,7 +324,7 @@ export const AdminOficinas: React.FC = () => {
       }
     } catch (err: any) {
       console.error('[AdminOficinas] Erro ao alterar plano:', err);
-      showError(err.message || 'Erro ao alterar plano da oficina');
+      showError('Erro ao alterar plano da oficina', err);
     } finally {
       setSalvandoPlano(false);
     }
@@ -439,10 +493,19 @@ export const AdminOficinas: React.FC = () => {
 
                         <button
                           onClick={() => handleOpenDetail(t.id)}
-                          className="inline-flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded text-xs font-medium border border-slate-700 transition"
+                          className="inline-flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded text-xs font-medium border border-slate-700 transition cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Detalhes</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
+                          className="inline-flex items-center space-x-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-2.5 py-1 rounded text-xs font-medium border border-red-500/30 transition cursor-pointer"
+                          title="Excluir oficina e liberar e-mail"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Excluir</span>
                         </button>
                       </td>
                     </tr>
@@ -520,9 +583,18 @@ export const AdminOficinas: React.FC = () => {
 
                       <button
                         onClick={() => handleOpenDetail(t.id)}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs font-semibold border border-slate-700"
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs font-semibold border border-slate-700 cursor-pointer"
                       >
                         Detalhes
+                      </button>
+
+                      <button
+                        onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
+                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-medium border border-red-500/30 flex items-center space-x-1 cursor-pointer"
+                        title="Excluir oficina"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Excluir</span>
                       </button>
                     </div>
                   </div>
@@ -534,8 +606,8 @@ export const AdminOficinas: React.FC = () => {
       )}
 
       {/* Detail Drawer Modal */}
-      {selectedTenantId && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex justify-end">
+      {selectedTenantId && createPortal(
+        <div className="fixed inset-0 z-[90] bg-slate-950/80 backdrop-blur-sm flex justify-end">
           <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl h-full flex flex-col p-6 overflow-y-auto shadow-2xl animate-in slide-in-from-right duration-200">
             
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
@@ -699,16 +771,35 @@ export const AdminOficinas: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Zona de Perigo / Exclusão */}
+                <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center space-x-2 text-red-400">
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider">Zona de Exclusão de Oficina</h4>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Deseja apagar esta oficina de testes e liberar o e-mail do proprietário para testar um novo cadastro com link de parceiro/afiliado?
+                  </p>
+                  <button
+                    onClick={() => handleAbrirModalExcluir(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.slug)}
+                    className="inline-flex items-center space-x-2 bg-red-600 hover:bg-red-500 text-white font-bold px-3.5 py-2 rounded-lg text-xs uppercase tracking-wider transition cursor-pointer shadow"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>Excluir Oficina & Liberar E-mails</span>
+                  </button>
+                </div>
+
               </div>
             ) : null}
 
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal de Alteração Manual de Plano */}
-      {modalPlanoOpen && targetTenant && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      {modalPlanoOpen && targetTenant && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
@@ -760,12 +851,13 @@ export const AdminOficinas: React.FC = () => {
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Promover a Administrador */}
-      {modalAdminTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      {modalAdminTarget && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
@@ -817,12 +909,13 @@ export const AdminOficinas: React.FC = () => {
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Tornar Parceiro Comercial */}
-      {modalParceiroTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      {modalParceiroTarget && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
@@ -910,7 +1003,97 @@ export const AdminOficinas: React.FC = () => {
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Exclusão Definitiva */}
+      {modalExcluirOpen && tenantParaExcluir && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-900/50 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5 text-red-400">
+                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <Trash2 className="w-5 h-5 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm">
+                    Excluir Oficina Definitivamente
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Ação irreversível de limpeza</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setModalExcluirOpen(false); setTenantParaExcluir(null); }} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 bg-red-950/30 border border-red-500/30 rounded-xl space-y-2 text-xs">
+              <p className="font-bold text-red-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                Atenção: Esta ação não pode ser desfeita!
+              </p>
+              <ul className="list-disc list-inside text-slate-300 space-y-1 pl-1">
+                <li>Todos os dados da oficina (<strong className="text-white">{tenantParaExcluir.nome}</strong>) serão apagados: clientes, veículos, agendamentos, serviços, financeiro e histórico.</li>
+                <li>Se a opção abaixo estiver marcada, o usuário de login (<strong className="text-white">auth.users</strong>) será removido, liberando o e-mail para se cadastrar novamente do zero.</li>
+              </ul>
+            </div>
+
+            <form onSubmit={handleConfirmarExclusao} className="flex flex-col gap-4">
+              <label className="flex items-start gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition">
+                <input
+                  type="checkbox"
+                  checked={excluirAuthUsers}
+                  onChange={(e) => setExcluirAuthUsers(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 rounded bg-slate-900 border-slate-700 text-red-600 focus:ring-0 cursor-pointer"
+                />
+                <div className="text-xs">
+                  <span className="font-bold text-slate-200 block">Excluir usuário do login e liberar o e-mail</span>
+                  <span className="text-slate-400 text-[11px] block mt-0.5">
+                    Permite usar o mesmo e-mail imediatamente para testar o cadastro através do link de parceiro/afiliado.
+                  </span>
+                </div>
+              </label>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-slate-300">
+                  Para confirmar, digite o nome da oficina: <span className="text-red-400 select-all font-bold">"{tenantParaExcluir.nome}"</span>
+                </label>
+                <input
+                  type="text"
+                  value={confirmacaoNome}
+                  onChange={(e) => setConfirmacaoNome(e.target.value)}
+                  placeholder={`Digite "${tenantParaExcluir.nome}"`}
+                  autoFocus
+                  className="p-3 bg-slate-950 border border-slate-800 focus:border-red-500 rounded-xl text-xs text-white font-medium outline-none transition"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setModalExcluirOpen(false); setTenantParaExcluir(null); }}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={excluindoOficina || confirmacaoNome.trim().toLowerCase() !== tenantParaExcluir.nome.trim().toLowerCase()}
+                  className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-red-950/50 flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>{excluindoOficina ? 'Excluindo...' : 'Excluir Definitivamente'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

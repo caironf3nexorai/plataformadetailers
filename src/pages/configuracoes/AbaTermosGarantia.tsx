@@ -18,7 +18,10 @@ import {
   Copy,
   FileText,
   RotateCcw,
+  Scale,
+  BookOpen,
 } from 'lucide-react';
+import { ModalBibliotecaTermos } from '../../components/termos/ModalBibliotecaTermos';
 import type {
   TermoGarantia,
   TipoTermoGarantia,
@@ -46,6 +49,19 @@ export const AbaTermosGarantia: React.FC = () => {
   const [conteudo, setConteudo] = useState<string>('');
   const [padrao, setPadrao] = useState<boolean>(false);
   const [saving, setSaving] = useState<boolean>(false);
+
+  // Modal da Biblioteca de Modelos Jurídicos da Plataforma
+  const [modalBibliotecaOpen, setModalBibliotecaOpen] = useState<boolean>(false);
+
+  const handleModeloAplicado = async (categoria: 'responsabilidade' | 'garantia', conteudo: string) => {
+    if (categoria === 'responsabilidade') {
+      setTermoResponsabilidade(conteudo);
+      if (tenant?.id) {
+        localStorage.setItem(`termo_responsabilidade_${tenant.id}`, conteudo);
+      }
+    }
+    await carregarTermos();
+  };
 
   // Carregar termos do tenant
   const carregarTermos = async () => {
@@ -268,6 +284,38 @@ export const AbaTermosGarantia: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 max-w-5xl">
+      {/* BANNER BIBLIOTECA DE MODELOS JURÍDICOS DA PLATAFORMA */}
+      <div className="bg-gradient-to-r from-amber-500/15 via-graphite-900 to-graphite-900 border border-amber-500/30 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-amber-500/5">
+        <div className="flex items-center gap-3.5">
+          <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30 shrink-0">
+            <Scale size={26} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-display text-sm sm:text-base font-bold text-vapor-100 uppercase tracking-wide">
+                Biblioteca de Modelos Jurídicos
+              </h3>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                SUGESTÕES PRONTAS
+              </span>
+            </div>
+            <p className="font-sans text-xs text-vapor-300 mt-1 max-w-2xl leading-relaxed">
+              Não sabe como redigir termos que resguardem sua oficina? Acesse nossa biblioteca com modelos prontos e revisados de responsabilidade, falhas ocultas e garantias específicas. Baixe em Word/PDF ou aplique diretamente em 1 clique!
+            </p>
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() => setModalBibliotecaOpen(true)}
+          className="shrink-0 text-xs font-bold h-10 px-4 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md hover:opacity-95"
+        >
+          <BookOpen size={15} />
+          <span>Explorar Modelos Prontos</span>
+        </Button>
+      </div>
+
       {/* 1. TERMO FIXO DE RESPONSABILIDADE & FALHAS OCULTAS DA OFICINA */}
       <div className="bg-graphite-900 border border-graphite-700 rounded-xl p-5 flex flex-col gap-4 shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -294,9 +342,20 @@ export const AbaTermosGarantia: React.FC = () => {
             <Button
               type="button"
               variant="secondary"
+              onClick={() => setModalBibliotecaOpen(true)}
+              className="text-xs h-9 px-3 text-amber-400 hover:text-amber-300 border-amber-500/30"
+              title="Ver modelos sugeridos na biblioteca"
+            >
+              <Scale size={13} className="mr-1.5" />
+              <span>Ver Sugestões</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
               onClick={handleRestaurarPadraoResponsabilidade}
               className="text-xs h-9 px-3 text-vapor-300 hover:text-vapor-100"
-              title="Restaurar o modelo jurídico recomendado"
+              title="Restaurar o modelo jurídico padrão inicial"
             >
               <RotateCcw size={13} className="mr-1.5" />
               <span>Restaurar Padrão</span>
@@ -355,15 +414,28 @@ export const AbaTermosGarantia: React.FC = () => {
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="primary"
-          onClick={() => handleNovoTermo('polimento')}
-          className="shrink-0 min-h-[44px] px-4 font-bold text-xs flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md"
-        >
-          <Plus size={16} />
-          <span>Novo Termo de Garantia</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setModalBibliotecaOpen(true)}
+            className="text-xs font-semibold h-10 px-3 flex items-center gap-1.5 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10"
+            title="Explorar biblioteca de termos da plataforma"
+          >
+            <BookOpen size={14} />
+            <span>Biblioteca de Modelos</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => handleNovoTermo('polimento')}
+            className="min-h-[40px] px-4 font-bold text-xs flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md"
+          >
+            <Plus size={16} />
+            <span>Novo Termo de Garantia</span>
+          </Button>
+        </div>
       </div>
 
       {/* Categorias Rápidas de Modelos (Templates Prontos) */}
@@ -633,6 +705,13 @@ export const AbaTermosGarantia: React.FC = () => {
         textoCancelar="Cancelar"
         variant="danger"
         loading={excluindoTermo}
+      />
+
+      {/* Modal da Biblioteca de Modelos Jurídicos da Plataforma */}
+      <ModalBibliotecaTermos
+        isOpen={modalBibliotecaOpen}
+        onClose={() => setModalBibliotecaOpen(false)}
+        onModeloAplicado={handleModeloAplicado}
       />
     </div>
   );

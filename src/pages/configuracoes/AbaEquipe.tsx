@@ -22,8 +22,11 @@ import {
   ShieldCheck,
   Lock,
   Trash2,
+  Trophy,
+  Users,
 } from 'lucide-react';
 import { gerarId } from '../../utils/uuid';
+import { PainelRankingEquipe } from '../../components/equipe/PainelRankingEquipe';
 
 export const AbaEquipe: React.FC = () => {
   const { tenant } = useAuth();
@@ -33,6 +36,7 @@ export const AbaEquipe: React.FC = () => {
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [comissaoMap, setComissaoMap] = useState<Record<string, ComissaoRegra[]>>({});
   const [loading, setLoading] = useState(true);
+  const [subAba, setSubAba] = useState<'ranking' | 'membros'>('ranking');
 
   // Modal Convidar
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -213,8 +217,44 @@ export const AbaEquipe: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header com indicador de uso do plano */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-graphite-800 border border-graphite-600 rounded-lg">
+      {/* Sub-abas: Ranking & Gamificação vs Membros & Cargos */}
+      <div className="flex items-center gap-2 border-b border-graphite-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setSubAba('ranking')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            subAba === 'ranking'
+              ? 'bg-amber-500 text-graphite-950 shadow-md shadow-amber-500/10'
+              : 'text-vapor-400 hover:text-vapor-200 hover:bg-graphite-800'
+          }`}
+        >
+          <Trophy size={15} />
+          <span>Ranking & Gamificação</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded font-black tracking-wider bg-graphite-950 text-amber-400 border border-amber-500/40">
+            PÓDIO
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubAba('membros')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            subAba === 'membros'
+              ? 'bg-amber-500 text-graphite-950 shadow-md shadow-amber-500/10'
+              : 'text-vapor-400 hover:text-vapor-200 hover:bg-graphite-800'
+          }`}
+        >
+          <Users size={15} />
+          <span>Membros & Cargos ({members.length})</span>
+        </button>
+      </div>
+
+      {subAba === 'ranking' ? (
+        <PainelRankingEquipe />
+      ) : (
+        <>
+          {/* Header com indicador de uso do plano */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-graphite-800 border border-graphite-600 rounded-lg">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
@@ -347,6 +387,8 @@ export const AbaEquipe: React.FC = () => {
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* MODAL CUSTOMIZADO: REMOVER OU INATIVAR MEMBRO */}

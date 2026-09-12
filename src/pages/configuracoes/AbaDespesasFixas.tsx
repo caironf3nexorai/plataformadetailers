@@ -25,6 +25,7 @@ import {
   Info,
   MoreVertical,
 } from 'lucide-react';
+import { traduzirErro } from '../../utils/erros';
 
 const SUGESTOES = [
   { nome: 'Aluguel', categoria: 'Instalacao' as CategoriaDespesa, tipo: 'recorrente' as TipoDespesa },
@@ -63,7 +64,7 @@ const traduzirErroDespesa = (errMessage: string): string => {
   ) {
     return 'Já existe uma despesa com este nome vigente neste período.';
   }
-  return errMessage;
+  return traduzirErro(errMessage).mensagem;
 };
 
 export const AbaDespesasFixas: React.FC = () => {

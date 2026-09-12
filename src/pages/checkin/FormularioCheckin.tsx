@@ -188,7 +188,8 @@ export const FormularioCheckin: React.FC = () => {
       setError(null);
 
       // 1. Buscar dados do agendamento
-      const { data: agData, error: agErr } = await supabase
+      let agData: any = null;
+      const { data: agDataFull, error: agErr } = await supabase
         .from('agendamentos')
         .select(`
           id,
@@ -202,9 +203,30 @@ export const FormularioCheckin: React.FC = () => {
           servico:servicos(id, nome)
         `)
         .eq('id', agendamentoId)
-        .single();
+        .maybeSingle();
 
-      if (agErr || !agData) throw new Error('Agendamento não encontrado.');
+      if (agErr || !agDataFull) {
+        // Fallback resiliente com campos essenciais caso alguma coluna/relação opcional gere falha
+        const { data: agDataFallback, error: fallbackErr } = await supabase
+          .from('agendamentos')
+          .select(`
+            id,
+            inicio,
+            status,
+            cliente:clientes(id, nome, telefone),
+            veiculo:veiculos(id, modelo, placa, cor, marca)
+          `)
+          .eq('id', agendamentoId)
+          .maybeSingle();
+
+        if (fallbackErr || !agDataFallback) {
+          console.error('[FormularioCheckin] Erro ao carregar agendamento:', agErr || fallbackErr);
+          throw new Error('Agendamento não encontrado.');
+        }
+        agData = agDataFallback;
+      } else {
+        agData = agDataFull;
+      }
       setAgendamento(agData);
       setVeiculoCor((agData.veiculo as any)?.cor || '');
       setAssinaturaNome((agData.cliente as any)?.nome || '');

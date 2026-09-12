@@ -115,8 +115,61 @@ serve(async (req) => {
           })
           .eq('tenant_id', tenantId);
       }
-    } else if (['SUBSCRIPTION_DELETED', 'PAYMENT_REFUNDED'].includes(event)) {
+    } else if (['PAYMENT_REFUNDED', 'PAYMENT_CHARGEBACK_REQUESTED'].includes(event)) {
       if (tenantId) {
+        // 1. Rebaixa a oficina imediatamente para o plano free
+        await supabase
+          .from('tenants')
+          .update({
+            plano: 'free',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', tenantId);
+
+        // 2. Marca a assinatura como cancelada
+        await supabase
+          .from('assinaturas')
+          .update({
+            status: 'cancelada',
+            plano: 'free',
+            cancelada_em: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('tenant_id', tenantId);
+
+        // 3. Cancela comissões de parceiro pendentes ou aprovadas (não pagas) relativas a essa oficina
+        await supabase
+          .from('parceiro_comissoes')
+          .update({
+            status: 'cancelada',
+            observacao: `Cancelada automaticamente por estorno do pagamento no Asaas (${event}) em ${hoje}`,
+          })
+          .eq('tenant_id', tenantId)
+          .in('status', ['prevista', 'aprovada']);
+
+        // 4. Auditoria do estorno
+        await supabase.from('admin_auditoria').insert({
+          admin_user_id: '00000000-0000-0000-0000-000000000000',
+          acao: 'estorno_pagamento_asaas',
+          entidade: 'tenants',
+          entidade_id: tenantId,
+          valor_anterior: { evento: event, paymentId: payment?.id },
+          valor_novo: { plano: 'free', status: 'cancelada', comissao_parceiro: 'cancelada' },
+        });
+      }
+    } else if (event === 'SUBSCRIPTION_DELETED') {
+      if (tenantId) {
+        // Obter assinatura para verificar se ainda está dentro do período pago
+        const { data: ass } = await supabase
+          .from('assinaturas')
+          .select('proximo_vencimento')
+          .eq('tenant_id', tenantId)
+          .maybeSingle();
+
+        const vencimento = ass?.proximo_vencimento;
+        const aindaDentroDoCicloPago = vencimento && vencimento >= hoje;
+
+        // Atualizar status da assinatura para cancelada (não renovará)
         await supabase
           .from('assinaturas')
           .update({
@@ -125,6 +178,17 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           })
           .eq('tenant_id', tenantId);
+
+        // Se NÃO estiver dentro de um ciclo já pago, rebaixa para free imediatamente
+        if (!aindaDentroDoCicloPago) {
+          await supabase
+            .from('tenants')
+            .update({
+              plano: 'free',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', tenantId);
+        }
       }
     }
 

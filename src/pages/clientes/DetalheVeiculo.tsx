@@ -23,7 +23,9 @@ import {
   Package,
   Calendar,
   Palette,
+  ShieldCheck,
 } from 'lucide-react';
+import { GarantiasClienteVeiculo, type GarantiaItem } from '../../components/clientes/GarantiasClienteVeiculo';
 
 import { formatarData } from '../../utils/datas';
 
@@ -39,6 +41,7 @@ export const DetalheVeiculo: React.FC = () => {
   const [historicoConsumo, setHistoricoConsumo] = useState<HistoricoConsumoItem[]>([]);
   const [clienteAtual, setClienteAtual] = useState<Cliente | null>(null);
   const [loading, setLoading] = useState(true);
+  const [garantiaAtivaPrincipal, setGarantiaAtivaPrincipal] = useState<GarantiaItem | null>(null);
 
   // Form de edição do veículo
   const [marca, setMarca] = useState('');
@@ -239,6 +242,12 @@ export const DetalheVeiculo: React.FC = () => {
                 {veiculo.categoria.nome}
               </Badge>
             )}
+            {garantiaAtivaPrincipal && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/15 border border-amber-500/40 rounded-full text-amber-400 font-sans text-[12px] font-bold uppercase tracking-wider">
+                <ShieldCheck size={14} className="text-amber-400" />
+                Protegido ({garantiaAtivaPrincipal.servico_nome})
+              </span>
+            )}
             {veiculo.cor ? (
               <span className="font-mono text-[13px] px-2.5 py-1 bg-graphite-900 border border-graphite-700 rounded text-vapor-200 font-semibold flex items-center gap-1.5">
                 <Palette size={14} className="text-amber-400" />
@@ -432,6 +441,20 @@ export const DetalheVeiculo: React.FC = () => {
           </div>
         )}
       </Card>
+
+      {/* Garantias & Proteções Ativas */}
+      <div className="mt-2">
+        <GarantiasClienteVeiculo
+          veiculoId={veiculo.id}
+          modo="veiculo"
+          onGarantiasCarregadas={(lista) => {
+            const ativa = lista.find(
+              (g) => g.statusCalculado === 'ativo' || g.statusCalculado === 'revisao_proxima' || g.statusCalculado === 'revisao_pendente'
+            );
+            setGarantiaAtivaPrincipal(ativa || null);
+          }}
+        />
+      </div>
 
       {/* Histórico de Serviços Executados neste Veículo */}
       <div>

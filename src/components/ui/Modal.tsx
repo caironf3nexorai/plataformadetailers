@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Card } from './Card';
 import { X } from 'lucide-react';
 
@@ -44,6 +45,7 @@ export const Modal: React.FC<ModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
   const maxWidthClasses = {
     sm: 'max-w-sm',
@@ -55,9 +57,9 @@ export const Modal: React.FC<ModalProps> = ({
     '4xl': 'max-w-4xl',
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 md:p-8 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 md:p-8 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -107,6 +109,7 @@ export const Modal: React.FC<ModalProps> = ({
           </div>
         )}
       </Card>
-    </div>
+    </div>,
+    document.body
   );
 };

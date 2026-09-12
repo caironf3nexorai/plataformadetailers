@@ -21,9 +21,10 @@ import { AbaMetaMensal } from './configuracoes/AbaMetaMensal';
 import { AbaFeedbacks } from './configuracoes/AbaFeedbacks';
 import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, Calendar, FileText, Target, MessageSquare, ShieldCheck } from 'lucide-react';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
+import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
 
 interface ConfiguracoesProps {
   abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos';
@@ -159,6 +160,31 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
   const [savingSlug, setSavingSlug] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugSuccess, setSlugSuccess] = useState<string | null>(null);
+  const [downloadingQr, setDownloadingQr] = useState(false);
+  const [showPlacaBalcaoModal, setShowPlacaBalcaoModal] = useState(false);
+
+  const handleBaixarQrCode = async () => {
+    if (!tenant?.slug) return;
+    try {
+      setDownloadingQr(true);
+      const urlDestino = `${window.location.origin}/agendar/${tenant.slug}`;
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=800x800&data=${encodeURIComponent(urlDestino)}&margin=15&format=png`;
+      const response = await fetch(qrApiUrl);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `qrcode-vitrine-${tenant.slug}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Erro ao baixar QR Code:', err);
+    } finally {
+      setDownloadingQr(false);
+    }
+  };
 
   useEffect(() => {
     if (tenant?.slug) {
@@ -400,7 +426,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           ...(isDono ? [{ id: 'categorias', label: 'Categorias', icon: Tag }] : []),
           ...((isDono || podeGerirEquipe()) ? [{ id: 'checklists', label: 'Checklists', icon: CheckSquare }] : []),
           ...(isDono ? [{ id: 'despesas', label: 'Despesas Fixas', icon: DollarSign }] : []),
-          ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online', icon: Calendar }] : []),
+          ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online & Vitrine', icon: Globe }] : []),
           { id: 'plano', label: 'Plano e Limites', icon: CreditCard },
           ...((isDono || podeGerirServicos()) ? [{ id: 'pdf', label: 'Documentos PDF', icon: FileText }] : []),
           ...((isDono || podeGerirServicos()) ? [{ id: 'termos', label: 'Termos de Garantia', icon: ShieldCheck }] : []),
@@ -885,6 +911,48 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                 </a>
               )}
             </div>
+
+            {tenant?.slug && (
+              <div className="pt-4 border-t border-graphite-700 flex flex-col sm:flex-row items-center gap-4 bg-graphite-900/60 p-4 rounded-lg border border-graphite-700/60">
+                <div className="bg-white p-2 rounded-md shadow-inner flex items-center justify-center shrink-0">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(`${window.location.origin}/agendar/${tenant.slug}`)}&margin=4`}
+                    alt="QR Code da Vitrine"
+                    className="w-20 h-20"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 flex-1 text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-1.5 font-display text-[13px] text-vapor-100 uppercase tracking-wide">
+                    <QrCode size={16} className="text-amber-400" />
+                    <span>QR Code de Balcão (Recepção)</span>
+                  </div>
+                  <p className="text-[12px] text-vapor-400">
+                    Imprima ou baixe para colocar no balcão da sua estética. O cliente aponta a câmera e acessa seus serviços e agendamento imediatamente!
+                  </p>
+                  <div className="pt-1 flex flex-wrap gap-2 justify-center sm:justify-start">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      onClick={() => setShowPlacaBalcaoModal(true)}
+                      className="text-[12px] py-1.5 px-3.5 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-graphite-950 font-semibold shadow-md shadow-amber-500/10"
+                    >
+                      <Sparkles size={14} className="text-graphite-950" />
+                      <span>Gerar Placa de Balcão (Display de Mesa)</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={handleBaixarQrCode}
+                      disabled={downloadingQr}
+                      className="text-[12px] py-1.5 px-3 flex items-center justify-center gap-2 w-full sm:w-auto"
+                    >
+                      <Download size={14} />
+                      <span>{downloadingQr ? 'Baixando...' : 'Apenas QR Code PNG'}</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       )}
@@ -970,6 +1038,21 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           </Link>
         </div>
       </div>
+
+      {tenant && tenant.slug && (
+        <ModalPlacaBalcao
+          isOpen={showPlacaBalcaoModal}
+          onClose={() => setShowPlacaBalcaoModal(false)}
+          oficina={{
+            nome: tenant.nome,
+            slug: tenant.slug,
+            logo_path: tenant.logo_path,
+            telefone: tenant.telefone,
+            cidade: tenant.cidade,
+            estado: tenant.uf || ''
+          }}
+        />
+      )}
     </div>
   );
 };

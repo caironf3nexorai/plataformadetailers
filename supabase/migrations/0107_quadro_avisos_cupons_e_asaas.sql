@@ -468,7 +468,9 @@ DECLARE
   v_tenant_id UUID;
   v_plano TEXT := 'free';
   v_comunicado RECORD;
-  v_cupom RECORD;
+  v_cupom_codigo TEXT := NULL;
+  v_cupom_desconto_tipo TEXT := NULL;
+  v_cupom_desconto_valor NUMERIC := NULL;
 BEGIN
   v_tenant_id := (SELECT public.meus_tenants() LIMIT 1);
   IF v_tenant_id IS NULL THEN
@@ -498,7 +500,8 @@ BEGIN
 
   -- Se tiver cupom associado, traz os dados do cupom
   IF v_comunicado.cupom_id IS NOT NULL THEN
-    SELECT codigo, desconto_tipo, desconto_valor INTO v_cupom
+    SELECT codigo, desconto_tipo, desconto_valor 
+    INTO v_cupom_codigo, v_cupom_desconto_tipo, v_cupom_desconto_valor
     FROM public.plataforma_cupons WHERE id = v_comunicado.cupom_id;
   END IF;
 
@@ -514,9 +517,9 @@ BEGIN
     'acao_label', v_comunicado.acao_label,
     'acao_link', v_comunicado.acao_link,
     'dias_bonus', v_comunicado.dias_bonus,
-    'cupom_codigo', v_cupom.codigo,
-    'cupom_desconto_tipo', v_cupom.desconto_tipo,
-    'cupom_desconto_valor', v_cupom.desconto_valor,
+    'cupom_codigo', v_cupom_codigo,
+    'cupom_desconto_tipo', v_cupom_desconto_tipo,
+    'cupom_desconto_valor', v_cupom_desconto_valor,
     'obrigatorio', v_comunicado.obrigatorio,
     'acao_payload', v_comunicado.acao_payload
   );
@@ -569,7 +572,7 @@ DECLARE
   v_dias INTEGER := 0;
   v_novo_vencimento DATE;
   v_novo_trial_fim DATE;
-  v_cupom RECORD;
+  v_cupom_codigo TEXT := NULL;
 BEGIN
   v_tenant_id := (SELECT public.meus_tenants() LIMIT 1);
   IF v_tenant_id IS NULL THEN
@@ -619,7 +622,7 @@ BEGIN
 
   -- 2. Se for cupom associado
   IF v_comunicado.cupom_id IS NOT NULL THEN
-    SELECT codigo INTO v_cupom FROM public.plataforma_cupons WHERE id = v_comunicado.cupom_id;
+    SELECT codigo INTO v_cupom_codigo FROM public.plataforma_cupons WHERE id = v_comunicado.cupom_id;
   END IF;
 
   -- 3. Registra / atualiza leitura como resgatada
@@ -627,20 +630,20 @@ BEGIN
     comunicado_id, tenant_id, user_id, visualizado_em, resgatado, resgatado_em, resgate_info
   ) VALUES (
     p_comunicado_id, v_tenant_id, auth.uid(), now(), true, now(),
-    jsonb_build_object('dias_creditados', v_dias, 'cupom', v_cupom.codigo)
+    jsonb_build_object('dias_creditados', v_dias, 'cupom', v_cupom_codigo)
   )
   ON CONFLICT (comunicado_id, tenant_id) DO UPDATE SET
     resgatado = true,
     resgatado_em = now(),
-    resgate_info = jsonb_build_object('dias_creditados', v_dias, 'cupom', v_cupom.codigo);
+    resgate_info = jsonb_build_object('dias_creditados', v_dias, 'cupom', v_cupom_codigo);
 
   RETURN jsonb_build_object(
     'sucesso', true,
     'dias_bonus', v_dias,
-    'cupom_codigo', v_cupom.codigo,
+    'cupom_codigo', v_cupom_codigo,
     'mensagem', CASE 
       WHEN v_dias > 0 THEN format('Parabéns! %s dias bônus foram creditados com sucesso na sua conta!', v_dias)
-      WHEN v_cupom.codigo IS NOT NULL THEN format('Cupom %s resgatado com sucesso!', v_cupom.codigo)
+      WHEN v_cupom_codigo IS NOT NULL THEN format('Cupom %s resgatado com sucesso!', v_cupom_codigo)
       ELSE 'Brinde resgatado com sucesso!'
     END
   );

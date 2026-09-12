@@ -1,23 +1,19 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Ticket, 
   Plus, 
   Search, 
-  Filter, 
   CheckCircle2, 
-  XCircle, 
   Copy, 
   Edit3, 
   Trash2, 
   Sparkles, 
   DollarSign, 
   Users, 
-  Percent, 
-  Calendar, 
   X, 
   Check,
-  RefreshCw,
-  Building
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
@@ -68,6 +64,18 @@ export const AdminCupons: React.FC = () => {
   const [parceiroId, setParceiroId] = useState<string>('');
   const [validoAte, setValidoAte] = useState<string>('');
   const [ativo, setAtivo] = useState(true);
+
+  // Previne rolagem da página de fundo enquanto o modal estiver aberto
+  useEffect(() => {
+    if (modalAberto) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [modalAberto]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -533,9 +541,9 @@ export const AdminCupons: React.FC = () => {
       )}
 
       {/* Modal de Criação / Edição */}
-      {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative my-8">
+      {modalAberto && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative my-auto max-h-[90vh] overflow-y-auto overflow-x-hidden">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
               <div className="flex items-center space-x-2">
                 <Ticket className="w-5 h-5 text-amber-400" />
@@ -763,7 +771,8 @@ export const AdminCupons: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

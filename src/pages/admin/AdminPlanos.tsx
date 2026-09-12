@@ -58,6 +58,7 @@ export const AdminPlanos: React.FC = () => {
     { chave: 'servicos', nome: 'Serviços / Produtos no Catálogo', grupo: 'Catálogo' },
     { chave: 'retencao_fotos_execucao_dias', nome: 'Retenção de Fotos (Dias)', grupo: 'Armazenamento' },
     { chave: 'atendimentos_preservados_limite', nome: 'Atendimentos Preservados (Cota Fotos)', grupo: 'Armazenamento' },
+    { chave: 'notas_fiscais_mes', nome: 'Notas Fiscais Emitidas / Mês (Focus NFS-e)', grupo: 'Fiscal & Financeiro' },
   ];
 
   const fetchDadosCompletos = async () => {

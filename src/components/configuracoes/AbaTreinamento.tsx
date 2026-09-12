@@ -14,6 +14,7 @@ import {
   Tv
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
+import { useAuth } from '../../contexts/AuthContext';
 import { getEmbedUrl } from '../../utils/videoExtractor';
 
 interface TreinamentoItem {
@@ -33,12 +34,21 @@ interface TreinamentoItem {
 }
 
 export const AbaTreinamento: React.FC = () => {
-  const { temFeature, nomePlano } = usePlano();
+  const { temFeature, nomePlano, planoAtual: planoHook } = usePlano();
+  const { tenant } = useAuth();
   const podeAcessarTreinamentos = temFeature('treinamentos');
   const [treinamentos, setTreinamentos] = useState<TreinamentoItem[]>([]);
-  const [planoAtual, setPlanoAtual] = useState<string>('free');
+  const userPlanoInicial = tenant?.plano || planoHook || 'free';
+  const [planoAtual, setPlanoAtual] = useState<string>(userPlanoInicial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Sincroniza planoAtual quando o tenant for carregado pelo AuthContext
+  useEffect(() => {
+    if (tenant?.plano || planoHook) {
+      setPlanoAtual(tenant?.plano || planoHook || 'free');
+    }
+  }, [tenant?.plano, planoHook]);
 
   // Player ativo
   const [activeVideo, setActiveVideo] = useState<TreinamentoItem | null>(null);
@@ -49,25 +59,50 @@ export const AbaTreinamento: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      const currentPlano = tenant?.plano || planoHook || 'free';
+      setPlanoAtual(currentPlano);
+
       // 1. Tenta obter via RPC
       const { data, error: rpcErr } = await supabase.rpc('obter_treinamentos_assinante');
       
       if (!rpcErr && data) {
-        setPlanoAtual(data.plano_atual || 'free');
-        setTreinamentos(data.treinamentos || []);
+        // Suporta se a RPC retornar array direto [...] ou objeto { plano_atual, treinamentos }
+        const listaBruta: any[] = Array.isArray(data)
+          ? data
+          : (Array.isArray(data.treinamentos) ? data.treinamentos : []);
+        
+        const rpcPlano = (!Array.isArray(data) && data.plano_atual) ? data.plano_atual : null;
+        const planoFinal = currentPlano !== 'free' ? currentPlano : (rpcPlano || 'free');
+        setPlanoAtual(planoFinal);
+
+        // Processa a disponibilidade com base no plano atual do tenant
+        const processados: TreinamentoItem[] = listaBruta.map((t: any) => {
+          const planosPerm: string[] = Array.isArray(t.planos_permitidos) ? t.planos_permitidos : ['free', 'pro', 'studio'];
+          const disponivel = planosPerm.length === 0 || planosPerm.includes(planoFinal);
+
+          return {
+            id: t.id,
+            titulo: t.titulo,
+            descricao: t.descricao,
+            url: t.url,
+            plataforma: t.plataforma || 'youtube',
+            video_id: t.video_id,
+            categoria: t.categoria || 'Geral',
+            duracao_minutos: t.duracao_minutos || 0,
+            ordem: t.ordem || 0,
+            essencial: !!t.essencial,
+            planos_permitidos: planosPerm,
+            disponivel_no_plano_atual: t.disponivel_no_plano_atual !== undefined ? t.disponivel_no_plano_atual : disponivel,
+            concluido: !!t.concluido
+          };
+        });
+
+        setTreinamentos(processados);
         return;
       }
 
-      // 2. Fallback direto via tabelas se a RPC não existir no DB
+      // 2. Fallback direto via tabelas se a RPC não responder
       console.warn('[AbaTreinamento] RPC falhou ou não existe, realizando consulta direta:', rpcErr?.message);
-
-      const { data: tenantData } = await supabase
-        .from('tenants')
-        .select('id, plano')
-        .single();
-      
-      const userPlano = tenantData?.plano || 'free';
-      setPlanoAtual(userPlano);
 
       const { data: vids, error: vidsErr } = await supabase
         .from('treinamentos')
@@ -78,11 +113,11 @@ export const AbaTreinamento: React.FC = () => {
       if (vidsErr) throw vidsErr;
 
       let visualizadosIds: string[] = [];
-      if (tenantData?.id) {
+      if (tenant?.id) {
         const { data: vis } = await supabase
           .from('treinamento_visualizacoes')
           .select('treinamento_id')
-          .eq('tenant_id', tenantData.id)
+          .eq('tenant_id', tenant.id)
           .eq('concluido', true);
 
         if (vis) {
@@ -91,9 +126,8 @@ export const AbaTreinamento: React.FC = () => {
       }
 
       const processados: TreinamentoItem[] = (vids || []).map((t: any) => {
-        const disponivel = Array.isArray(t.planos_permitidos) 
-          ? t.planos_permitidos.includes(userPlano) 
-          : true;
+        const planosPerm = Array.isArray(t.planos_permitidos) ? t.planos_permitidos : ['free', 'pro', 'studio'];
+        const disponivel = planosPerm.length === 0 || planosPerm.includes(currentPlano);
 
         return {
           id: t.id,
@@ -106,7 +140,7 @@ export const AbaTreinamento: React.FC = () => {
           duracao_minutos: t.duracao_minutos || 0,
           ordem: t.ordem || 0,
           essencial: !!t.essencial,
-          planos_permitidos: t.planos_permitidos || ['free', 'pro', 'studio'],
+          planos_permitidos: planosPerm,
           disponivel_no_plano_atual: disponivel,
           concluido: visualizadosIds.includes(t.id)
         };
@@ -123,7 +157,7 @@ export const AbaTreinamento: React.FC = () => {
 
   useEffect(() => {
     fetchTreinamentos();
-  }, []);
+  }, [tenant?.id, tenant?.plano]);
 
   const handleToggleConcluido = async (treinamento: TreinamentoItem, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -142,13 +176,12 @@ export const AbaTreinamento: React.FC = () => {
 
       if (rpcErr) {
         // Fallback via upsert/delete na tabela treinamento_visualizacoes
-        const { data: tenantData } = await supabase.from('tenants').select('id').single();
         const { data: userData } = await supabase.auth.getUser();
 
-        if (tenantData?.id && userData?.user?.id) {
+        if (tenant?.id && userData?.user?.id) {
           if (novoStatus) {
             await supabase.from('treinamento_visualizacoes').upsert({
-              tenant_id: tenantData.id,
+              tenant_id: tenant.id,
               user_id: userData.user.id,
               treinamento_id: treinamento.id,
               concluido: true,
@@ -157,7 +190,7 @@ export const AbaTreinamento: React.FC = () => {
           } else {
             await supabase.from('treinamento_visualizacoes')
               .delete()
-              .eq('tenant_id', tenantData.id)
+              .eq('tenant_id', tenant.id)
               .eq('treinamento_id', treinamento.id);
           }
         }

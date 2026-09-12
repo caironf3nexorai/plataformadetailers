@@ -55,9 +55,10 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenMenu, isMenuOpen }) => {
 
   return (
     <header 
-      className="lg:hidden fixed top-0 left-0 right-0 h-[60px] bg-graphite-900/95 backdrop-blur-md border-b border-graphite-700 flex items-center justify-between px-4 z-40 shadow-sm"
+      className="lg:hidden fixed top-0 left-0 right-0 bg-graphite-900/95 backdrop-blur-md border-b border-graphite-700 flex items-center justify-between px-4 z-40 shadow-sm"
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
+        height: 'calc(60px + env(safe-area-inset-top, 0px))',
       }}
     >
       <h1 className="font-display text-[15.5px] font-bold text-vapor-100 tracking-wider truncate max-w-[200px] sm:max-w-xs">

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useAdminAuth } from '../../components/admin/AdminGuard';
 import { 
@@ -13,9 +14,11 @@ import {
   Building2,
   Clock,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  BookOpen
 } from 'lucide-react';
 import { parseVideoUrl, getEmbedUrl } from '../../utils/videoExtractor';
+import { AdminAbaMateriaisDidaticos } from '../../components/admin/AdminAbaMateriaisDidaticos';
 
 interface AdminTreinamentoItem {
   id: string;
@@ -43,6 +46,7 @@ export const AdminTreinamentos: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [abaAtiva, setAbaAtiva] = useState<'videos' | 'materiais'>('videos');
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -59,6 +63,18 @@ export const AdminTreinamentos: React.FC = () => {
 
   // Video Preview
   const [previewVideo, setPreviewVideo] = useState<AdminTreinamentoItem | null>(null);
+
+  // Previne rolagem de fundo enquanto modais estiverem abertos
+  useEffect(() => {
+    if (showModal || previewVideo) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showModal, previewVideo]);
 
   const fetchTreinamentos = async () => {
     setLoading(true);
@@ -200,33 +216,66 @@ export const AdminTreinamentos: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-heading text-white flex items-center gap-2">
             <Tv className="text-amber-500" />
-            <span>Módulo de Treinamentos da Plataforma</span>
+            <span>Academia Detailer & Capacitação</span>
           </h1>
           <p className="text-slate-400 text-sm">
-            Cadastre vídeos de onboarding, capacitação e boas práticas para as oficinas assinantes.
+            Gerencie aulas em vídeo, e-books e materiais didáticos para as oficinas assinantes da plataforma.
           </p>
         </div>
 
+        {abaAtiva === 'videos' && (
+          <button
+            onClick={openNewModal}
+            disabled={isReadOnly}
+            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 shadow-lg shadow-amber-500/10 shrink-0 self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Cadastrar Novo Treinamento</span>
+          </button>
+        )}
+      </div>
+
+      {/* Seletor de Abas */}
+      <div className="flex items-center bg-slate-950 p-1.5 rounded-xl border border-slate-800 w-fit shadow-inner">
         <button
-          onClick={openNewModal}
-          disabled={isReadOnly}
-          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 shadow-lg shadow-amber-500/10"
+          onClick={() => setAbaAtiva('videos')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+            abaAtiva === 'videos'
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          <span>Cadastrar Novo Treinamento</span>
+          <Tv className="w-4 h-4" />
+          <span>Aulas em Vídeo ({treinamentos.length})</span>
+        </button>
+
+        <button
+          onClick={() => setAbaAtiva('materiais')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+            abaAtiva === 'materiais'
+              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Materiais Didáticos & E-books (PDF)</span>
         </button>
       </div>
 
-      {/* Nota de Segurança sobre Vídeos Não Listados */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-slate-300 text-xs sm:text-sm space-y-1">
-        <p className="font-bold text-amber-400 flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4" />
-          <span>Nota sobre Vídeos Não Listados (YouTube / Vimeo):</span>
-        </p>
-        <p className="text-slate-400 leading-relaxed">
-          Vídeos marcados como "Não Listados" no YouTube ou Vimeo não aparecem em pesquisas públicas, mas qualquer pessoa com o link tem acesso ao conteúdo. Este formato é ideal para tutoriais e treinamentos operacionais do sistema.
-        </p>
-      </div>
+      {abaAtiva === 'materiais' ? (
+        <AdminAbaMateriaisDidaticos isReadOnly={isReadOnly} />
+      ) : (
+        <>
+          {/* Nota de Segurança sobre Vídeos Não Listados */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-slate-300 text-xs sm:text-sm space-y-1">
+            <p className="font-bold text-amber-400 flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4" />
+              <span>Nota sobre Vídeos Não Listados (YouTube / Vimeo):</span>
+            </p>
+            <p className="text-slate-400 leading-relaxed">
+              Vídeos marcados como "Não Listados" no YouTube ou Vimeo não aparecem em pesquisas públicas, mas qualquer pessoa com o link tem acesso ao conteúdo. Este formato é ideal para tutoriais e treinamentos operacionais do sistema.
+            </p>
+          </div>
 
       {msg && (
         <div className={`p-4 rounded-xl text-sm font-medium border flex items-center justify-between ${
@@ -390,15 +439,19 @@ export const AdminTreinamentos: React.FC = () => {
       )}
 
       {/* Modal Formulário (Novo / Editar) */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-xl w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto overflow-x-hidden my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h3 className="text-lg font-bold text-white flex items-center space-x-2">
-                <Tv className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center space-x-2">
+                <Tv className="w-5 h-5 text-amber-500 shrink-0" />
                 <span>{editingId ? 'Editar Treinamento' : 'Cadastrar Novo Treinamento'}</span>
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">
+              <button 
+                type="button"
+                onClick={() => setShowModal(false)} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -494,7 +547,7 @@ export const AdminTreinamentos: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-300">Planos onde o vídeo fica disponível:</label>
                 <div className="flex items-center gap-4 text-xs font-mono text-slate-300 pt-1">
                   {['free', 'pro', 'studio'].map((planoCod) => (
-                    <label key={planoCod} className="flex items-center gap-2 cursor-pointer uppercase">
+                    <label key={planoCod} className="flex items-center gap-2 cursor-pointer uppercase select-none">
                       <input
                         type="checkbox"
                         checked={planos.includes(planoCod)}
@@ -507,63 +560,68 @@ export const AdminTreinamentos: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={essencial}
-                      onChange={(e) => setEssencial(e.target.checked)}
-                      className="w-4 h-4 accent-amber-500 rounded"
-                    />
-                    <span>Marcar como <strong>Essencial (Primeiros Passos)</strong></span>
-                  </label>
+              {/* Status e Destaque */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg flex flex-wrap items-center gap-4">
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={essencial}
+                    onChange={(e) => setEssencial(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <span>Marcar como <strong>Essencial (Primeiros Passos)</strong></span>
+                </label>
 
-                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={ativo}
-                      onChange={(e) => setAtivo(e.target.checked)}
-                      className="w-4 h-4 accent-amber-500 rounded"
-                    />
-                    <span>Ativo no catálogo</span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={ativo}
+                    onChange={(e) => setAtivo(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500 rounded"
+                  />
+                  <span>Ativo no catálogo</span>
+                </label>
+              </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition text-xs flex-1 sm:flex-none"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition text-xs shadow-lg shadow-amber-500/10 flex-1 sm:flex-none"
-                  >
-                    {submitting ? 'Salvando...' : 'Salvar Treinamento'}
-                  </button>
-                </div>
+              {/* Ações do Rodapé (Alinhados à direita e sem corte de margem) */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition text-xs shadow-lg shadow-amber-500/10 flex items-center gap-1.5 shrink-0"
+                >
+                  {submitting ? 'Salvando...' : 'Salvar Treinamento'}
+                </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Preview Vídeo */}
-      {previewVideo && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-3xl w-full p-6 space-y-4 shadow-2xl relative">
+      {previewVideo && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-2xl relative my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <h4 className="text-base font-bold text-white">{previewVideo.titulo}</h4>
-              <button onClick={() => setPreviewVideo(null)} className="text-slate-400 hover:text-white">
+              <h4 className="text-base font-bold text-white truncate pr-2">{previewVideo.titulo}</h4>
+              <button 
+                type="button"
+                onClick={() => setPreviewVideo(null)} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition shrink-0"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-slate-800">
+            <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 shadow-inner">
               <iframe
                 src={getEmbedUrl(previewVideo.plataforma, previewVideo.video_id)}
                 title={previewVideo.titulo}
@@ -573,7 +631,10 @@ export const AdminTreinamentos: React.FC = () => {
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+        </>
       )}
     </div>
   );

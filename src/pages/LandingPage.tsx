@@ -57,9 +57,14 @@ export const LandingPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* 1. HEADER NAVEGAÇÃO FLUTUANTE                                             */}
       {/* ========================================================================= */}
-      <header className="sticky top-0 z-50 w-full border-b border-graphite-800/80 bg-graphite-950/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 group transition-transform hover:scale-105">
+      <header 
+        className="sticky top-0 z-50 w-full border-b border-graphite-800/80 bg-graphite-950/80 backdrop-blur-xl"
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 min-h-[64px] sm:min-h-[80px] h-16 sm:h-20 flex items-center justify-between gap-2">
+          <Link to="/" className="flex items-center gap-2 group transition-transform hover:scale-105 shrink-0">
             <LogoNuvemWash size="md" />
           </Link>
 
@@ -84,11 +89,11 @@ export const LandingPage: React.FC = () => {
           </nav>
 
           {/* Botões de Ação */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <Link to="/entrar">
               <Button
                 variant="ghost"
-                className="text-sm font-medium text-vapor-200 hover:text-white hover:bg-graphite-800 min-h-[40px] px-4"
+                className="text-xs sm:text-sm font-medium text-vapor-200 hover:text-white hover:bg-graphite-800 min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-4"
               >
                 Entrar
               </Button>
@@ -96,10 +101,10 @@ export const LandingPage: React.FC = () => {
             <Link to="/criar-conta">
               <Button
                 variant="primary"
-                className="text-sm font-semibold min-h-[42px] px-5 shadow-lg shadow-amber-500/20 flex items-center gap-2"
+                className="text-xs sm:text-sm font-semibold min-h-[38px] sm:min-h-[42px] px-3 sm:px-5 shadow-lg shadow-amber-500/20 flex items-center gap-1.5 whitespace-nowrap"
               >
                 <span>Criar Conta Grátis</span>
-                <ArrowRight size={15} />
+                <ArrowRight size={14} className="shrink-0" />
               </Button>
             </Link>
           </div>

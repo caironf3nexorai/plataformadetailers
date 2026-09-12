@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X, Copy, Check, Ticket, Tag } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { CreditCard, QrCode, ShieldCheck, CheckCircle2, Loader2, AlertCircle, ExternalLink, X, Copy, Check, Ticket } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -246,9 +247,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-graphite-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-graphite-900 border border-graphite-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 w-screen h-screen z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-graphite-900 border border-graphite-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh] my-auto">
         {/* Cabeçalho */}
         <div className="p-5 border-b border-graphite-800 flex items-center justify-between bg-graphite-950/50">
           <div className="flex items-center gap-3">
@@ -609,6 +612,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

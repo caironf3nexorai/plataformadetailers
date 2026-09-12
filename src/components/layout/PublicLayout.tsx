@@ -21,7 +21,12 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
   return (
     <div className="min-h-screen bg-graphite-900 text-vapor-100 flex flex-col font-sans selection:bg-amber-500 selection:text-graphite-900">
       {/* Header Simples */}
-      <header className="h-[64px] border-b border-graphite-600 bg-graphite-800/80 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between">
+      <header 
+        className="min-h-[64px] border-b border-graphite-600 bg-graphite-800/80 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between"
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
+      >
         <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <LogoNuvemWash size="sm" />
         </Link>

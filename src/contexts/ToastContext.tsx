@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
-import { traduzirErro } from '../utils/erros';
+import { traduzirErro, ehMensagemEmInglesOuTecnica } from '../utils/erros';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -39,13 +39,22 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const traduzido = traduzirErro(erroAlvo);
     
     let finalMsg = traduzido.mensagem;
-    if (typeof userMsg === 'string' && userMsg && !userMsg.includes('SELECT') && !userMsg.includes('ERROR:')) {
-      if (userMsg !== traduzido.mensagem && traduzido.ehInesperado) {
+
+    // Se userMsg foi passado como string amigável em português (e não o próprio erro técnico/em inglês)
+    if (
+      typeof userMsg === 'string' &&
+      userMsg.trim() &&
+      !ehMensagemEmInglesOuTecnica(userMsg) &&
+      userMsg !== traduzido.mensagem
+    ) {
+      if (traduzido.ehInesperado && traduzido.mensagem && !traduzido.mensagem.includes('Ocorreu um erro ao processar')) {
         finalMsg = `${userMsg}: ${traduzido.mensagem}`;
+      } else {
+        finalMsg = userMsg;
       }
     }
     
-    console.error('[NuvemWash Error]', traduzido.codigoRef, rawError || userMsg);
+    console.error('[Plataforma Detailers Error]', traduzido.codigoRef, rawError || userMsg);
     showToast(finalMsg, 'error');
   }, [showToast]);
 

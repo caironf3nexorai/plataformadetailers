@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissao } from '../hooks/usePermissao';
@@ -11,8 +10,10 @@ import { supabase } from '../lib/supabase';
 import type { Cliente } from '../types/clientes';
 import { CadastroRapidoModal } from '../components/clientes/CadastroRapidoModal';
 import { ImportarCSVModal } from '../components/clientes/ImportarCSVModal';
+import { AbaOportunidadesRetorno } from '../components/clientes/AbaOportunidadesRetorno';
+import { AbaGarantias } from '../components/clientes/AbaGarantias';
 import { extrairNumeroOS } from '../utils/formatters';
-import { Users, UserPlus, Search, Car, Phone, FileSpreadsheet, FileText } from 'lucide-react';
+import { Users, UserPlus, Search, Car, Phone, FileSpreadsheet, FileText, RotateCcw, ShieldCheck } from 'lucide-react';
 
 export const Clientes: React.FC = () => {
   const navigate = useNavigate();
@@ -27,7 +28,20 @@ export const Clientes: React.FC = () => {
   const [abrirComOrcamento, setAbrirComOrcamento] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  const [abaAtiva, setAbaAtiva] = useState<'todos' | 'incompletos'>('todos');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [abaAtiva, setAbaAtiva] = useState<'todos' | 'incompletos' | 'oportunidades' | 'garantias'>('todos');
+  const [totalOportunidades, setTotalOportunidades] = useState<number>(0);
+  const [totalGarantias, setTotalGarantias] = useState<number>(0);
+
+  // Sincroniza aba via URL (?aba=oportunidades ou ?aba=garantias)
+  useEffect(() => {
+    const abaParam = searchParams.get('aba');
+    if (abaParam === 'oportunidades') {
+      setAbaAtiva('oportunidades');
+    } else if (abaParam === 'garantias') {
+      setAbaAtiva('garantias');
+    }
+  }, [searchParams]);
 
   // Debounce 300ms na busca
   useEffect(() => {
@@ -156,54 +170,98 @@ export const Clientes: React.FC = () => {
         }
       />
 
-      {/* Abas e Busca */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        {/* Topo com Busca Única */}
-        <div className="relative w-full max-w-lg">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-vapor-400" size={18} />
-          <Input
-            type="text"
-            placeholder="Buscar por nome, telefone, placa ou OS (ex: OS 0042)..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            autoFocus
-            className="pl-10 min-h-[48px] bg-graphite-800 border-graphite-600 text-vapor-100"
-          />
-        </div>
-
-        {/* Filtros de Aba */}
-        <div className="flex items-center gap-2 bg-graphite-800 p-1 rounded-lg border border-graphite-600">
+      {/* Abas Superiores */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-graphite-700/80 pb-3">
+        <div className="flex flex-wrap items-center gap-2 bg-graphite-800/80 p-1 rounded-xl border border-graphite-700">
           <button
             type="button"
-            onClick={() => setAbaAtiva('todos')}
-            className={`px-3 py-2 text-xs font-semibold rounded-md transition ${
+            onClick={() => { setAbaAtiva('todos'); setSearchParams({}); }}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition ${
               abaAtiva === 'todos'
-                ? 'bg-graphite-700 text-vapor-100 shadow'
+                ? 'bg-graphite-700 text-vapor-100 shadow font-bold'
                 : 'text-vapor-400 hover:text-vapor-200'
             }`}
           >
             Todos ({clientes.length})
           </button>
+
           <button
             type="button"
-            onClick={() => setAbaAtiva('incompletos')}
-            className={`px-3 py-2 text-xs font-semibold rounded-md transition flex items-center gap-1.5 ${
+            onClick={() => { setAbaAtiva('incompletos'); setSearchParams({}); }}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
               abaAtiva === 'incompletos'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
                 : 'text-vapor-400 hover:text-amber-400'
             }`}
           >
-            <span>Cadastro Incompleto</span>
+            <span>Incompletos</span>
             {clientesIncompletos.length > 0 && (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/30 text-amber-300 font-bold">
                 {clientesIncompletos.length}
               </span>
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={() => { setAbaAtiva('oportunidades'); setSearchParams({ aba: 'oportunidades' }); }}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
+              abaAtiva === 'oportunidades'
+                ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/40 font-bold shadow-sm'
+                : 'text-vapor-400 hover:text-amber-300'
+            }`}
+          >
+            <RotateCcw size={13} className="text-amber-400" />
+            <span>Oportunidades de Retorno</span>
+            {totalOportunidades > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-500 text-white font-mono font-bold animate-pulse">
+                {totalOportunidades}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setAbaAtiva('garantias'); setSearchParams({ aba: 'garantias' }); }}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
+              abaAtiva === 'garantias'
+                ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-300 border border-amber-500/40 font-bold shadow-sm'
+                : 'text-vapor-400 hover:text-amber-300'
+            }`}
+          >
+            <ShieldCheck size={14} className="text-amber-400" />
+            <span>Garantias & Pós-Venda</span>
+            {totalGarantias > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/30 text-amber-300 font-mono font-bold">
+                {totalGarantias}
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* Campo de Busca (visível nas abas de clientes) */}
+        {abaAtiva !== 'oportunidades' && abaAtiva !== 'garantias' && (
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-vapor-400" size={17} />
+            <input
+              type="text"
+              placeholder="Buscar por nome, telefone, placa ou OS..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-graphite-800 border border-graphite-600 rounded-lg text-xs text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500"
+            />
+          </div>
+        )}
       </div>
 
-      {/* Listagem de Clientes / Skeleton / EmptyState */}
+      {/* Conteúdo da Aba Ativa */}
+      {abaAtiva === 'oportunidades' ? (
+        <AbaOportunidadesRetorno onTotalOportunidadesChange={setTotalOportunidades} />
+      ) : abaAtiva === 'garantias' ? (
+        <AbaGarantias onTotalGarantiasChange={setTotalGarantias} />
+      ) : (
+        <>
+          {/* Listagem de Clientes / Skeleton / EmptyState */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -308,6 +366,8 @@ export const Clientes: React.FC = () => {
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* Modal Cadastro Rápido com suporte a criação imediata de orçamento */}

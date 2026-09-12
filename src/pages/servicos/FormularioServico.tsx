@@ -21,7 +21,8 @@ import {
   Calendar, 
   AlertTriangle,
   CheckCircle,
-  Sparkles
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import {
   slugifyGrupo,
@@ -106,6 +107,13 @@ export const FormularioServico: React.FC = () => {
   const [ativo, setAtivo] = useState(true);
   const [checklistModeloId, setChecklistModeloId] = useState<string | null>(null);
   const [checklistModelos, setChecklistModelos] = useState<Array<{ id: string; nome: string }>>([]);
+
+  // Estados de Garantia e Pós-Venda
+  const [temGarantia, setTemGarantia] = useState(false);
+  const [garantiaMeses, setGarantiaMeses] = useState<number>(12);
+  const [garantiaIntervaloDias, setGarantiaIntervaloDias] = useState<number>(60);
+  const [garantiaProdutoPadrao, setGarantiaProdutoPadrao] = useState('');
+  const [garantiaCuidados, setGarantiaCuidados] = useState('');
 
   // Matriz de preços local para o serviço específico
   const [servicosDoTenant, setServicosDoTenant] = useState<Array<{ id: string; nome: string; grupo: string; ativo?: boolean }>>([]);
@@ -206,6 +214,11 @@ export const FormularioServico: React.FC = () => {
           setFotoPath(s.foto_path);
           setAtivo(s.ativo);
           setChecklistModeloId(s.checklist_modelo_id || null);
+          setTemGarantia(s.tem_garantia || false);
+          setGarantiaMeses(s.garantia_meses || 12);
+          setGarantiaIntervaloDias(s.garantia_intervalo_dias || 60);
+          setGarantiaProdutoPadrao(s.garantia_produto_padrao || '');
+          setGarantiaCuidados(s.garantia_cuidados || '');
 
           if (s.unidade_duracao === 'dias' || s.unidade_duracao === 'horas' || s.unidade_duracao === 'min') {
             servicoUnidadeSalva = s.unidade_duracao;
@@ -444,6 +457,11 @@ export const FormularioServico: React.FC = () => {
         unidade_duracao: unidadePadrao,
         ativo,
         checklist_modelo_id: checklistModeloId || null,
+        tem_garantia: temGarantia,
+        garantia_meses: temGarantia ? (Number(garantiaMeses) || 12) : null,
+        garantia_intervalo_dias: temGarantia ? (Number(garantiaIntervaloDias) || 60) : null,
+        garantia_produto_padrao: temGarantia ? (garantiaProdutoPadrao.trim() || null) : null,
+        garantia_cuidados: temGarantia ? (garantiaCuidados.trim() || null) : null,
       };
 
       // 1. Identifica se já existe serviço com este mesmo nome no tenant
@@ -1117,10 +1135,116 @@ export const FormularioServico: React.FC = () => {
             );
           })()}
 
-          {/* Seção 5: Interno & Status */}
+          {/* Seção 5: Garantia & Pós-Venda (Etiquetas de Para-brisa) */}
+          <Card className="p-5 bg-graphite-800 border-graphite-600 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-graphite-700 pb-2">
+              <h3 className="font-display text-[13px] text-vapor-300 uppercase tracking-widest flex items-center gap-1.5">
+                <ShieldCheck size={16} className="text-amber-500" />
+                5. Garantia & Etiqueta de Para-brisa
+              </h3>
+              <span className="text-[10px] font-sans text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
+                PÓS-VENDA
+              </span>
+            </div>
+
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-sans text-[13px] text-vapor-100 font-medium">
+                  Este serviço emite Certificado e Etiqueta de Garantia?
+                </span>
+                <span className="font-sans text-[11px] text-vapor-400">
+                  Ao concluir um atendimento com este serviço, a plataforma sugerirá a emissão da etiqueta de para-brisa com QR Code e ativará o radar de retorno.
+                </span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                <input
+                  type="checkbox"
+                  checked={temGarantia}
+                  onChange={(e) => setTemGarantia(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-graphite-900 border border-graphite-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-vapor-400 after:border-graphite-600 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500 peer-checked:after:bg-graphite-900" />
+              </label>
+            </div>
+
+            {temGarantia && (
+              <div className="flex flex-col gap-4 pt-3 border-t border-graphite-700/80">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Prazo de Garantia */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="font-sans text-[12px] text-vapor-300 font-medium">
+                      Prazo de Garantia Padrão (Meses)
+                    </label>
+                    <select
+                      value={garantiaMeses}
+                      onChange={(e) => setGarantiaMeses(Number(e.target.value))}
+                      className="bg-graphite-900 border border-graphite-600 rounded p-2.5 font-sans text-[13px] text-vapor-100 outline-none focus:border-amber-500 transition-colors"
+                    >
+                      <option value={3}>3 meses (90 dias)</option>
+                      <option value={6}>6 meses</option>
+                      <option value={12}>12 meses (1 ano)</option>
+                      <option value={24}>24 meses (2 anos)</option>
+                      <option value={36}>36 meses (3 anos - Vitrificação)</option>
+                      <option value={60}>60 meses (5 anos)</option>
+                    </select>
+                  </div>
+
+                  {/* Intervalo de Retorno */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="font-sans text-[12px] text-vapor-300 font-medium">
+                      Retorno Recomendado (Dias)
+                    </label>
+                    <CampoNumerico
+                      integerOnly
+                      value={garantiaIntervaloDias}
+                      onChange={(val) => setGarantiaIntervaloDias(val || 60)}
+                      placeholder="60"
+                      wrapperClassName="w-full min-h-[42px]"
+                    />
+                    <span className="font-sans text-[10.5px] text-vapor-500">
+                      Intervalo para lavar/inspecionar e manter a garantia ativa.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Produto Recomendado */}
+                <div className="flex flex-col gap-1">
+                  <label className="font-sans text-[12px] text-vapor-300 font-medium">
+                    Produto / Vitrificador Padrão
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Vonixx V-Paint 3 Anos, Nasiol ZR53, Kisho Si-701..."
+                    value={garantiaProdutoPadrao}
+                    onChange={(e) => setGarantiaProdutoPadrao(e.target.value)}
+                    className="w-full bg-graphite-900 border border-graphite-600 rounded p-2.5 font-sans text-[13px] text-vapor-100 outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+
+                {/* Recomendações e Cuidados */}
+                <div className="flex flex-col gap-1">
+                  <label className="font-sans text-[12px] text-vapor-300 font-medium">
+                    Instruções de Cuidados no Pós-Venda
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Ex: Tempo de cura de 48h sem contato com água. Lavar com shampoo neutro..."
+                    value={garantiaCuidados}
+                    onChange={(e) => setGarantiaCuidados(e.target.value)}
+                    className="w-full bg-graphite-900 border border-graphite-600 rounded p-2.5 font-sans text-[12px] text-vapor-100 outline-none focus:border-amber-500 transition-colors resize-none"
+                  />
+                  <span className="font-sans text-[10.5px] text-vapor-500">
+                    Esse texto será impresso no certificado e exibido quando o cliente escanear o QR Code.
+                  </span>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Seção 6: Interno & Status */}
           <Card className="p-5 bg-graphite-800 border-graphite-600 flex flex-col gap-4">
             <h3 className="font-display text-[13px] text-vapor-300 uppercase tracking-widest border-b border-graphite-700 pb-2">
-              5. Observações Internas
+              6. Observações Internas
             </h3>
 
             <div className="flex flex-col gap-1">

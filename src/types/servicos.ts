@@ -21,6 +21,11 @@ export interface Servico {
   unidade_duracao?: 'min' | 'horas' | 'dias';
   ordem: number;
   ativo: boolean;
+  tem_garantia?: boolean;
+  garantia_meses?: number;
+  garantia_intervalo_dias?: number;
+  garantia_produto_padrao?: string | null;
+  garantia_cuidados?: string | null;
   created_at?: string;
   updated_at?: string;
 }

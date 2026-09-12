@@ -55,6 +55,7 @@ const VisualizarCheckin = lazyWithRetry(() => import('./pages/checkin/Visualizar
 const ExecucaoPage = lazyWithRetry(() => import('./pages/Execucao').then(m => ({ default: m.ExecucaoPage })));
 const VisualizarAtendimento = lazyWithRetry(() => import('./pages/VisualizarAtendimento').then(m => ({ default: m.VisualizarAtendimento })));
 const VistoriaPublica = lazyWithRetry(() => import('./pages/VistoriaPublica').then(m => ({ default: m.VistoriaPublica })));
+const CertificadoGarantiaPublico = lazyWithRetry(() => import('./pages/CertificadoGarantiaPublico').then(m => ({ default: m.CertificadoGarantiaPublico })));
 
 // Carregamento Tardio (Lazy Loading) do Módulo Admin da Plataforma
 const AdminGuard = lazyWithRetry(() => import('./components/admin/AdminGuard').then(m => ({ default: m.AdminGuard })));
@@ -73,6 +74,7 @@ const AdminPrecificacaoReferencia = lazyWithRetry(() => import('./pages/admin/Ad
 const AdminTreinamentos = lazyWithRetry(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
 const AdminComunicados = lazyWithRetry(() => import('./pages/admin/AdminComunicados').then(m => ({ default: m.AdminComunicados })));
 const AdminCupons = lazyWithRetry(() => import('./pages/admin/AdminCupons').then(m => ({ default: m.AdminCupons })));
+const AdminModelosTermos = lazyWithRetry(() => import('./pages/admin/AdminModelosTermos').then(m => ({ default: m.AdminModelosTermos })));
 const LoginParceiro = lazyWithRetry(() => import('./pages/parceiro/LoginParceiro').then(m => ({ default: m.LoginParceiro })));
 const PainelParceiro = lazyWithRetry(() => import('./pages/parceiro/PainelParceiro').then(m => ({ default: m.PainelParceiro })));
 
@@ -98,6 +100,8 @@ function App() {
             <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
             <Route path="/orcamento/:token" element={<OrcamentoPublico />} />
             <Route path="/vistoria/:token" element={<VistoriaPublica />} />
+            <Route path="/garantia/:codigo" element={<CertificadoGarantiaPublico />} />
+            <Route path="/certificado/:codigo" element={<CertificadoGarantiaPublico />} />
             <Route path="/agendar/:slug/agendamento" element={<FluxoAgendamentoOnline />} />
             <Route path="/agendar/:slug/novo" element={<FluxoAgendamentoOnline />} />
             <Route path="/agendar/:slug" element={<CatalogoPublico />} />
@@ -131,6 +135,7 @@ function App() {
               <Route path="oficinas" element={<AdminOficinas />} />
               <Route path="comunicados" element={<AdminComunicados />} />
               <Route path="cupons" element={<AdminCupons />} />
+              <Route path="modelos-termos" element={<AdminModelosTermos />} />
               <Route path="assinaturas" element={<AdminAssinaturas />} />
               <Route path="referencias-preco" element={<AdminPrecificacaoReferencia />} />
               <Route path="indicacoes" element={<AdminIndicacoes />} />

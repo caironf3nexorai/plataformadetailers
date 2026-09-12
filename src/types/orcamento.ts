@@ -80,6 +80,8 @@ export interface Orcamento {
   aceite_manual?: boolean;
   incluir_fotos?: boolean;
   incluir_termos?: boolean;
+  incluir_termo_responsabilidade?: boolean;
+  incluir_termo_garantia?: boolean;
   termo_garantia_id?: string | null;
   modo_orcamento?: 'simples' | '3_niveis' | string | null;
   cliente?: {
@@ -159,6 +161,8 @@ export interface OrcamentoPublicoData {
     aplicado_por_nome?: string | null;
   } | null;
   incluir_termos?: boolean;
+  incluir_termo_responsabilidade?: boolean;
+  incluir_termo_garantia?: boolean;
   termo_responsabilidade?: string | null;
   termo_garantia?: {
     id: string;

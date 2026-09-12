@@ -261,7 +261,9 @@ export const OrcamentoPublico: React.FC = () => {
         pdfTextoObservacoesOrcamento: data.oficina?.pdf_texto_observacoes_orcamento || undefined,
         pdfTextoRodape: (data.oficina as any)?.pdf_texto_rodape || undefined,
         pdfOcultarMarcaDagua: (data.oficina as any)?.pdf_ocultar_marca_dagua ?? undefined,
-        incluirTermos: data.incluir_termos ?? true,
+        incluirTermos: (data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true) || (data.incluir_termo_garantia ?? data.incluir_termos ?? true),
+        incluirTermoResponsabilidade: data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true,
+        incluirTermoGarantia: data.incluir_termo_garantia ?? data.incluir_termos ?? true,
         termoResponsabilidade: data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
         termosGarantia: data.termo_garantia?.conteudo || undefined,
       });
@@ -846,60 +848,67 @@ export const OrcamentoPublico: React.FC = () => {
         })()}
 
         {/* CARD DE OBSERVAÇÕES E TERMOS DO ORÇAMENTO */}
-        {(data.observacoes || (data.incluir_termos ?? true) || data.termo_garantia) && (
-          <Card className="p-5 bg-graphite-900 border border-graphite-800 rounded-2xl flex flex-col gap-4 mt-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-graphite-800 pb-2.5">
-              <div className="flex items-center gap-2 text-amber-400 font-sans font-bold text-[14px] uppercase tracking-wide">
-                <ShieldCheck size={18} />
-                <span>Termos, Condições & Garantia da Proposta</span>
-              </div>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                Acompanha a OS e Vistoria
-              </span>
-            </div>
+        {(() => {
+          const hasResp = data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true;
+          const hasGar = (data.incluir_termo_garantia ?? data.incluir_termos ?? true) && !!data.termo_garantia;
 
-            {/* Observações específicas da proposta */}
-            {data.observacoes && (
-              <div className="flex flex-col gap-1">
-                <span className="font-bold text-xs text-vapor-300">Observações da Oficina:</span>
-                <div className="font-sans text-[13px] text-vapor-200 whitespace-pre-wrap leading-relaxed bg-graphite-950 p-3.5 rounded-xl border border-graphite-800">
-                  {data.observacoes}
+          if (!data.observacoes && !hasResp && !hasGar) return null;
+
+          return (
+            <Card className="p-5 bg-graphite-900 border border-graphite-800 rounded-2xl flex flex-col gap-4 mt-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-graphite-800 pb-2.5">
+                <div className="flex items-center gap-2 text-amber-400 font-sans font-bold text-[14px] uppercase tracking-wide">
+                  <ShieldCheck size={18} />
+                  <span>Termos, Condições & Garantia da Proposta</span>
                 </div>
-              </div>
-            )}
-
-            {/* Termo Fixo de Responsabilidade & Falhas Ocultas */}
-            {(data.incluir_termos ?? true) && (
-              <div className="flex flex-col gap-1.5">
-                <span className="font-bold text-xs text-vapor-300 flex items-center gap-1.5">
-                  <FileText size={13} className="text-amber-400" />
-                  <span>Termo Fixo de Responsabilidade & Falhas Ocultas:</span>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Acompanha a OS e Vistoria
                 </span>
-                <p className="font-sans text-xs text-vapor-400 leading-relaxed whitespace-pre-line bg-graphite-950/80 p-3 rounded-xl border border-graphite-800">
-                  {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
-                </p>
               </div>
-            )}
 
-            {/* Termo Variável de Garantia (se houver vinculado) */}
-            {data.termo_garantia && (
-              <div className="flex flex-col gap-1.5 pt-2 border-t border-graphite-800">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
-                    <ShieldCheck size={14} />
-                    <span>Garantia do Serviço: {data.termo_garantia.titulo}</span>
-                  </span>
-                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-graphite-800 text-vapor-300">
-                    {data.termo_garantia.tipo}
-                  </span>
+              {/* Observações específicas da proposta */}
+              {data.observacoes && (
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-xs text-vapor-300">Observações da Oficina:</span>
+                  <div className="font-sans text-[13px] text-vapor-200 whitespace-pre-wrap leading-relaxed bg-graphite-950 p-3.5 rounded-xl border border-graphite-800">
+                    {data.observacoes}
+                  </div>
                 </div>
-                <p className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/20">
-                  {data.termo_garantia.conteudo}
-                </p>
-              </div>
-            )}
-          </Card>
-        )}
+              )}
+
+              {/* Termo Fixo de Responsabilidade & Falhas Ocultas */}
+              {hasResp && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-bold text-xs text-vapor-300 flex items-center gap-1.5">
+                    <FileText size={13} className="text-amber-400" />
+                    <span>Termo Fixo de Responsabilidade & Falhas Ocultas:</span>
+                  </span>
+                  <p className="font-sans text-xs text-vapor-400 leading-relaxed whitespace-pre-line bg-graphite-950/80 p-3 rounded-xl border border-graphite-800">
+                    {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                  </p>
+                </div>
+              )}
+
+              {/* Termo Variável de Garantia (se houver vinculado) */}
+              {hasGar && data.termo_garantia && (
+                <div className="flex flex-col gap-1.5 pt-2 border-t border-graphite-800">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                      <ShieldCheck size={14} />
+                      <span>Garantia do Serviço: {data.termo_garantia.titulo}</span>
+                    </span>
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-graphite-800 text-vapor-300">
+                      {data.termo_garantia.tipo}
+                    </span>
+                  </div>
+                  <p className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/20">
+                    {data.termo_garantia.conteudo}
+                  </p>
+                </div>
+              )}
+            </Card>
+          );
+        })()}
 
         {/* OPÇÃO DE RECUSAR SE AINDA PUDER RESPONDER */}
         {podeTrocarOuResponder && !isAprovado && (

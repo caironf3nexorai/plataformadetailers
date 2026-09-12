@@ -51,6 +51,9 @@ export const AdminPermissoes: React.FC = () => {
   const [featureParaExcluir, setFeatureParaExcluir] = useState<FeatureItem | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Filtro de exibição para telas móveis
+  const [filtroPlanoMobile, setFiltroPlanoMobile] = useState<'todos' | 'free' | 'pro' | 'studio'>('todos');
+
   const fetchFeatures = async () => {
     try {
       setLoading(true);
@@ -253,76 +256,118 @@ export const AdminPermissoes: React.FC = () => {
           <p className="text-sm">Carregando catálogo de funcionalidades...</p>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="px-6 py-4">Funcionalidade / Módulo</th>
-                <th className="px-6 py-4 text-center font-mono w-32">FREE</th>
-                <th className="px-6 py-4 text-center font-mono w-32">PRO</th>
-                <th className="px-6 py-4 text-center font-mono w-32">STUDIO</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {grupos.map((grupo) => (
-                <React.Fragment key={grupo}>
-                  {/* Category Header Row */}
-                  <tr className="bg-slate-950/60 font-bold text-amber-400 text-xs tracking-wider">
-                    <td colSpan={4} className="px-6 py-2.5 uppercase border-y border-slate-800/80 flex items-center space-x-2">
-                      <Layers className="w-3.5 h-3.5" />
-                      <span>{grupo}</span>
-                    </td>
-                  </tr>
+        <div className="space-y-3">
+          {/* Mobile Plan Filter Controls */}
+          <div className="md:hidden flex flex-col gap-2 p-3 bg-slate-900 border border-slate-800 rounded-xl">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-slate-300">Coluna Exibida:</span>
+              <div className="flex items-center gap-1">
+                {(['todos', 'free', 'pro', 'studio'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setFiltroPlanoMobile(p)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold uppercase transition ${
+                      filtroPlanoMobile === p
+                        ? 'bg-amber-500 text-slate-950 shadow-sm'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {filtroPlanoMobile === 'todos' && (
+              <div className="text-[11px] text-amber-400/90 flex items-center justify-between pt-1 border-t border-slate-800/60">
+                <span>👉 Arraste para o lado para ver PRO e STUDIO</span>
+                <span className="text-[10px] text-slate-400 font-mono">ou filtre acima</span>
+              </div>
+            )}
+          </div>
 
-                  {catalogo.filter((c) => c.grupo === grupo).map((feat) => (
-                    <tr key={feat.chave} className="hover:bg-slate-800/40 transition">
-                      <td className="px-6 py-3.5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-semibold text-white">{feat.nome}</div>
-                            {feat.descricao && (
-                              <div className="text-xs text-slate-400 mt-0.5">{feat.descricao}</div>
-                            )}
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">key: {feat.chave}</div>
-                          </div>
-                          {!isReadOnly && (
-                            <button
-                              type="button"
-                              onClick={() => setFeatureParaExcluir(feat)}
-                              title="Excluir funcionalidade do catálogo"
-                              className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition shrink-0"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-
-                      {['free', 'pro', 'studio'].map((planCode) => {
-                        const isChecked = matrix[feat.chave]?.[planCode] || false;
-                        return (
-                          <td key={planCode} className="px-6 py-3.5 text-center">
-                            <button
-                              type="button"
-                              disabled={isReadOnly}
-                              onClick={() => handleToggle(feat.chave, planCode)}
-                              className={`w-7 h-7 rounded-lg inline-flex items-center justify-center transition border ${
-                                isChecked
-                                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-inner'
-                                  : 'bg-slate-950 text-slate-600 border-slate-800 hover:border-slate-700'
-                              }`}
-                            >
-                              {isChecked ? <Check className="w-4 h-4" /> : <X className="w-3.5 h-3.5" />}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
+          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto scrollbar-thin touch-pan-x overscroll-x-contain shadow-xl">
+            <table className={`w-full text-left text-sm text-slate-300 border-collapse ${
+              filtroPlanoMobile === 'todos' ? 'min-w-[560px]' : 'min-w-[320px]'
+            }`}>
+              <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800 sticky top-0 z-20">
+                <tr>
+                  <th className="px-4 sm:px-6 py-4 sticky left-0 bg-slate-950 z-30 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.5)] min-w-[200px] sm:min-w-[260px]">
+                    Funcionalidade / Módulo
+                  </th>
+                  {(filtroPlanoMobile === 'todos' ? (['free', 'pro', 'studio'] as const) : ([filtroPlanoMobile] as const)).map((planCode) => (
+                    <th key={planCode} className="px-4 sm:px-6 py-4 text-center font-mono w-28 sm:w-32 uppercase">
+                      {planCode}
+                    </th>
                   ))}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {grupos.map((grupo) => {
+                  const colunas = filtroPlanoMobile === 'todos' ? (['free', 'pro', 'studio'] as const) : ([filtroPlanoMobile] as const);
+                  return (
+                    <React.Fragment key={grupo}>
+                      {/* Category Header Row */}
+                      <tr className="bg-slate-950/80 font-bold text-amber-400 text-xs tracking-wider">
+                        <td colSpan={colunas.length + 1} className="px-4 sm:px-6 py-2.5 uppercase border-y border-slate-800/80 sticky left-0 z-10 bg-slate-950">
+                          <div className="flex items-center space-x-2">
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>{grupo}</span>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {catalogo.filter((c) => c.grupo === grupo).map((feat) => (
+                        <tr key={feat.chave} className="hover:bg-slate-800/40 transition">
+                          <td className="px-4 sm:px-6 py-3.5 sticky left-0 bg-slate-900 z-10 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.3)]">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-semibold text-white">{feat.nome}</div>
+                                {feat.descricao && (
+                                  <div className="text-xs text-slate-400 mt-0.5">{feat.descricao}</div>
+                                )}
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">key: {feat.chave}</div>
+                              </div>
+                              {!isReadOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => setFeatureParaExcluir(feat)}
+                                  title="Excluir funcionalidade do catálogo"
+                                  className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition shrink-0"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                          {colunas.map((planCode) => {
+                            const isChecked = matrix[feat.chave]?.[planCode] || false;
+                            return (
+                              <td key={planCode} className="px-4 sm:px-6 py-3.5 text-center">
+                                <button
+                                  type="button"
+                                  disabled={isReadOnly}
+                                  onClick={() => handleToggle(feat.chave, planCode)}
+                                  className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg inline-flex items-center justify-center transition border ${
+                                    isChecked
+                                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-inner'
+                                      : 'bg-slate-950 text-slate-600 border-slate-800 hover:border-slate-700'
+                                  }`}
+                                >
+                                  {isChecked ? <Check className="w-5 h-5 sm:w-4 sm:h-4" /> : <X className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

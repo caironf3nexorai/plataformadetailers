@@ -32,6 +32,9 @@ import {
   Tv,
   Gauge,
   Zap,
+  Trophy,
+  Users,
+  ChevronRight,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -95,7 +98,7 @@ interface DashboardData {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { tenant } = useAuth();
+  const { tenant, profile, user } = useAuth();
   const { isOperador } = usePermissao();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,12 +118,142 @@ export const Dashboard: React.FC = () => {
     return localStorage.getItem('dismiss_onboarding_treinamento') === 'true';
   });
 
+  const [topRankers, setTopRankers] = useState<Array<{
+    membro_id: string;
+    nome: string;
+    role: string;
+    carros_entregues: number;
+    tempo_medio_minutos: number;
+    total_comissao: number;
+  }>>([]);
+
+  // Formata o nome do membro de forma inteligente
+  const formatarNomeMembro = (nome?: string | null, email?: string | null, userId?: string | null) => {
+    if (nome && nome.trim()) return nome.trim();
+    if (userId && user?.id === userId && profile?.nome?.trim()) {
+      return profile.nome.trim();
+    }
+    if (email && email.trim()) {
+      const parte = email.split('@')[0];
+      return parte
+        .replace(/[._-]+/g, ' ')
+        .split(' ')
+        .filter(Boolean)
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join(' ');
+    }
+    return 'Membro da Equipe';
+  };
+
+  const formatarIniciais = (nome: string) => {
+    if (!nome) return 'EQ';
+    const partes = nome.trim().split(/\s+/).filter(Boolean);
+    if (partes.length >= 2) {
+      return (partes[0][0] + partes[1][0]).toUpperCase();
+    }
+    return nome.slice(0, 2).toUpperCase();
+  };
+
+  useEffect(() => {
+    const fetchTopRanking = async () => {
+      if (!tenant?.id || isOperador) return;
+      try {
+        const inicioMes = new Date();
+        inicioMes.setDate(1);
+        const inicioIso = inicioMes.toISOString().split('T')[0];
+        const fimMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 0);
+        const fimIso = fimMes.toISOString().split('T')[0];
+
+        const { data: rpcRanking, error } = await supabase.rpc('ranking_produtividade_equipe', {
+          p_tenant: tenant.id,
+          p_inicio: inicioIso,
+          p_fim: fimIso,
+        });
+
+        if (!error && Array.isArray(rpcRanking) && rpcRanking.length > 0) {
+          const list = rpcRanking.map((item: any) => ({
+            membro_id: item.member_id,
+            nome: formatarNomeMembro(item.nome, item.email, item.user_id),
+            role: item.papel,
+            carros_entregues: Number(item.veiculos_concluidos) || 0,
+            tempo_medio_minutos: Number(item.tempo_medio_minutos) || 0,
+            total_comissao: Number(item.comissao_acumulada) || 0,
+          }));
+          setTopRankers(list.slice(0, 3));
+        } else {
+          // Fallback resiliente direto das tabelas
+          const { data: execs } = await supabase
+            .from('execucoes')
+            .select('id, status, tempo_total_segundos, execucao_executores(usuario_id)')
+            .eq('tenant_id', tenant.id)
+            .eq('status', 'finalizado')
+            .gte('finalizado_em', `${inicioIso}T00:00:00`)
+            .lte('finalizado_em', `${fimIso}T23:59:59`)
+            .limit(100);
+
+          const { data: membersData } = await supabase
+            .from('tenant_members')
+            .select('id, user_id, email, role, status')
+            .eq('tenant_id', tenant.id)
+            .eq('status', 'ativo');
+
+          if (membersData && membersData.length > 0) {
+            const userIds = membersData.map((m: any) => m.user_id).filter(Boolean);
+            let profileMap = new Map<string, string>();
+            if (userIds.length > 0) {
+              const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, nome')
+                .in('id', userIds);
+              profileMap = new Map((profiles || []).map((p: any) => [p.id, p.nome]));
+            }
+
+            const countMap: Record<string, { carros: number; totalSegundos: number }> = {};
+
+            (execs || []).forEach((ex: any) => {
+              (ex.execucao_executores || []).forEach((ee: any) => {
+                if (!countMap[ee.usuario_id]) countMap[ee.usuario_id] = { carros: 0, totalSegundos: 0 };
+                countMap[ee.usuario_id].carros += 1;
+                countMap[ee.usuario_id].totalSegundos += (ex.tempo_total_segundos || 0);
+              });
+            });
+
+            const ranked = membersData
+              .map((m: any) => {
+                const nomePerfil = profileMap.get(m.user_id);
+                const nomeFinal = formatarNomeMembro(nomePerfil, m.email, m.user_id);
+                const stats = countMap[m.user_id] || { carros: 0, totalSegundos: 0 };
+                const tempoMedio = stats.carros > 0 ? Math.round(stats.totalSegundos / stats.carros / 60) : 0;
+                return {
+                  membro_id: m.id,
+                  nome: nomeFinal,
+                  role: m.role,
+                  carros_entregues: stats.carros,
+                  tempo_medio_minutos: tempoMedio,
+                  total_comissao: 0,
+                };
+              })
+              .sort((a: any, b: any) => b.carros_entregues - a.carros_entregues)
+              .slice(0, 3);
+
+            setTopRankers(ranked);
+          }
+        }
+      } catch (err) {
+        console.warn('[Dashboard] Erro ao carregar top rankers:', err);
+      }
+    };
+
+    fetchTopRanking();
+  }, [tenant?.id, isOperador, profile?.nome, user?.id]);
+
   useEffect(() => {
     const fetchTreinamentosOnboarding = async () => {
       try {
         const { data: vids } = await supabase.rpc('obter_treinamentos_assinante');
-        if (vids && Array.isArray(vids)) {
-          const essenciais = vids.filter((v: any) => v.essencial);
+        const lista = Array.isArray(vids) ? vids : (vids?.treinamentos || []);
+        if (lista.length > 0) {
+          const essenciais = lista.filter((v: any) => v.essencial);
           if (essenciais.length > 0) {
             const concluidos = essenciais.filter((v: any) => v.concluido).length;
             setTreinamentoOnboarding({
@@ -1094,6 +1227,134 @@ export const Dashboard: React.FC = () => {
             </span>
           </Card>
         </div>
+      </section>
+
+      {/* --------------------------------------------------------------------- */}
+      {/* BLOCO 5: GAMIFICAÇÃO & PÓDIO DA EQUIPE (PRODUTIVIDADE DO MÊS) */}
+      {/* --------------------------------------------------------------------- */}
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trophy size={18} className="text-amber-500" />
+            <h2 className="font-display text-base text-vapor-100 uppercase tracking-wider">
+              Pódio & Produtividade da Equipe
+            </h2>
+            <Badge tone="amber">Mês Atual</Badge>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => navigate('/configuracoes?aba=equipe')}
+            className="text-xs text-amber-500 hover:text-amber-400 font-semibold flex items-center gap-1 p-0 h-auto"
+          >
+            <span>Ver Ranking Completo</span>
+            <ChevronRight size={14} />
+          </Button>
+        </div>
+
+        {topRankers.length === 0 ? (
+          <Card className="p-6 bg-graphite-800 border-graphite-700 text-center flex flex-col items-center justify-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
+              <Trophy size={24} />
+            </div>
+            <div>
+              <p className="font-sans text-sm font-semibold text-vapor-100">
+                O pódio do mês está pronto para a sua equipe!
+              </p>
+              <p className="font-sans text-xs text-vapor-400 mt-1 max-w-md">
+                Conforme os operadores finalizarem execuções de serviços no Box, os destaques de agilidade e volume subirão ao pódio automaticamente.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate('/configuracoes?aba=equipe')}
+              className="text-xs min-h-[36px] px-3 mt-1"
+            >
+              <Users size={14} />
+              <span>Acessar Painel da Equipe</span>
+            </Button>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {topRankers.map((ranker, idx) => {
+              const podiumStyles = [
+                {
+                  pos: '1º LUGAR',
+                  badge: '🥇 CAMPEÃO',
+                  tone: 'amber' as const,
+                  border: 'border-amber-500/50 bg-gradient-to-b from-amber-500/10 via-graphite-800 to-graphite-900',
+                  iconColor: 'text-amber-400',
+                },
+                {
+                  pos: '2º LUGAR',
+                  badge: '🥈 VICE-LÍDER',
+                  tone: 'glass' as const,
+                  border: 'border-slate-400/40 bg-gradient-to-b from-slate-400/10 via-graphite-800 to-graphite-900',
+                  iconColor: 'text-slate-300',
+                },
+                {
+                  pos: '3º LUGAR',
+                  badge: '🥉 3º COLOCADO',
+                  tone: 'vapor' as const,
+                  border: 'border-amber-700/40 bg-gradient-to-b from-amber-700/10 via-graphite-800 to-graphite-900',
+                  iconColor: 'text-amber-600',
+                },
+              ][idx] || {
+                pos: `${idx + 1}º LUGAR`,
+                badge: 'OPERADOR',
+                tone: 'vapor' as const,
+                border: 'border-graphite-700 bg-graphite-800',
+                iconColor: 'text-vapor-400',
+              };
+
+              return (
+                <Card
+                  key={ranker.membro_id || idx}
+                  className={`p-5 flex flex-col justify-between gap-3 relative overflow-hidden transition-all hover:border-amber-500/60 ${podiumStyles.border}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold uppercase tracking-wider text-vapor-400">
+                      {podiumStyles.pos}
+                    </span>
+                    <Badge tone={podiumStyles.tone}>{podiumStyles.badge}</Badge>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-graphite-950 border border-graphite-700 flex items-center justify-center font-display text-base font-bold text-vapor-100 uppercase shrink-0">
+                      {formatarIniciais(ranker.nome)}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-sans text-sm font-bold text-vapor-100 truncate">
+                        {ranker.nome}
+                      </span>
+                      <span className="font-sans text-xs text-vapor-400 capitalize">
+                        {ranker.role}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-graphite-700/60 text-xs">
+                    <div>
+                      <span className="text-vapor-400 block text-[11px]">Entregas</span>
+                      <span className="font-mono font-bold text-vapor-100 text-sm flex items-center gap-1">
+                        <Car size={13} className="text-amber-500" />
+                        {ranker.carros_entregues} veículos
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-vapor-400 block text-[11px]">Tempo Médio</span>
+                      <span className="font-mono font-bold text-vapor-100 text-sm flex items-center gap-1">
+                        <Clock size={13} className="text-vapor-400" />
+                        {ranker.tempo_medio_minutos > 0 ? `${ranker.tempo_medio_minutos} min` : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* --------------------------------------------------------------------- */}

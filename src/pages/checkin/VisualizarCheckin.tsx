@@ -171,7 +171,8 @@ export const VisualizarCheckin: React.FC = () => {
       setCheckin(chkData);
 
       // 2. Agendamento + Cliente + Veiculo
-      const { data: agData } = await supabase
+      let agData: any = null;
+      const { data: agDataFull, error: agErr } = await supabase
         .from('agendamentos')
         .select(`
           id,
@@ -186,7 +187,26 @@ export const VisualizarCheckin: React.FC = () => {
           servico:servicos(id, nome)
         `)
         .eq('id', chkData.agendamento_id)
-        .single();
+        .maybeSingle();
+
+      if (agErr || !agDataFull) {
+        const { data: agDataFallback } = await supabase
+          .from('agendamentos')
+          .select(`
+            id,
+            inicio,
+            status,
+            vistoria_dispensada,
+            cliente:clientes(id, nome, telefone),
+            veiculo:veiculos(id, modelo, placa, marca, cor)
+          `)
+          .eq('id', chkData.agendamento_id)
+          .maybeSingle();
+
+        agData = agDataFallback;
+      } else {
+        agData = agDataFull;
+      }
 
       setAgendamento(agData);
 

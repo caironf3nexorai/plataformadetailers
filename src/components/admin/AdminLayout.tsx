@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Tv,
   Megaphone,
-  Ticket
+  Ticket,
+  Scale
 } from 'lucide-react';
 import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 import { LogoNuvemWash } from '../ui/LogoNuvemWash';
@@ -50,6 +51,7 @@ export const AdminLayout: React.FC = () => {
     { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
     { label: 'Quadro de Avisos', path: '/admin/comunicados', icon: Megaphone },
     { label: 'Cupons', path: '/admin/cupons', icon: Ticket },
+    { label: 'Modelos de Termos', path: '/admin/modelos-termos', icon: Scale },
     { label: 'Assinaturas & MRR', path: '/admin/assinaturas', icon: DollarSign },
     { label: 'Treinamentos', path: '/admin/treinamentos', icon: Tv },
     { label: 'Ref. Mercado', path: '/admin/referencias-preco', icon: TrendingUp },
@@ -65,7 +67,12 @@ export const AdminLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
       {/* Top Header Bar */}
-      <header className="sticky top-0 z-50 bg-slate-900/95 backdrop-blur border-b border-amber-500/20 shadow-xl">
+      <header 
+        className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-amber-500/20 shadow-xl"
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+        }}
+      >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16 gap-2 sm:gap-3">
             

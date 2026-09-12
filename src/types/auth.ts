@@ -39,8 +39,26 @@ export interface Tenant {
   pdf_texto_observacoes_orcamento?: string | null;
   pdf_texto_rodape?: string | null;
   pdf_ocultar_marca_dagua?: boolean | null;
+  placa_balcao_config?: PlacaBalcaoConfig | null;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface PlacaBalcaoConfig {
+  corDestaque?: string;
+  corFundo?: string;
+  estiloFonte?: 'moderna' | 'luxo' | 'esportiva' | 'minimalista';
+  sloganOficina?: string;
+  chamadaPrincipal?: string;
+  instrucaoQr?: string;
+  pill1Titulo?: string;
+  pill1Subtexto?: string;
+  pill2Titulo?: string;
+  pill2Subtexto?: string;
+  pill3Titulo?: string;
+  pill3Subtexto?: string;
+  ocultarMarcaNuvemWash?: boolean;
+  textoRodapeCustomizado?: string | null;
 }
 
 export interface TenantMember {

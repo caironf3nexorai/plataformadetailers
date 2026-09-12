@@ -12,11 +12,18 @@ import {
   User,
   X,
   Check,
-  CheckCircle2
+  CheckCircle2,
+  Code,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  AlertCircle,
+  Terminal
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAdminAuth } from '../../components/admin/AdminGuard';
+import { traduzirErro } from '../../utils/erros';
 
 interface FeedbackItem {
   id: string;
@@ -36,6 +43,108 @@ interface FeedbackItem {
   created_at: string;
 }
 
+interface AutoErrorParsed {
+  isAutoErr: boolean;
+  refCode?: string;
+  tela?: string;
+  mensagemPrincipal: string;
+  detalheAmigavel?: string;
+  dadosJsonTecnico?: string;
+}
+
+function parseMensagemFeedback(raw: string): AutoErrorParsed {
+  if (!raw || (!raw.startsWith('[AUTO-ERR]') && !raw.includes('[REF: ERR-'))) {
+    return {
+      isAutoErr: false,
+      mensagemPrincipal: raw,
+    };
+  }
+
+  // Extrair código de referência
+  const refMatch = raw.match(/\[REF:\s*([^\]]+)\]/);
+  const refCode = refMatch ? refMatch[1].trim() : undefined;
+
+  // Extrair tela
+  const telaMatch = raw.match(/\[TELA:\s*([^\]]+)\]/);
+  const tela = telaMatch ? telaMatch[1].trim() : undefined;
+
+  // Extrair título e mensagem gravados (se houver)
+  const tituloMatch = raw.match(/\[TITULO:\s*([^\]]+)\]/);
+  const tituloGravado = tituloMatch ? tituloMatch[1].trim() : undefined;
+
+  const msgMatch = raw.match(/\[MSG:\s*([^\]]+)\]/);
+  const msgGravada = msgMatch ? msgMatch[1].trim() : undefined;
+
+  // Limpar tags
+  let corpo = raw
+    .replace(/\[AUTO-ERR\]/g, '')
+    .replace(/\[REF:\s*[^\]]+\]/g, '')
+    .replace(/\[TELA:\s*[^\]]+\]/g, '')
+    .replace(/\[TITULO:\s*[^\]]+\]/g, '')
+    .replace(/\[MSG:\s*[^\]]+\]/g, '')
+    .trim();
+
+  let detalheAmigavel: string | undefined = undefined;
+  let dadosJsonTecnico: string | undefined = undefined;
+
+  // Extrair JSON caso haja (ex: erro retornado pelo Asaas)
+  const jsonMatch = corpo.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (jsonMatch) {
+    const rawJson = jsonMatch[0];
+    try {
+      const parsed = JSON.parse(rawJson);
+      dadosJsonTecnico = JSON.stringify(parsed, null, 2);
+
+      if (parsed.errors && Array.isArray(parsed.errors) && parsed.errors.length > 0) {
+        detalheAmigavel = parsed.errors.map((e: any) => e.description || e.code).join(' • ');
+      } else if (parsed.message) {
+        detalheAmigavel = parsed.message;
+      } else if (parsed.error) {
+        detalheAmigavel = typeof parsed.error === 'string' ? parsed.error : JSON.stringify(parsed.error);
+      }
+    } catch (e) {
+      dadosJsonTecnico = rawJson;
+    }
+
+    corpo = corpo.replace(rawJson, '').trim();
+    if (corpo.endsWith(':')) {
+      corpo = corpo.slice(0, -1).trim();
+    }
+  }
+
+  // Se não foi extraído JSON, guarda o log técnico bruto para inspeção
+  const logBruto = corpo;
+  if (!dadosJsonTecnico && logBruto) {
+    dadosJsonTecnico = logBruto;
+  }
+
+  // Tradução e mensagem principal amigável em português
+  let mensagemPrincipal = '';
+  if (tituloGravado && msgGravada) {
+    mensagemPrincipal = `${tituloGravado}: ${msgGravada}`;
+  } else if (tituloGravado || msgGravada) {
+    mensagemPrincipal = tituloGravado || msgGravada || '';
+  }
+
+  // Se não temos título ou mensagem gravados (logs antigos ou brutos)
+  if (!mensagemPrincipal) {
+    const traduzido = traduzirErro(corpo, tela);
+    mensagemPrincipal = `${traduzido.titulo}: ${traduzido.mensagem}`;
+    if (!detalheAmigavel && traduzido.acao) {
+      detalheAmigavel = traduzido.acao;
+    }
+  }
+
+  return {
+    isAutoErr: true,
+    refCode,
+    tela,
+    mensagemPrincipal: mensagemPrincipal || 'Erro técnico registrado automaticamente pelo sistema',
+    detalheAmigavel,
+    dadosJsonTecnico,
+  };
+}
+
 export const AdminFeedbacks: React.FC = () => {
   const { adminLevel } = useAdminAuth();
   const isEditor = adminLevel !== 'suporte';
@@ -53,6 +162,18 @@ export const AdminFeedbacks: React.FC = () => {
   const [novoStatus, setNovoStatus] = useState<string>('em_analise');
   const [isPremiado, setIsPremiado] = useState(false);
   const [salvando, setSalvando] = useState(false);
+
+  // Accordion para detalhes técnicos
+  const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    setExpandedDetails((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const loadFeedbacks = async () => {
     setLoading(true);
@@ -296,10 +417,104 @@ export const AdminFeedbacks: React.FC = () => {
               </div>
 
               {/* Conteúdo e Meta */}
-              <div className="space-y-2">
-                <p className="text-sm text-slate-200 font-sans whitespace-pre-wrap leading-relaxed">
-                  "{item.mensagem}"
-                </p>
+              <div className="space-y-3">
+                {(() => {
+                  const parsed = parseMensagemFeedback(item.mensagem);
+
+                  if (!parsed.isAutoErr) {
+                    return (
+                      <p className="text-sm text-slate-200 font-sans whitespace-pre-wrap leading-relaxed">
+                        "{item.mensagem}"
+                      </p>
+                    );
+                  }
+
+                  const isExpanded = expandedDetails.has(item.id);
+
+                  return (
+                    <div className="space-y-3 bg-slate-950/70 border border-red-500/20 rounded-xl p-4">
+                      {/* Cabeçalho do Erro Automático */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+                          <Terminal className="w-3 h-3 text-red-400" />
+                          Log do Sistema
+                        </span>
+
+                        {parsed.refCode && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(parsed.refCode!);
+                              showSuccess(`Código ${parsed.refCode} copiado!`);
+                            }}
+                            className="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded text-[11px] font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Clique para copiar código de referência"
+                          >
+                            <span>Ref: <strong className="text-amber-400">{parsed.refCode}</strong></span>
+                            <Copy className="w-3 h-3 text-slate-400" />
+                          </button>
+                        )}
+
+                        {parsed.tela && (
+                          <span className="bg-slate-900 text-slate-400 border border-slate-800 px-2 py-0.5 rounded text-[10px] font-mono">
+                            Tela: {parsed.tela}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Título / Descrição Principal */}
+                      <div className="text-sm font-semibold text-slate-100 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <span>{parsed.mensagemPrincipal}</span>
+                      </div>
+
+                      {/* Caixa de Explicação Amigável */}
+                      {parsed.detalheAmigavel && (
+                        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-xs text-amber-200 flex items-start gap-2.5">
+                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <div>
+                            <strong className="text-amber-300 font-bold block mb-0.5">Diagnóstico / Motivo:</strong>
+                            <span className="leading-relaxed">{parsed.detalheAmigavel}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Detalhes Técnicos / JSON (Accordion) */}
+                      {parsed.dadosJsonTecnico && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpanded(item.id)}
+                            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 font-mono transition-colors cursor-pointer"
+                          >
+                            <Code className="w-3.5 h-3.5 text-amber-500" />
+                            <span>{isExpanded ? 'Ocultar Detalhes Técnicos' : 'Ver Log Técnico / Código do Banco'}</span>
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+
+                          {isExpanded && (
+                            <div className="mt-2 relative">
+                              <pre className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-56 select-text">
+                                {parsed.dadosJsonTecnico}
+                              </pre>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(parsed.dadosJsonTecnico!);
+                                  showSuccess('Log técnico copiado para a área de transferência!');
+                                }}
+                                className="absolute top-2 right-2 p-1.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-600 transition cursor-pointer"
+                                title="Copiar log técnico"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="flex items-center gap-4 text-xs text-slate-400 flex-wrap pt-1">
                   <div className="flex items-center gap-1 text-slate-300">

@@ -70,6 +70,7 @@ export const ExecucaoPage: React.FC = () => {
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [showAddExecutor, setShowAddExecutor] = useState(false);
   const [execucaoValores, setExecucaoValores] = useState<any[]>([]);
+  const [marcandoTodosExec, setMarcandoTodosExec] = useState(false);
 
   // Estados para inclusão e remoção de etapas avulsas
   const [novoItemText, setNovoItemText] = useState<Record<string, string>>({});
@@ -375,6 +376,55 @@ export const ExecucaoPage: React.FC = () => {
         prev.map((item) => (item.id === itemId ? { ...item, concluido: !novoConcluido } : item))
       );
       setErrorMsg('Falha ao conectar com o servidor.');
+    }
+  };
+
+  // Marcar todos os itens pendentes (ou apenas os obrigatórios)
+  const handleMarcarTodosItens = async (apenasObrigatorios = false) => {
+    if (execucao?.status === 'finalizado') {
+      setErrorMsg('Não é possível alterar itens de checklist de uma execução finalizada.');
+      return;
+    }
+
+    const targetItens = apenasObrigatorios
+      ? itens.filter((i) => i.obrigatorio && !i.concluido)
+      : itens.filter((i) => !i.concluido);
+
+    if (targetItens.length === 0) return;
+
+    setMarcandoTodosExec(true);
+    setErrorMsg(null);
+    const targetIds = targetItens.map((i) => i.id);
+
+    // Otimista imediato na UI
+    setItens((prev) =>
+      prev.map((item) => (targetIds.includes(item.id) ? { ...item, concluido: true } : item))
+    );
+
+    try {
+      const { error: updErr } = await supabase
+        .from('execucao_itens')
+        .update({
+          concluido: true,
+          concluido_em: new Date().toISOString(),
+          concluido_por: user?.id || null,
+        })
+        .in('id', targetIds);
+
+      if (updErr) {
+        console.warn('[handleMarcarTodosItens fallback to RPC]:', updErr);
+        await Promise.allSettled(
+          targetIds.map((id) =>
+            supabase.rpc('marcar_item', { p_item: id, p_concluido: true })
+          )
+        );
+      }
+    } catch (err: any) {
+      console.error('[handleMarcarTodosItens error]:', err);
+      setErrorMsg('Falha ao concluir etapas em lote.');
+      await loadExecucaoData();
+    } finally {
+      setMarcandoTodosExec(false);
     }
   };
 
@@ -829,14 +879,30 @@ export const ExecucaoPage: React.FC = () => {
         )}
 
         {/* PROGRESSO GERAL */}
-        <div className="flex items-center justify-between bg-graphite-900 p-3.5 rounded-lg border border-graphite-800">
-          <div className="flex items-center gap-2">
-            <CheckCircle size={20} className="text-amber-500" />
-            <span className="text-[14px] font-medium text-vapor-200">Progresso do Checklist</span>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-graphite-900 p-3.5 rounded-lg border border-graphite-800">
+          <div className="flex items-center justify-between sm:justify-start gap-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={20} className="text-amber-500" />
+              <span className="text-[14px] font-medium text-vapor-200">Progresso do Checklist</span>
+            </div>
+            <span className="font-mono text-[16px] font-bold text-amber-500">
+              {concluidosCount} / {totalItens}
+            </span>
           </div>
-          <span className="font-mono text-[16px] font-bold text-amber-500">
-            {concluidosCount} / {totalItens}
-          </span>
+
+          {totalItens > 0 && concluidosCount < totalItens && execucao?.status !== 'finalizado' && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={marcandoTodosExec}
+              onClick={() => handleMarcarTodosItens(false)}
+              className="text-xs h-8 px-3 text-vapor-200 hover:text-vapor-100 border-graphite-700 bg-graphite-800/80 hover:bg-graphite-700 flex items-center justify-center gap-1.5"
+            >
+              <CheckSquare size={14} className="text-emerald-400" />
+              <span>{marcandoTodosExec ? 'Concluindo...' : 'Concluir todas as etapas'}</span>
+            </Button>
+          )}
         </div>
 
         {/* CHECKLIST AGRUPADO POR SERVIÇO */}
@@ -1331,6 +1397,7 @@ export const ExecucaoPage: React.FC = () => {
           placaVeiculo={agendamento.veiculo?.placa || ''}
           pendingRequiredCount={pendingRequiredItems.length}
           pendingRequiredNames={pendingRequiredNames}
+          onMarcarTodosPendentes={() => handleMarcarTodosItens(true)}
           agendamentoItens={agendamento.itens || []}
           fotosSaidaExistentes={fotos.filter((f) => f.momento === 'saida')}
           onSuccess={() => {

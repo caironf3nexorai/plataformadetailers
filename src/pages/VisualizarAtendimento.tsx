@@ -32,6 +32,8 @@ import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
 import { gerarPDFOS } from '../utils/pdfOS';
 import { getEvidenciaSignedUrl, baixarFoto } from '../utils/evidencias';
 import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
+import { ModalEmitirCertificado } from '../components/garantia/ModalEmitirCertificado';
+import { AdesivoParabrisaModal } from '../components/garantia/AdesivoParabrisaModal';
 
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -45,23 +47,35 @@ export const VisualizarAtendimento: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [execucao, setExecucao] = useState<any | null>(null);
-  const [agendamento, setAgendamento] = useState<any | null>(null);
-  const [ordinalCliente, setOrdinalCliente] = useState<number | null>(null);
+  const [execucao, setExecucao] = useState<any>(null);
+  const [agendamento, setAgendamento] = useState<any>(null);
   const [checkinId, setCheckinId] = useState<string | null>(null);
+  const [valores, setValores] = useState<any[]>([]);
   const [checklist, setChecklist] = useState<any[]>([]);
   const [consumos, setConsumos] = useState<any[]>([]);
-  const [valores, setValores] = useState<any[]>([]);
   const [fotos, setFotos] = useState<{ vistoria: any[]; durante: any[]; saida: any[] }>({
     vistoria: [],
     durante: [],
     saida: [],
   });
+  const [ordinalCliente, setOrdinalCliente] = useState<number | null>(null);
   const [fotoModal, setFotoModal] = useState<{ url: string; titulo: string; data?: string } | null>(null);
   const [gerandoPDFOS, setGerandoPDFOS] = useState(false);
   const [modalAvisoSemVistoriaOpen, setModalAvisoSemVistoriaOpen] = useState(false);
   const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
   const [termoGarantia, setTermoGarantia] = useState<{ titulo?: string; texto?: string } | null>(null);
+
+  // Estados de Certificado de Garantia
+  const [certificadoExistente, setCertificadoExistente] = useState<{
+    id: string;
+    codigo: string;
+    status: string;
+    data_vencimento?: string;
+    servico_nome?: string;
+    produto_aplicado?: string | null;
+  } | null>(null);
+  const [modalEmitirCertificadoOpen, setModalEmitirCertificadoOpen] = useState(false);
+  const [modalAdesivoOpen, setModalAdesivoOpen] = useState(false);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
     if (!agendamento || !tenant) return;
@@ -74,7 +88,7 @@ export const VisualizarAtendimento: React.FC = () => {
       // 1. Tempo real trabalhado na execução (se concluído)
       const tempoRealTrabalhadoMinutos = execucao?.tempo_efetivo_minutos && execucao.tempo_efetivo_minutos > 0
         ? execucao.tempo_efetivo_minutos
-        : (segundosTrabalhados > 0 ? Math.round(segundosTrabalhados / 60) : undefined);
+        : (Number(execucao?.segundos_trabalhados || 0) > 0 ? Math.round(Number(execucao.segundos_trabalhados) / 60) : undefined);
 
       const rawItens = (agendamento.agendamento_itens || agendamento.itens || []);
       const itensFormatados = rawItens.map((it: any) => {
@@ -276,6 +290,19 @@ export const VisualizarAtendimento: React.FC = () => {
               .maybeSingle();
             if (tgData) {
               setTermoGarantia({ titulo: tgData.titulo, texto: tgData.conteudo });
+            }
+          }
+
+          // Busca se já possui Certificado de Garantia emitido para este atendimento
+          if (currentAgend.id) {
+            const { data: certData } = await supabase
+              .from('certificados_garantia')
+              .select('id, codigo, status, data_vencimento, servico_nome, produto_aplicado')
+              .eq('agendamento_id', currentAgend.id)
+              .maybeSingle();
+
+            if (certData) {
+              setCertificadoExistente(certData);
             }
           }
         }
@@ -602,6 +629,32 @@ export const VisualizarAtendimento: React.FC = () => {
             <ClipboardCheck size={16} />
             <span className="hidden sm:inline">Vistoria de Entrada</span>
           </Button>
+
+          {/* Botão de Certificado Digital de Garantia */}
+          {certificadoExistente ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setModalAdesivoOpen(true)}
+              className="flex items-center gap-1.5 text-[12px] bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25 shrink-0 font-bold"
+              title="Visualizar Certificado e Imprimir Adesivo com QR Code"
+            >
+              <ShieldCheck size={16} className="text-amber-400" />
+              <span className="hidden sm:inline">Garantia: {certificadoExistente.codigo}</span>
+              <span className="sm:hidden">{certificadoExistente.codigo}</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setModalEmitirCertificadoOpen(true)}
+              className="flex items-center gap-1.5 text-[12px] bg-graphite-800 hover:bg-graphite-700 text-amber-400 border border-graphite-600 hover:border-amber-500/50 shrink-0 font-semibold"
+              title="Emitir Certificado Digital de Garantia com QR Code para o Cliente"
+            >
+              <Sparkles size={16} className="text-amber-400" />
+              <span>Emitir Garantia</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1106,6 +1159,73 @@ export const VisualizarAtendimento: React.FC = () => {
               </p>
             </div>
           )}
+
+          {/* Card Especial: Certificado Digital de Garantia com QR Code */}
+          {certificadoExistente ? (
+            <div className="p-4 bg-gradient-to-r from-amber-500/10 via-graphite-850 to-graphite-900 rounded-xl border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <ShieldCheck size={17} className="text-amber-400" />
+                  <span className="text-xs font-bold text-amber-300 uppercase tracking-wide">
+                    Certificado Digital de Garantia Ativo
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-graphite-950 font-mono text-[11px] font-black text-amber-400 border border-amber-500/40">
+                    {certificadoExistente.codigo}
+                  </span>
+                </div>
+                <p className="text-xs text-vapor-300">
+                  {certificadoExistente.servico_nome} {certificadoExistente.produto_aplicado ? `· ${certificadoExistente.produto_aplicado}` : ''}
+                </p>
+                {certificadoExistente.data_vencimento && (
+                  <span className="text-[11px] text-vapor-400 block font-mono">
+                    Validade: {formatarDataHora(certificadoExistente.data_vencimento)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setModalAdesivoOpen(true)}
+                  className="text-xs py-2 px-3.5 font-bold bg-amber-500 hover:bg-amber-400 text-graphite-950 flex items-center gap-1.5 flex-1 sm:flex-initial"
+                >
+                  <Printer size={14} />
+                  <span>Adesivo & QR Code</span>
+                </Button>
+                <a
+                  href={`/garantia/${certificadoExistente.codigo}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border border-graphite-600 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <Eye size={14} />
+                  <span>Ver Página</span>
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 bg-graphite-800/90 rounded-xl border border-graphite-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-bold text-vapor-100 flex items-center gap-1.5">
+                  <Sparkles size={15} className="text-amber-400" />
+                  Certificado Digital de Garantia com QR Code de Para-brisa
+                </span>
+                <p className="text-xs text-vapor-400 leading-relaxed">
+                  Gere um certificado de garantia digital autenticado com linha do tempo de revisões e selo/adesivo com QR Code para o vidro do veículo.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setModalEmitirCertificadoOpen(true)}
+                className="text-xs py-2 px-3.5 font-bold text-amber-300 border-amber-500/40 hover:bg-amber-500/10 flex items-center gap-1.5 shrink-0"
+              >
+                <Sparkles size={14} />
+                <span>Emitir Certificado</span>
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -1189,6 +1309,73 @@ export const VisualizarAtendimento: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Modal Emitir Certificado de Garantia */}
+      {/* Modal Emitir Certificado Digital */}
+      {modalEmitirCertificadoOpen && agendamento && (() => {
+        const itemComGarantia = (agendamento?.agendamento_itens || agendamento?.itens || []).find((it: any) => it.servicos?.tem_garantia)
+          || (agendamento?.agendamento_itens || agendamento?.itens || [])[0];
+        const servicoDetectado = itemComGarantia?.servicos || agendamento?.servicos;
+
+        return (
+          <ModalEmitirCertificado
+            isOpen={modalEmitirCertificadoOpen}
+            onClose={() => setModalEmitirCertificadoOpen(false)}
+            atendimento={{
+              agendamento_id: agendamento.id,
+              cliente_id: agendamento.cliente_id,
+              cliente_nome: agendamento.clientes?.nome || agendamento.cliente?.nome || 'Cliente',
+              cliente_telefone: agendamento.clientes?.telefone || agendamento.cliente?.telefone,
+              veiculo_id: agendamento.veiculo_id,
+              veiculo_modelo: agendamento.veiculos?.modelo || agendamento.veiculo?.modelo || 'Veículo',
+              veiculo_placa: agendamento.veiculos?.placa || agendamento.veiculo?.placa || '',
+              veiculo_cor: agendamento.veiculos?.cor || agendamento.veiculo?.cor,
+              servico_id: servicoDetectado?.id || agendamento.servico_id,
+              servico_nome: servicoDetectado?.nome || agendamento.servicos?.nome || 'Vitrificação / Proteção Cerâmica',
+              produto_padrao: servicoDetectado?.garantia_produto_padrao,
+              garantia_meses: servicoDetectado?.garantia_meses,
+              intervalo_manutencao_dias: servicoDetectado?.garantia_intervalo_dias,
+              cuidados_padrao: servicoDetectado?.garantia_cuidados,
+              data_servico: agendamento.inicio || agendamento.created_at,
+              tenant_nome: tenant?.nome,
+              tenant_logo: tenant?.logo_path
+            }}
+            onSucesso={(codigo) => {
+              setCertificadoExistente({
+                id: '',
+                codigo,
+                status: 'ativo',
+                servico_nome: servicoDetectado?.nome || agendamento.servicos?.nome || 'Vitrificação / Proteção Cerâmica'
+              });
+            }}
+          />
+        );
+      })()}
+
+      {/* Modal Visualizar / Imprimir Adesivo de Para-brisa */}
+      {modalAdesivoOpen && certificadoExistente && agendamento && (
+        <AdesivoParabrisaModal
+          isOpen={modalAdesivoOpen}
+          onClose={() => setModalAdesivoOpen(false)}
+          certificado={{
+            codigo: certificadoExistente.codigo,
+            servico_nome: certificadoExistente.servico_nome || agendamento.servicos?.nome || 'Proteção Cerâmica',
+            produto_aplicado: certificadoExistente.produto_aplicado,
+            data_aplicacao: agendamento.inicio || agendamento.created_at,
+            data_vencimento: certificadoExistente.data_vencimento || new Date(Date.now() + 365*24*60*60*1000).toISOString()
+          }}
+          oficina={{
+            nome: tenant?.nome || 'NuvemWash',
+            logo_path: tenant?.logo_path,
+            telefone: tenant?.telefone
+          }}
+          veiculo={{
+            modelo: agendamento.veiculos?.modelo || 'Veículo',
+            placa: agendamento.veiculos?.placa || '',
+            cor: agendamento.veiculos?.cor
+          }}
+        />
       )}
     </div>
   );

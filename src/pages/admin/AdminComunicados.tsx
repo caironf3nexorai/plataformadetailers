@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Megaphone, 
   Plus, 
   Search, 
-  CheckCircle2, 
   X, 
   Gift, 
   Ticket, 
@@ -12,12 +12,8 @@ import {
   RefreshCw, 
   Trash2, 
   Edit3, 
-  Calendar, 
   ExternalLink,
-  Info,
-  Clock,
-  Radio,
-  Award
+  Radio
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
@@ -85,6 +81,18 @@ export const AdminComunicados: React.FC = () => {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
 
+  // Previne rolagem da página de fundo enquanto o modal estiver aberto
+  useEffect(() => {
+    if (modalAberto) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [modalAberto]);
+
   const carregarDados = async () => {
     setLoading(true);
     try {
@@ -137,6 +145,14 @@ export const AdminComunicados: React.FC = () => {
     }
   };
 
+  const toLocalInputDateTime = (dateOrStr?: string | Date | null): string => {
+    if (!dateOrStr) return '';
+    const d = typeof dateOrStr === 'string' ? new Date(dateOrStr) : dateOrStr;
+    if (isNaN(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const abrirModalCriacao = () => {
     setComunicadoEmEdicao(null);
     setTitulo('');
@@ -153,7 +169,7 @@ export const AdminComunicados: React.FC = () => {
     setPublicoAlvo('todos');
     setObrigatorio(false);
     setAtivo(true);
-    setDataInicio(new Date().toISOString().slice(0, 16));
+    setDataInicio(toLocalInputDateTime(new Date()));
     setDataFim('');
     setModalAberto(true);
   };
@@ -174,8 +190,8 @@ export const AdminComunicados: React.FC = () => {
     setPublicoAlvo(c.publico_alvo);
     setObrigatorio(c.obrigatorio);
     setAtivo(c.ativo);
-    setDataInicio(c.data_inicio ? c.data_inicio.slice(0, 16) : '');
-    setDataFim(c.data_fim ? c.data_fim.slice(0, 16) : '');
+    setDataInicio(toLocalInputDateTime(c.data_inicio));
+    setDataFim(toLocalInputDateTime(c.data_fim));
     setModalAberto(true);
   };
 
@@ -505,9 +521,9 @@ export const AdminComunicados: React.FC = () => {
       )}
 
       {/* Modal de Criação / Edição */}
-      {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md">
-          <div className="bg-slate-900 border border-amber-500/30 rounded-3xl w-full max-w-4xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
+      {modalAberto && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-3xl w-full max-w-4xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden my-auto">
             {/* Faixa Iluminada de Topo */}
             <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 shrink-0" />
 
@@ -851,7 +867,8 @@ export const AdminComunicados: React.FC = () => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

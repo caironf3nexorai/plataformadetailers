@@ -12,6 +12,7 @@ import { usePermissao } from '../../hooks/usePermissao';
 import { supabase } from '../../lib/supabase';
 import type { CategoriaVeiculo, Cliente, Veiculo } from '../../types/clientes';
 import { HistoricoServicos } from '../../components/clientes/HistoricoServicos';
+import { GarantiasClienteVeiculo } from '../../components/clientes/GarantiasClienteVeiculo';
 import { formatTelefone, formatPlaca, cleanTelefone } from '../../utils/formatters';
 import {
   ArrowLeft,
@@ -501,6 +502,11 @@ export const DetalheCliente: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Garantias & Proteções Ativas */}
+      <div className="mt-2">
+        <GarantiasClienteVeiculo clienteId={cliente.id} modo="cliente" />
       </div>
 
       {/* Histórico de Serviços */}

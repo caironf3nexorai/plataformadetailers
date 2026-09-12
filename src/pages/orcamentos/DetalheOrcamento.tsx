@@ -194,7 +194,8 @@ export const DetalheOrcamento: React.FC = () => {
 
   // Checks de Inclusão no Orçamento / PDF / Link Público
   const [incluirFotos, setIncluirFotos] = useState<boolean>(true);
-  const [incluirTermos, setIncluirTermos] = useState<boolean>(true);
+  const [incluirTermoResponsabilidade, setIncluirTermoResponsabilidade] = useState<boolean>(true);
+  const [incluirTermoGarantia, setIncluirTermoGarantia] = useState<boolean>(true);
 
   // Termos de Garantia, Responsabilidade e Validade
   const [termosDisponiveis, setTermosDisponiveis] = useState<TermoGarantia[]>([]);
@@ -261,7 +262,9 @@ export const DetalheOrcamento: React.FC = () => {
       setObservacoes(quote.observacoes || '');
       setValidadeDiasOrcamento(quote.validade_dias || 7);
       setIncluirFotos((quote as any).incluir_fotos ?? true);
-      setIncluirTermos((quote as any).incluir_termos ?? true);
+      const baseTermos = (quote as any).incluir_termos ?? true;
+      setIncluirTermoResponsabilidade((quote as any).incluir_termo_responsabilidade ?? baseTermos);
+      setIncluirTermoGarantia((quote as any).incluir_termo_garantia ?? baseTermos);
       setTermoGarantiaSelecionado((quote as any).termo_garantia_id || '');
 
       // Carrega URLs assinadas das assinaturas existentes de forma independente
@@ -1252,7 +1255,9 @@ export const DetalheOrcamento: React.FC = () => {
             created_at: f.created_at,
             descricao: f.descricao,
           })),
-          incluirTermos,
+          incluirTermos: incluirTermoResponsabilidade || incluirTermoGarantia,
+          incluirTermoResponsabilidade,
+          incluirTermoGarantia,
           termoResponsabilidade: termoResponsabilidade || (tenant as any)?.termo_responsabilidade || localStorage.getItem(`termo_responsabilidade_${tenant.id}`) || TERMO_RESPONSABILIDADE_PADRAO,
           termosGarantia: termoEscolhido?.conteudo || undefined,
           desconto: orcamento.desconto_valor && orcamento.desconto_tipo ? {
@@ -1633,21 +1638,44 @@ export const DetalheOrcamento: React.FC = () => {
               <span className="font-semibold">Fotos no PDF / Link</span>
             </label>
 
-            {/* CHECK: INCLUIR TERMOS */}
+            {/* CHECK: TERMO DE RESPONSABILIDADE */}
             <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-vapor-100">
               <input
                 type="checkbox"
-                checked={incluirTermos}
+                checked={incluirTermoResponsabilidade}
                 onChange={async (e) => {
                   const val = e.target.checked;
-                  setIncluirTermos(val);
+                  setIncluirTermoResponsabilidade(val);
                   if (orcamento) {
-                    await supabase.from('orcamentos').update({ incluir_termos: val }).eq('id', orcamento.id);
+                    await supabase.from('orcamentos').update({ 
+                      incluir_termo_responsabilidade: val,
+                      incluir_termos: val || incluirTermoGarantia
+                    }).eq('id', orcamento.id);
+                  }
+                }}
+                className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-cyan-400 focus:ring-0"
+              />
+              <span className="font-semibold">Termo de Responsabilidade</span>
+            </label>
+
+            {/* CHECK: TERMO DE GARANTIA */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-vapor-100">
+              <input
+                type="checkbox"
+                checked={incluirTermoGarantia}
+                onChange={async (e) => {
+                  const val = e.target.checked;
+                  setIncluirTermoGarantia(val);
+                  if (orcamento) {
+                    await supabase.from('orcamentos').update({ 
+                      incluir_termo_garantia: val,
+                      incluir_termos: incluirTermoResponsabilidade || val
+                    }).eq('id', orcamento.id);
                   }
                 }}
                 className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
               />
-              <span className="font-semibold">Termos Legais e Garantia no PDF</span>
+              <span className="font-semibold">Termo de Garantia</span>
             </label>
           </div>
         </div>
@@ -1705,10 +1733,18 @@ export const DetalheOrcamento: React.FC = () => {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-vapor-300 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <ShieldCheck size={14} className="text-amber-400" />
+                <ShieldCheck size={14} className={incluirTermoGarantia ? "text-amber-400" : "text-vapor-500"} />
                 Termo Específico de Garantia:
               </span>
-              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-bold">Variável</span>
+              {incluirTermoGarantia ? (
+                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-bold">
+                  Ativo na Proposta
+                </span>
+              ) : (
+                <span className="text-[10px] text-vapor-400 bg-graphite-900 px-1.5 py-0.5 rounded border border-graphite-700 font-bold">
+                  Desmarcado acima
+                </span>
+              )}
             </label>
             <select
               value={termoGarantiaSelecionado}
@@ -1719,9 +1755,12 @@ export const DetalheOrcamento: React.FC = () => {
                   await supabase.from('orcamentos').update({ termo_garantia_id: val || null }).eq('id', orcamento.id);
                 }
               }}
-              className="w-full bg-graphite-950 border border-graphite-700 rounded-lg p-2 text-vapor-100 font-sans text-xs outline-none focus:border-amber-500"
+              disabled={!incluirTermoGarantia}
+              className={`w-full bg-graphite-950 border border-graphite-700 rounded-lg p-2 font-sans text-xs outline-none focus:border-amber-500 transition-opacity ${
+                !incluirTermoGarantia ? 'opacity-50 cursor-not-allowed text-vapor-500' : 'text-vapor-100'
+              }`}
             >
-              <option value="">Termo Padrão da Oficina</option>
+              <option value="">Nenhum termo específico selecionado</option>
               {termosDisponiveis.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.titulo} ({t.tipo})
@@ -1732,21 +1771,35 @@ export const DetalheOrcamento: React.FC = () => {
         </div>
 
         {/* CARD DO TERMO GERAL DE RESPONSABILIDADE & FALHAS OCULTAS (FIXO DA OFICINA) */}
-        <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-graphite-950/80 border border-graphite-800">
+        <div
+          className={`flex flex-col gap-1.5 p-3 rounded-lg border transition-all ${
+            incluirTermoResponsabilidade
+              ? 'bg-graphite-950/80 border-graphite-800'
+              : 'bg-graphite-950/40 border-graphite-800/60 border-dashed opacity-60'
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-vapor-200 flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-cyan-400" />
+              <ShieldCheck size={14} className={incluirTermoResponsabilidade ? 'text-cyan-400' : 'text-vapor-500'} />
               Termo Fixo de Responsabilidade, Falhas Ocultas & Condições Gerais
             </span>
-            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20 font-bold">
-              Aplicado Automaticamente
-            </span>
+            {incluirTermoResponsabilidade ? (
+              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
+                Ativo na Proposta / PDF
+              </span>
+            ) : (
+              <span className="text-[10px] text-vapor-400 bg-graphite-900 px-2 py-0.5 rounded-full border border-graphite-700 font-bold">
+                Desativado neste Orçamento
+              </span>
+            )}
           </div>
           <p className="text-[11px] text-vapor-400 leading-relaxed italic bg-graphite-900/60 p-2.5 rounded border border-graphite-800 max-h-24 overflow-y-auto">
             "{termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}"
           </p>
           <span className="text-[10px] text-vapor-500">
-            • Este termo geral acompanha a proposta comercial, vistoria e ordem de serviço para proteção jurídica contra falhas preexistentes.
+            {incluirTermoResponsabilidade
+              ? '• Este termo geral acompanha a proposta comercial e o PDF para proteção jurídica contra falhas preexistentes.'
+              : '• A opção "Termo de Responsabilidade" está desmarcada acima. Nenhum termo de responsabilidade será anexado a esta proposta nem ao PDF.'}
           </span>
         </div>
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Megaphone, 
   Gift, 
@@ -16,6 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ComunicadoAtivo {
   id: string;
@@ -39,6 +41,7 @@ interface ComunicadoAtivo {
 export const ModalComunicadoGlobal: React.FC = () => {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
+  const { tenant, loading: authLoading } = useAuth();
 
   const [comunicado, setComunicado] = useState<ComunicadoAtivo | null>(null);
   const [visivel, setVisivel] = useState(false);
@@ -48,13 +51,16 @@ export const ModalComunicadoGlobal: React.FC = () => {
   const [cupomCopiado, setCupomCopiado] = useState(false);
 
   useEffect(() => {
+    // Só busca comunicados quando a autenticação e o tenant estiverem prontos
+    if (authLoading || !tenant?.id) return;
+
     let ativo = true;
 
     async function checarComunicados() {
       try {
         const { data, error } = await supabase.rpc('obter_comunicado_pendente');
         if (error) {
-          // Falha silenciosa para não travar a aplicação
+          console.error('[ModalComunicadoGlobal] Erro ao obter comunicado pendente:', error);
           return;
         }
 
@@ -66,7 +72,7 @@ export const ModalComunicadoGlobal: React.FC = () => {
           }, 800);
         }
       } catch (err) {
-        // Silently catch
+        console.error('[ModalComunicadoGlobal] Falha inesperada ao checar comunicados:', err);
       }
     }
 
@@ -75,7 +81,7 @@ export const ModalComunicadoGlobal: React.FC = () => {
     return () => {
       ativo = false;
     };
-  }, []);
+  }, [authLoading, tenant?.id]);
 
   if (!visivel || !comunicado) return null;
 
@@ -190,8 +196,8 @@ export const ModalComunicadoGlobal: React.FC = () => {
 
   const theme = getThemeStyles(comunicado.cor_tema);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
       <div 
         className={`relative w-full max-w-lg bg-slate-900 border rounded-3xl overflow-hidden shadow-2xl transition-all transform animate-in zoom-in-95 duration-200 ${theme.glow}`}
       >
@@ -334,17 +340,38 @@ export const ModalComunicadoGlobal: React.FC = () => {
 
           {/* Botões de Ação */}
           <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2">
-            {!comunicado.obrigatorio && (
+            {/* Botão Secundário para dispensar se não for obrigatório e houver ação secundária */}
+            {!comunicado.obrigatorio && comunicado.acao_tipo !== 'nenhuma' && !resgatadoSucesso && (
               <button
                 type="button"
                 onClick={handleDispensar}
-                className="w-full sm:w-auto px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase tracking-wider transition"
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase tracking-wider transition"
               >
-                {resgatadoSucesso ? 'Fechar' : 'Entendido'}
+                Lembrar Mais Tarde
               </button>
             )}
 
-            {!resgatadoSucesso && comunicado.acao_tipo !== 'nenhuma' && (
+            {/* Se já resgatou sucesso, exibe botão Fechar */}
+            {resgatadoSucesso ? (
+              <button
+                type="button"
+                onClick={handleDispensar}
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold uppercase tracking-wider transition"
+              >
+                Fechar
+              </button>
+            ) : comunicado.acao_tipo === 'nenhuma' ? (
+              /* Apenas ler e fechar / Confirmação de leitura (ex: "CONFIRMAR TESTE" ou "OK, Entendido") */
+              <button
+                type="button"
+                onClick={handleDispensar}
+                className={`w-full sm:w-auto flex items-center justify-center space-x-2 px-6 py-3 rounded-xl text-xs font-black uppercase tracking-wider transition transform active:scale-95 shadow-lg ${theme.buttonPrimary}`}
+              >
+                <Check className="w-4 h-4" />
+                <span>{comunicado.acao_label || 'OK, Entendido'}</span>
+              </button>
+            ) : (
+              /* Ações interativas: Cupom, Brinde ou Link */
               <button
                 type="button"
                 onClick={handleExecutarAcao}
@@ -364,6 +391,7 @@ export const ModalComunicadoGlobal: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

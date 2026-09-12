@@ -74,6 +74,8 @@ export interface PDFOrcamentoData {
   incluirFotos?: boolean;
   fotos?: Array<{ url: string; path?: string; tipo?: 'antes' | 'depois'; descricao?: string; created_at?: string }>;
   incluirTermos?: boolean;
+  incluirTermoResponsabilidade?: boolean;
+  incluirTermoGarantia?: boolean;
   termosGarantia?: string | null;
   termoResponsabilidade?: string | null;
 
@@ -533,8 +535,16 @@ export async function gerarPDFOrcamento(
   }
 
   // 6. Termos Contratuais (Responsabilidade e Garantia)
-  if (data.incluirTermos !== false) {
-    // 6.1 Termo Fixo de Responsabilidade & Falhas Ocultas (Geral da Oficina)
+  const deveIncluirResp = data.incluirTermoResponsabilidade !== undefined
+    ? data.incluirTermoResponsabilidade
+    : (data.incluirTermos !== false);
+
+  const deveIncluirGar = data.incluirTermoGarantia !== undefined
+    ? data.incluirTermoGarantia
+    : (data.incluirTermos !== false);
+
+  // 6.1 Termo Fixo de Responsabilidade & Falhas Ocultas (Geral da Oficina)
+  if (deveIncluirResp) {
     const textoResp = (data.termoResponsabilidade && data.termoResponsabilidade.trim()) || TERMO_RESPONSABILIDADE_PADRAO;
     if (textoResp) {
       const splitResp = doc.splitTextToSize(textoResp.trim(), usableWidth - 10);
@@ -564,10 +574,11 @@ export async function gerarPDFOrcamento(
 
       y += respBoxH + 3.5;
     }
+  }
 
-    // 6.2 Termo Variável de Garantia Específica do Serviço
-    if (data.termosGarantia && data.termosGarantia.trim()) {
-      const splitTermos = doc.splitTextToSize(data.termosGarantia.trim(), usableWidth - 10);
+  // 6.2 Termo Variável de Garantia Específica do Serviço
+  if (deveIncluirGar && data.termosGarantia && data.termosGarantia.trim()) {
+    const splitTermos = doc.splitTextToSize(data.termosGarantia.trim(), usableWidth - 10);
       const termosBoxH = Math.max(14, 7 + splitTermos.length * 3.6);
 
       if (y + termosBoxH > 275) {
@@ -594,7 +605,6 @@ export async function gerarPDFOrcamento(
 
       y += termosBoxH + 4;
     }
-  }
 
   // 7. Bloco de Assinaturas (Digital ou Linhas Físicas para Impressão Manual)
   const temAssinaturaDigital = Boolean(data.assinaturaUrl || data.assinaturaUsuarioUrl);

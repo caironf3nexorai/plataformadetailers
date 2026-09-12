@@ -39,6 +39,7 @@ const FALLBACK_LIMITS: Record<PlanCode, Record<string, number | null>> = {
 const FALLBACK_FEATURES: Record<PlanCode, Record<string, boolean>> = {
   free: {
     personalizacao_pdf: false,
+    personalizacao_placa_balcao: false,
     arquivos_digitais: true,
     treinamentos: true,
     metas_equipe: false,
@@ -48,6 +49,7 @@ const FALLBACK_FEATURES: Record<PlanCode, Record<string, boolean>> = {
   },
   pro: {
     personalizacao_pdf: true,
+    personalizacao_placa_balcao: true,
     arquivos_digitais: true,
     treinamentos: true,
     metas_equipe: true,
@@ -57,6 +59,7 @@ const FALLBACK_FEATURES: Record<PlanCode, Record<string, boolean>> = {
   },
   studio: {
     personalizacao_pdf: true,
+    personalizacao_placa_balcao: true,
     arquivos_digitais: true,
     treinamentos: true,
     metas_equipe: true,
