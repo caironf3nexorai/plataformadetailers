@@ -24,6 +24,12 @@ export const BannerAlertaLimites: React.FC = () => {
     try {
       if (!tenant?.id) return;
 
+      // Início do mês atual para recursos mensais
+      const now = new Date();
+      const ano = now.getFullYear();
+      const mes = String(now.getMonth() + 1).padStart(2, '0');
+      const inicioMesIso = `${ano}-${mes}-01T00:00:00`;
+
       // Contadores atuais da oficina
       const [
         { count: countClientes },
@@ -31,13 +37,13 @@ export const BannerAlertaLimites: React.FC = () => {
         { count: countExecucoes },
       ] = await Promise.all([
         supabase.from('clientes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
-        supabase.from('agendamentos').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
-        supabase.from('execucoes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
+        supabase.from('agendamentos').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id).gte('created_at', inicioMesIso),
+        supabase.from('execucoes').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant.id).gte('created_at', inicioMesIso),
       ]);
 
       const lista: AlertaItem[] = [];
 
-      // 1. Clientes
+      // 1. Clientes (Capacidade Total Cadastrada)
       const resClientes = verificarUso('clientes', countClientes || 0);
       if ((resClientes.proximo || resClientes.atingiu) && resClientes.limite) {
         lista.push({
@@ -50,12 +56,12 @@ export const BannerAlertaLimites: React.FC = () => {
         });
       }
 
-      // 2. Agendamentos
+      // 2. Agendamentos (Cota Mensal - Renova todo dia 1º)
       const resAgendamentos = verificarUso('agendamentos', countAgendamentos || 0);
       if ((resAgendamentos.proximo || resAgendamentos.atingiu) && resAgendamentos.limite) {
         lista.push({
           recurso: 'agendamentos',
-          nomeRecurso: 'Agendamentos',
+          nomeRecurso: 'Agendamentos no Mês',
           usoAtual: countAgendamentos || 0,
           limite: resAgendamentos.limite,
           porcentagem: resAgendamentos.porcentagem,
@@ -63,12 +69,12 @@ export const BannerAlertaLimites: React.FC = () => {
         });
       }
 
-      // 3. Execuções / Vistorias
+      // 3. Execuções / Vistorias (Cota Mensal - Renova todo dia 1º)
       const resExecucoes = verificarUso('execucoes', countExecucoes || 0);
       if ((resExecucoes.proximo || resExecucoes.atingiu) && resExecucoes.limite) {
         lista.push({
           recurso: 'execucoes',
-          nomeRecurso: 'Vistorias & Execuções',
+          nomeRecurso: 'Vistorias & Atendimentos no Mês',
           usoAtual: countExecucoes || 0,
           limite: resExecucoes.limite,
           porcentagem: resExecucoes.porcentagem,
