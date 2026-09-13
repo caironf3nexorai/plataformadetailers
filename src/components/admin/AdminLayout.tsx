@@ -18,7 +18,8 @@ import {
   Tv,
   Megaphone,
   Ticket,
-  Scale
+  Scale,
+  Rocket
 } from 'lucide-react';
 import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 import { LogoNuvemWash } from '../ui/LogoNuvemWash';
@@ -50,6 +51,7 @@ export const AdminLayout: React.FC = () => {
   const navItems = [
     { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
     { label: 'Quadro de Avisos', path: '/admin/comunicados', icon: Megaphone },
+    { label: 'Campanhas & Trial', path: '/admin/campanhas', icon: Rocket },
     { label: 'Cupons', path: '/admin/cupons', icon: Ticket },
     { label: 'Modelos de Termos', path: '/admin/modelos-termos', icon: Scale },
     { label: 'Assinaturas & MRR', path: '/admin/assinaturas', icon: DollarSign },

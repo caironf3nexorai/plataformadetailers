@@ -76,12 +76,13 @@ export const NovaOficina: React.FC = () => {
         return;
       }
 
-      // Obter código de convite ou de parceiro do localStorage ou URL
+      // Obter código de convite, parceiro ou campanha do localStorage ou URL
       const searchParams = new URLSearchParams(window.location.search);
       const conviteCodigo = searchParams.get('convite') || localStorage.getItem('convite_codigo');
       const parceiroCodigo = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
+      const campanhaCodigo = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
 
-      // Chamada RPC para criação atômica da oficina e do membro dono com convite/parceiro
+      // Chamada RPC para criação atômica da oficina e do membro dono com convite/parceiro/campanha
       const { data: _tenantId, error } = await supabase.rpc('criar_oficina', {
         p_nome: nome.trim(),
         p_cidade: cidade.trim() || null,
@@ -89,6 +90,7 @@ export const NovaOficina: React.FC = () => {
         p_telefone: telefone.trim() || null,
         p_codigo_indicacao: conviteCodigo ? conviteCodigo.trim().toUpperCase() : null,
         p_codigo_parceiro: parceiroCodigo ? parceiroCodigo.trim().toUpperCase() : null,
+        p_codigo_campanha: campanhaCodigo ? campanhaCodigo.trim().toUpperCase() : null,
       });
 
       if (error) {
@@ -98,6 +100,7 @@ export const NovaOficina: React.FC = () => {
       } else {
         localStorage.removeItem('convite_codigo');
         localStorage.removeItem('parceiro_codigo');
+        localStorage.removeItem('campanha_codigo');
         await refetchTenantData();
         navigate('/');
       }

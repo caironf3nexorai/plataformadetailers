@@ -15,6 +15,7 @@ const PoliticaPrivacidade = lazyWithRetry(() => import('./pages/public/PoliticaP
 const TermosUso = lazyWithRetry(() => import('./pages/public/TermosUso').then(m => ({ default: m.TermosUso })));
 const PaginaConvite = lazyWithRetry(() => import('./pages/public/PaginaConvite').then(m => ({ default: m.PaginaConvite })));
 const PaginaParceiro = lazyWithRetry(() => import('./pages/public/PaginaParceiro').then(m => ({ default: m.PaginaParceiro })));
+const PaginaLancamento = lazyWithRetry(() => import('./pages/public/PaginaLancamento').then(m => ({ default: m.PaginaLancamento })));
 
 // Páginas de Autenticação
 import { Entrar } from './pages/auth/Entrar';
@@ -73,6 +74,7 @@ const AdminParceiros = lazyWithRetry(() => import('./pages/admin/AdminParceiros'
 const AdminPrecificacaoReferencia = lazyWithRetry(() => import('./pages/admin/AdminPrecificacaoReferencia').then(m => ({ default: m.AdminPrecificacaoReferencia })));
 const AdminTreinamentos = lazyWithRetry(() => import('./pages/admin/AdminTreinamentos').then(m => ({ default: m.AdminTreinamentos })));
 const AdminComunicados = lazyWithRetry(() => import('./pages/admin/AdminComunicados').then(m => ({ default: m.AdminComunicados })));
+const AdminCampanhas = lazyWithRetry(() => import('./pages/admin/AdminCampanhas').then(m => ({ default: m.AdminCampanhas })));
 const AdminCupons = lazyWithRetry(() => import('./pages/admin/AdminCupons').then(m => ({ default: m.AdminCupons })));
 const AdminModelosTermos = lazyWithRetry(() => import('./pages/admin/AdminModelosTermos').then(m => ({ default: m.AdminModelosTermos })));
 const LoginParceiro = lazyWithRetry(() => import('./pages/parceiro/LoginParceiro').then(m => ({ default: m.LoginParceiro })));
@@ -110,6 +112,7 @@ function App() {
             <Route path="/login" element={<Navigate to="/entrar" replace />} />
             <Route path="/criar-conta" element={<CriarConta />} />
             <Route path="/convite/:codigo" element={<PaginaConvite />} />
+            <Route path="/lancamento/:codigo" element={<PaginaLancamento />} />
             <Route path="/parceiro/login" element={<LoginParceiro />} />
             <Route path="/parceiro/painel" element={<PainelParceiro />} />
             <Route path="/parceiro/:codigo" element={<PaginaParceiro />} />
@@ -134,6 +137,7 @@ function App() {
               <Route index element={<Navigate to="/admin/oficinas" replace />} />
               <Route path="oficinas" element={<AdminOficinas />} />
               <Route path="comunicados" element={<AdminComunicados />} />
+              <Route path="campanhas" element={<AdminCampanhas />} />
               <Route path="cupons" element={<AdminCupons />} />
               <Route path="modelos-termos" element={<AdminModelosTermos />} />
               <Route path="assinaturas" element={<AdminAssinaturas />} />

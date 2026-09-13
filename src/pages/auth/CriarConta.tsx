@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, UserPlus, Mail } from 'lucide-react';
+import { AlertTriangle, UserPlus, Mail, Rocket } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const CriarConta: React.FC = () => {
@@ -21,10 +21,33 @@ export const CriarConta: React.FC = () => {
   const [telefone, setTelefone] = useState('');
   const [emailLocked, setEmailLocked] = useState(false);
   const [conviteOficina, setConviteOficina] = useState<string | null>(null);
+  const [campanhaInfo, setCampanhaInfo] = useState<{ codigo: string; nome: string; plano_nome: string; dias_trial: number } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
+
+  // Captura de Campanha de Lançamento
+  useEffect(() => {
+    const codCampanha = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
+    if (codCampanha) {
+      const codLimpo = codCampanha.trim().toUpperCase();
+      localStorage.setItem('campanha_codigo', codLimpo);
+      
+      const buscarCampanha = async () => {
+        try {
+          const { data, error } = await supabase.rpc('obter_campanha_lancamento_publica', { p_codigo: codLimpo });
+          if (!error && data && (data as any).valida) {
+            setCampanhaInfo(data as any);
+          }
+        } catch (err) {
+          console.error('[CriarConta] Erro ao validar campanha:', err);
+        }
+      };
+
+      buscarCampanha();
+    }
+  }, [searchParams]);
 
   // E-mail pré-preenchido e travado para convites
   useEffect(() => {
@@ -132,6 +155,15 @@ export const CriarConta: React.FC = () => {
         </div>
 
         <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-4 shadow-xl">
+          {campanhaInfo && (
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-amber-400 text-xs font-sans shadow-sm">
+              <Rocket size={18} className="shrink-0 text-amber-400 animate-pulse" />
+              <span>
+                <strong>Convite VIP de Lançamento Aplicado:</strong> Você terá <strong>{campanhaInfo.dias_trial} dias grátis</strong> no <strong>Plano {campanhaInfo.plano_nome}</strong>!
+              </span>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded flex items-center gap-2 text-flare-400 text-[13px]">
               <AlertTriangle size={18} className="shrink-0" />
