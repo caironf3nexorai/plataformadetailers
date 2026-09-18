@@ -27,3 +27,8 @@ dist-ssr
 # Supabase temporary files & Scratch
 supabase/.temp/
 scratch/
+
+# Agent Customizations & Skills
+.agents/skills/
+skills/
+skills-lock.json

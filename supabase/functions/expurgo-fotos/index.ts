@@ -19,8 +19,8 @@ serve(async (req: Request) => {
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    if (cronSecret && token !== cronSecret && cronHeader !== cronSecret) {
-      return new Response(JSON.stringify({ error: 'Acesso negado: Secret do CRON inválido ou ausente.' }), {
+    if (!cronSecret || (token !== cronSecret && cronHeader !== cronSecret)) {
+      return new Response(JSON.stringify({ error: 'Não autorizado: Secret do CRON inválido ou ausente.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

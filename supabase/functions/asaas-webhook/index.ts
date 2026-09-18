@@ -9,8 +9,8 @@ serve(async (req) => {
   try {
     // 1. Validação de Token no Cabeçalho
     const tokenHeader = req.headers.get('asaas-access-token');
-    if (ASAAS_WEBHOOK_SECRET && tokenHeader !== ASAAS_WEBHOOK_SECRET) {
-      return new Response(JSON.stringify({ error: 'Token de webhook inválido' }), {
+    if (!ASAAS_WEBHOOK_SECRET || tokenHeader !== ASAAS_WEBHOOK_SECRET) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
