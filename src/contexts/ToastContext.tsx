@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
-import { traduzirErro, ehMensagemEmInglesOuTecnica } from '../utils/erros';
+import { traduzirErro, ehMensagemEmInglesOuTecnica, reportarErroAutomatico } from '../utils/erros';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -38,6 +38,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const erroAlvo = rawError || userMsg;
     const traduzido = traduzirErro(erroAlvo);
     
+    // Auto-reporta silenciosamente no banco apenas se for um erro inesperado real exibido ao usuário
+    if (traduzido.ehInesperado) {
+      reportarErroAutomatico(traduzido);
+    }
+
     let finalMsg = traduzido.mensagem;
 
     // Se userMsg foi passado como string amigável em português (e não o próprio erro técnico/em inglês)

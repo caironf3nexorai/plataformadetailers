@@ -102,9 +102,18 @@ export function ehMensagemEmInglesOuTecnica(texto: string): boolean {
 }
 
 /**
- * Registra silenciosamente no banco (tabela de feedbacks com tipo='erro') erros inesperados
+ * Registra silenciosamente no banco (tabela de feedbacks com tipo='erro') erros inesperados.
+ * Protegido contra loops infinitos: nunca registra se a tela atual for a de feedbacks ou em ambiente de teste.
  */
-async function registrarErroAutomatico(traduzido: ErroTraduzido, telaOrigem?: string) {
+export async function reportarErroAutomatico(traduzidoOuErro: any, telaOrigem?: string) {
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin/feedbacks')) {
+    return; // Imunidade contra loops na tela de feedbacks
+  }
+
+  const traduzido: ErroTraduzido = (typeof traduzidoOuErro === 'object' && traduzidoOuErro?.codigoRef && traduzidoOuErro?.titulo)
+    ? traduzidoOuErro
+    : traduzirErro(traduzidoOuErro, telaOrigem);
+
   if (!traduzido.ehInesperado) return;
 
   const tela = telaOrigem || (typeof window !== 'undefined' ? window.location.pathname : 'desconhecida');
@@ -134,7 +143,7 @@ async function registrarErroAutomatico(traduzido: ErroTraduzido, telaOrigem?: st
 /**
  * Traduz erros técnicos de Postgres, Supabase Auth, PostgREST ou Rede para mensagens claras em Português
  */
-export function traduzirErro(erro: any, contextoTela?: string): ErroTraduzido {
+export function traduzirErro(erro: any, _contextoTela?: string): ErroTraduzido {
   if (!erro) {
     const codigoRef = gerarCodigoRef();
     return {
@@ -456,11 +465,6 @@ export function traduzirErro(erro: any, contextoTela?: string): ErroTraduzido {
     detalheTecnico,
     codigoPostgres: code
   };
-
-  // Dispara registro automático no banco se for um erro inesperado do sistema
-  if (ehInesperado) {
-    registrarErroAutomatico(resultado, contextoTela);
-  }
 
   return resultado;
 }

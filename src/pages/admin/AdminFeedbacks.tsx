@@ -128,10 +128,14 @@ function parseMensagemFeedback(raw: string): AutoErrorParsed {
 
   // Se não temos título ou mensagem gravados (logs antigos ou brutos)
   if (!mensagemPrincipal) {
-    const traduzido = traduzirErro(corpo, tela);
-    mensagemPrincipal = `${traduzido.titulo}: ${traduzido.mensagem}`;
-    if (!detalheAmigavel && traduzido.acao) {
-      detalheAmigavel = traduzido.acao;
+    if (corpo && corpo.trim()) {
+      const traduzido = traduzirErro(corpo, tela);
+      mensagemPrincipal = `${traduzido.titulo}: ${traduzido.mensagem}`;
+      if (!detalheAmigavel && traduzido.acao) {
+        detalheAmigavel = traduzido.acao;
+      }
+    } else {
+      mensagemPrincipal = 'Erro técnico registrado automaticamente pelo sistema';
     }
   }
 
