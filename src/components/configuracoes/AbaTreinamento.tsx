@@ -11,7 +11,8 @@ import {
   Sparkles, 
   X, 
   Info,
-  Tv
+  Tv,
+  Search
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { useAuth } from '../../contexts/AuthContext';
@@ -23,25 +24,30 @@ interface TreinamentoItem {
   descricao: string | null;
   url: string;
   plataforma: 'youtube' | 'vimeo';
-  video_id: string;
-  categoria: string;
+  video_id?: string | null;
   duracao_minutos: number;
+  categoria: string | null;
   ordem: number;
-  essencial: boolean;
-  planos_permitidos: string[];
+  essencial?: boolean;
+  planos_permitidos?: string[];
+  min_plano?: 'free' | 'pro' | 'studio';
   disponivel_no_plano_atual: boolean;
   concluido: boolean;
 }
 
 export const AbaTreinamento: React.FC = () => {
-  const { temFeature, nomePlano, planoAtual: planoHook } = usePlano();
   const { tenant } = useAuth();
+  const { temFeature, planoAtual: planoHook, nomePlano } = usePlano();
   const podeAcessarTreinamentos = temFeature('treinamentos');
   const [treinamentos, setTreinamentos] = useState<TreinamentoItem[]>([]);
   const userPlanoInicial = tenant?.plano || planoHook || 'free';
   const [planoAtual, setPlanoAtual] = useState<string>(userPlanoInicial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filtro por categoria e busca
+  const [categoriaAtiva, setCategoriaAtiva] = useState<string>('todas');
+  const [busca, setBusca] = useState<string>('');
 
   // Sincroniza planoAtual quando o tenant for carregado pelo AuthContext
   useEffect(() => {
@@ -275,10 +281,86 @@ export const AbaTreinamento: React.FC = () => {
           </p>
         </Card>
       ) : (
-        /* Lista por Categoria */
-        <div className="space-y-6">
-          {categorias.map((categoriaNome) => {
-            const itensCategoria = treinamentos.filter(t => (t.categoria || 'Geral') === categoriaNome);
+        <>
+          {/* Barra de Busca e Categorias da Academia */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-graphite-800 p-3 rounded-xl border border-graphite-700">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-3 text-vapor-400" />
+            <input
+              type="text"
+              placeholder="Buscar curso, aula ou palavra-chave..."
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full bg-graphite-900 border border-graphite-700 rounded-lg pl-9 pr-4 py-2 text-xs text-vapor-100 placeholder-vapor-400 outline-none focus:border-amber-500"
+            />
+          </div>
+          {busca && (
+            <button
+              onClick={() => setBusca('')}
+              className="px-3 py-1 text-xs text-vapor-400 hover:text-vapor-200 transition-colors"
+            >
+              Limpar busca
+            </button>
+          )}
+        </div>
+
+        {/* Pílulas de Categoria */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setCategoriaAtiva('todas')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+              categoriaAtiva === 'todas'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 scale-[1.02]'
+                : 'bg-graphite-850 text-vapor-300 hover:text-vapor-100 border border-graphite-700/80 hover:border-graphite-600'
+            }`}
+          >
+            <span>Todos os Cursos</span>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${categoriaAtiva === 'todas' ? 'bg-black/20 text-slate-950' : 'bg-graphite-800 text-vapor-400'}`}>
+              {treinamentos.length}
+            </span>
+          </button>
+
+          {categorias.map((catNome) => {
+            const count = treinamentos.filter((t) => (t.categoria || 'Geral') === catNome).length;
+            const isSelected = categoriaAtiva === catNome;
+            return (
+              <button
+                key={catNome}
+                type="button"
+                onClick={() => setCategoriaAtiva(catNome)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 ${
+                  isSelected
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 scale-[1.02]'
+                    : 'bg-graphite-850 text-vapor-300 hover:text-vapor-100 border border-graphite-700/80 hover:border-graphite-600'
+                }`}
+              >
+                <span>{catNome}</span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-black/20 text-slate-950' : 'bg-graphite-800 text-vapor-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Lista por Categoria */}
+      <div className="space-y-6">
+        {categorias
+          .filter((catNome) => categoriaAtiva === 'todas' || categoriaAtiva === catNome)
+          .map((categoriaNome) => {
+            const itensCategoria = treinamentos
+              .filter((t) => (t.categoria || 'Geral') === categoriaNome)
+              .filter((t) => {
+                if (!busca.trim()) return true;
+                const q = busca.toLowerCase();
+                return (
+                  t.titulo.toLowerCase().includes(q) ||
+                  (t.descricao && t.descricao.toLowerCase().includes(q))
+                );
+              });
             if (itensCategoria.length === 0) return null;
 
             return (
@@ -387,6 +469,7 @@ export const AbaTreinamento: React.FC = () => {
             );
           })}
         </div>
+      </>
       )}
 
       {/* MODAL PLAYER DE VÍDEO (DOMÍNIO SEM COOKIES) */}
@@ -417,7 +500,7 @@ export const AbaTreinamento: React.FC = () => {
             {/* Container Responsivo 16:9 */}
             <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-graphite-700">
               <iframe
-                src={getEmbedUrl(activeVideo.plataforma, activeVideo.video_id)}
+                src={getEmbedUrl(activeVideo.plataforma, activeVideo.video_id || '')}
                 title={activeVideo.titulo}
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen

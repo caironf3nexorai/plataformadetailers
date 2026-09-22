@@ -15,10 +15,21 @@ import {
   Clock,
   Eye,
   AlertTriangle,
-  BookOpen
+  BookOpen,
+  Filter
 } from 'lucide-react';
 import { parseVideoUrl, getEmbedUrl } from '../../utils/videoExtractor';
 import { AdminAbaMateriaisDidaticos } from '../../components/admin/AdminAbaMateriaisDidaticos';
+
+export const CATEGORIAS_PADRAO_ACADEMIA = [
+  'Início / Primeiros Passos',
+  'Curso de Restauração de Farol',
+  'Curso de Polimento Automotivo',
+  'Vitrificação & Proteção',
+  'Higienização Interna',
+  'Gestão, Vendas & Precificação',
+  'Geral'
+];
 
 interface AdminTreinamentoItem {
   id: string;
@@ -47,6 +58,7 @@ export const AdminTreinamentos: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [abaAtiva, setAbaAtiva] = useState<'videos' | 'materiais'>('videos');
+  const [filtroCategoriaAdmin, setFiltroCategoriaAdmin] = useState<string>('');
 
   // Form State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -288,6 +300,33 @@ export const AdminTreinamentos: React.FC = () => {
         </div>
       )}
 
+      {/* Filtros da Tabela */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-900 p-3.5 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-amber-400" />
+          <span className="text-xs text-slate-300 font-medium">Filtrar por Categoria:</span>
+          <select
+            value={filtroCategoriaAdmin}
+            onChange={(e) => setFiltroCategoriaAdmin(e.target.value)}
+            className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
+          >
+            <option value="">Todas as Categorias ({treinamentos.length})</option>
+            {Array.from(new Set(treinamentos.map((t) => t.categoria || 'Geral'))).map((c) => {
+              const count = treinamentos.filter((t) => (t.categoria || 'Geral') === c).length;
+              return (
+                <option key={c} value={c}>
+                  {c} ({count})
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
+        <span className="text-xs font-mono text-slate-400">
+          Exibindo {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length} de {treinamentos.length} aulas
+        </span>
+      </div>
+
       {/* Lista de Treinamentos */}
       {loading ? (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
@@ -309,14 +348,16 @@ export const AdminTreinamentos: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {treinamentos.length === 0 ? (
+              {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-slate-500 font-mono">
-                    Nenhum treinamento cadastrado ainda. Clique em "Cadastrar Novo Treinamento".
+                    Nenhum treinamento encontrado nesta categoria.
                   </td>
                 </tr>
               ) : (
-                treinamentos.map((item) => (
+                treinamentos
+                  .filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin)
+                  .map((item) => (
                   <tr key={item.id} className="hover:bg-slate-800/40 transition">
                     {/* Botões de Reordenamento */}
                     <td className="px-4 py-4 text-center">
@@ -497,14 +538,32 @@ export const AdminTreinamentos: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">Categoria *</label>
-                  <input
-                    type="text"
-                    required
-                    value={categoria}
-                    onChange={(e) => setCategoria(e.target.value)}
-                    placeholder="Ex: Primeiro Uso, Serviços..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
-                  />
+                  <select
+                    value={CATEGORIAS_PADRAO_ACADEMIA.includes(categoria) ? categoria : 'Outro'}
+                    onChange={(e) => {
+                      if (e.target.value !== 'Outro') {
+                        setCategoria(e.target.value);
+                      } else {
+                        setCategoria('');
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500/50 mb-1.5 cursor-pointer"
+                  >
+                    {CATEGORIAS_PADRAO_ACADEMIA.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                    <option value="Outro">Outro (Personalizado)...</option>
+                  </select>
+                  {(!CATEGORIAS_PADRAO_ACADEMIA.includes(categoria) || categoria === '') && (
+                    <input
+                      type="text"
+                      required
+                      value={categoria}
+                      onChange={(e) => setCategoria(e.target.value)}
+                      placeholder="Digite a categoria personalizada..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-amber-300 focus:outline-none focus:border-amber-500/50"
+                    />
+                  )}
                 </div>
 
                 <div>

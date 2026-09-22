@@ -126,6 +126,7 @@ export const Dashboard: React.FC = () => {
     tempo_medio_minutos: number;
     total_comissao: number;
   }>>([]);
+  const [clientesRetornoCount, setClientesRetornoCount] = useState<number>(0);
 
   // Formata o nome do membro de forma inteligente
   const formatarNomeMembro = (nome?: string | null, email?: string | null, userId?: string | null) => {
@@ -293,6 +294,16 @@ export const Dashboard: React.FC = () => {
       }
 
       setData(rpcData as DashboardData);
+
+      // Busca clientes sumidos / oportunidades de retorno
+      try {
+        const { data: retData } = await supabase.rpc('obter_oportunidades_retorno', { p_filtro: 'acao_necessaria' });
+        if (retData && Array.isArray(retData)) {
+          setClientesRetornoCount(retData.length);
+        }
+      } catch (err) {
+        // Silencioso se tabela ou função de retorno estiver vazia
+      }
     } catch (err: any) {
       console.error('[Dashboard RPC Error]:', err);
       setError(err.message || 'Erro ao carregar dados do dashboard.');
@@ -360,7 +371,8 @@ export const Dashboard: React.FC = () => {
     (acao?.orcamentos_expirando_count || 0) +
     (acao?.contas_vencidas_count || 0) +
     (acao?.agendamentos_sem_confirmacao_count || 0) +
-    (acao?.atendimentos_taxa_estimada_count || 0);
+    (acao?.atendimentos_taxa_estimada_count || 0) +
+    clientesRetornoCount;
 
   return (
     <div className="flex flex-col gap-6 pb-12 max-w-7xl mx-auto w-full">
@@ -1142,6 +1154,34 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="font-sans text-xs text-vapor-400">
               Recebimentos com taxas de cartão não configuradas (estimadas).
+            </p>
+          </Card>
+
+          {/* Alerta 7: Clientes Sumidos / Oportunidades de Retorno */}
+          <Card
+            onClick={() => navigate('/clientes?aba=oportunidades')}
+            className={`p-4 bg-graphite-800 border-graphite-600 hover:border-amber-500/60 transition-all cursor-pointer flex flex-col justify-between gap-3 group ${
+              clientesRetornoCount > 0 ? 'border-amber-500/80 bg-amber-500/5' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users
+                  size={18}
+                  className={clientesRetornoCount > 0 ? 'text-amber-500' : 'text-vapor-400'}
+                />
+                <span className="font-sans text-xs font-semibold text-vapor-200">Clientes para Reativar</span>
+              </div>
+              <span
+                className={`font-mono text-lg font-bold ${
+                  clientesRetornoCount > 0 ? 'text-amber-500' : 'text-vapor-400'
+                }`}
+              >
+                {clientesRetornoCount}
+              </span>
+            </div>
+            <p className="font-sans text-xs text-vapor-400">
+              Clientes que não retornam há 30+ dias. Envie lembretes via WhatsApp em 1 clique.
             </p>
           </Card>
         </div>

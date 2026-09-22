@@ -7,7 +7,7 @@ import { BloqueioRecursoPlano } from '../components/planos/BloqueioRecursoPlano'
 import { Tv, BookOpen } from 'lucide-react';
 
 export const Treinamentos: React.FC = () => {
-  const { temFeature, carregandoPermissoes } = usePlano();
+  const { temFeature, carregandoPermissoes, isTrial } = usePlano();
   const [subAba, setSubAba] = useState<'videos' | 'materiais'>('videos');
 
   if (!carregandoPermissoes && !temFeature('treinamentos')) {
@@ -15,11 +15,16 @@ export const Treinamentos: React.FC = () => {
       <div className="flex flex-col gap-4">
         <PageHeader title="Academia Detailer" />
         <BloqueioRecursoPlano
-          recurso="Academia Detailer & Treinamentos"
-          descricao="O módulo de capacitação técnica, tutoriais de processos e onboarding da equipe está disponível a partir do Plano Pro."
+          recurso="Academia Detailer & Cursos Práticos"
+          descricao={
+            isTrial
+              ? "A Academia Detailer com cursos completos de polimento, restauração de farol, vitrificação e gestão é um benefício exclusivo para assinantes com plano ativo. Como sua oficina está em período de degustação (Trial), ative seu plano para liberar imediatamente todas as aulas!"
+              : "O módulo de capacitação técnica, tutoriais de processos e onboarding da equipe está disponível a partir do Plano Pro."
+          }
           planoMinimo="Pro"
           beneficios={[
             'Aulas em vídeo sobre processos de polimento e vitrificação',
+            'Curso completo de Restauração de Farol passo a passo',
             'Padronização de checklist e execução para a equipe',
             'Treinamentos de atendimento e vendas de alto valor',
             'E-books e manuais de precificação, tráfego pago e gestão',

@@ -625,8 +625,12 @@ export const Precificacao: React.FC = () => {
                         {/* Badges de Qualidade dos Dados */}
                         <div className="flex items-center gap-1 text-[11px] text-vapor-400 font-mono">
                           {item.duracao_fonte === 'medido' ? (
-                            <span className="text-mint-400/90" title={`Medido em ${item.execucoes_count} execuções reais`}>
-                              • Medido ({item.execucoes_count}x)
+                            <span 
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-mint-500/10 text-mint-400 text-[10px] font-mono font-semibold border border-mint-500/20" 
+                              title={`Auto-alimentado: Tempo real medido pelo cronômetro em ${item.execucoes_count} atendimentos concluídos`}
+                            >
+                              <Zap size={10} className="text-mint-400" />
+                              Auto-alimentado ({item.execucoes_count}x)
                             </span>
                           ) : (
                             <span className="text-amber-500/90" title="Tempo vindo do cadastro (sem medição cronometrada)">

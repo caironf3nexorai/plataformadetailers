@@ -11,7 +11,8 @@ import {
   Check, 
   X, 
   AlertTriangle, 
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 
 interface ServicoModelo {
@@ -67,7 +68,28 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
   const [formFonte, setFormFonte] = useState<'plataforma' | 'comunidade'>('plataforma');
   const [formAmostra, setFormAmostra] = useState('0');
   const [saving, setSaving] = useState(false);
+  const [syncingCommunity, setSyncingCommunity] = useState(false);
   const [idParaExcluir, setIdParaExcluir] = useState<string | null>(null);
+
+  const handleSyncCommunity = async () => {
+    if (isReadOnly) return;
+    setSyncingCommunity(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const { data: res, error: rpcErr } = await supabase.rpc('atualizar_referencias_comunidade');
+      if (rpcErr) throw rpcErr;
+
+      const qtd = res?.registros_atualizados ?? 0;
+      setSuccess(`Sincronização com a comunidade concluída! ${qtd} faixas de mercado atualizadas.`);
+      await loadData();
+    } catch (err: any) {
+      console.error('[AdminPrecificacao] Erro ao sincronizar comunidade:', err);
+      setError(err.message || 'Erro ao sincronizar referências da comunidade.');
+    } finally {
+      setSyncingCommunity(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -251,13 +273,25 @@ export const AdminPrecificacaoReferencia: React.FC = () => {
           </button>
 
           {!isReadOnly && (
-            <button
-              onClick={handleOpenNew}
-              className="flex items-center space-x-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 text-xs transition"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Nova Faixa de Preço</span>
-            </button>
+            <>
+              <button
+                onClick={handleSyncCommunity}
+                disabled={syncingCommunity}
+                className="flex items-center space-x-2 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 text-xs transition"
+                title="Recalcula referências de mercado P25-P75 com base nos atendimentos concluídos de todas as oficinas"
+              >
+                <Sparkles className={`w-4 h-4 ${syncingCommunity ? 'animate-spin' : ''}`} />
+                <span>{syncingCommunity ? 'Sincronizando...' : 'Sincronizar com Comunidade'}</span>
+              </button>
+
+              <button
+                onClick={handleOpenNew}
+                className="flex items-center space-x-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl shadow-lg shadow-amber-500/20 text-xs transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Nova Faixa de Preço</span>
+              </button>
+            </>
           )}
         </div>
       </div>

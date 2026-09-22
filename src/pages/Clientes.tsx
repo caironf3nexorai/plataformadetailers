@@ -33,10 +33,10 @@ export const Clientes: React.FC = () => {
   const [totalOportunidades, setTotalOportunidades] = useState<number>(0);
   const [totalGarantias, setTotalGarantias] = useState<number>(0);
 
-  // Sincroniza aba via URL (?aba=oportunidades ou ?aba=garantias)
+  // Sincroniza aba via URL (?aba=oportunidades ou ?aba=retorno ou ?aba=garantias)
   useEffect(() => {
     const abaParam = searchParams.get('aba');
-    if (abaParam === 'oportunidades') {
+    if (abaParam === 'oportunidades' || abaParam === 'retorno' || abaParam === 'reativacao') {
       setAbaAtiva('oportunidades');
     } else if (abaParam === 'garantias') {
       setAbaAtiva('garantias');

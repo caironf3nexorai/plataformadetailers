@@ -41,31 +41,37 @@ const FALLBACK_FEATURES: Record<PlanCode, Record<string, boolean>> = {
     personalizacao_pdf: false,
     personalizacao_placa_balcao: false,
     arquivos_digitais: true,
-    treinamentos: true,
+    treinamentos: false,
+    academia_trial_liberada: false,
     metas_equipe: false,
     programa_indicacao: true,
     relatorios_dre: false,
     whatsapp_mensagens: false,
+    emissao_nfe_focus: false,
   },
   pro: {
     personalizacao_pdf: true,
     personalizacao_placa_balcao: true,
     arquivos_digitais: true,
     treinamentos: true,
+    academia_trial_liberada: false,
     metas_equipe: true,
     programa_indicacao: true,
     relatorios_dre: true,
     whatsapp_mensagens: true,
+    emissao_nfe_focus: true,
   },
   studio: {
     personalizacao_pdf: true,
     personalizacao_placa_balcao: true,
     arquivos_digitais: true,
     treinamentos: true,
+    academia_trial_liberada: false,
     metas_equipe: true,
     programa_indicacao: true,
     relatorios_dre: true,
     whatsapp_mensagens: true,
+    emissao_nfe_focus: true,
   },
 };
 
@@ -79,13 +85,15 @@ export const usePlano = () => {
   const { tenant } = useAuth();
   const planoAtual: PlanCode = (tenant?.plano as PlanCode) || 'free';
 
+  const [carregandoPermissoes, setCarregandoPermissoes] = useState<boolean>(true);
   const [featuresMap, setFeaturesMap] = useState<Record<string, boolean>>(
     FALLBACK_FEATURES[planoAtual] || FALLBACK_FEATURES.free
   );
   const [limitsMap, setLimitsMap] = useState<Record<string, number | null>>(
     FALLBACK_LIMITS[planoAtual] || FALLBACK_LIMITS.free
   );
-  const [carregandoPermissoes, setCarregandoPermissoes] = useState(true);
+  const [statusAssinatura, setStatusAssinatura] = useState<string>('trial');
+  const isTrial = statusAssinatura === 'trial';
 
   const carregarPermissoesDoPlano = useCallback(async () => {
     if (!tenant?.plano) {
@@ -96,7 +104,17 @@ export const usePlano = () => {
     try {
       setCarregandoPermissoes(true);
 
-      // Buscar features do plano em tempo real do banco de dados
+      // 1. Buscar status da assinatura da oficina
+      try {
+        const { data: assData } = await supabase.rpc('obter_assinatura_tenant');
+        if (assData?.status) {
+          setStatusAssinatura(assData.status);
+        }
+      } catch (errAss) {
+        console.warn('[usePlano] Erro ao buscar status da assinatura:', errAss);
+      }
+
+      // 2. Buscar features do plano em tempo real do banco de dados
       const { data: featData } = await supabase
         .from('plan_features')
         .select('feature, habilitado')
@@ -110,7 +128,7 @@ export const usePlano = () => {
         setFeaturesMap(mapF);
       }
 
-      // Buscar limites numéricos do plano em tempo real
+      // 3. Buscar limites numéricos do plano em tempo real
       const { data: limData } = await supabase
         .from('plan_limits')
         .select('recurso, limite')
@@ -136,6 +154,18 @@ export const usePlano = () => {
 
   // Verificar se uma funcionalidade está liberada no plano atual
   const temFeature = (featureKey: string): boolean => {
+    // Regra da Academia do Detailer no Trial:
+    // Se a feature for 'treinamentos', e o admin configurou academia_trial_liberada = false,
+    // contas em período de testes (trial) ou Free NÃO acessam a academia, apenas planos pagos ativos.
+    if (featureKey === 'treinamentos') {
+      const trialLiberado = featuresMap['academia_trial_liberada'] ?? false;
+      const ehPlanoPagoAtivo = statusAssinatura === 'ativa';
+
+      if (!trialLiberado && !ehPlanoPagoAtivo) {
+        return false;
+      }
+    }
+
     if (featuresMap[featureKey] !== undefined) {
       return featuresMap[featureKey];
     }
@@ -168,6 +198,8 @@ export const usePlano = () => {
   return {
     planoAtual,
     nomePlano: PLAN_NAMES[planoAtual] || planoAtual.toUpperCase(),
+    statusAssinatura,
+    isTrial,
     temFeature,
     limiteDe,
     verificarUso,

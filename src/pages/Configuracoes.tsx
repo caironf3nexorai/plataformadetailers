@@ -21,13 +21,14 @@ import { AbaMetaMensal } from './configuracoes/AbaMetaMensal';
 import { AbaFeedbacks } from './configuracoes/AbaFeedbacks';
 import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles } from 'lucide-react';
+import { AbaFiscal } from '../components/configuracoes/AbaFiscal';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
 
 interface ConfiguracoesProps {
-  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos';
+  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal';
 }
 
 export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
@@ -42,7 +43,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     return 'oficina';
   };
 
-  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos'>(getTabPadrao());
+  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal'>(getTabPadrao());
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -57,6 +58,8 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     }
     if (abaParam === 'plano' || abaParam === 'assinatura') {
       setActiveTab('plano');
+    } else if (abaParam === 'fiscal' || abaParam === 'nfse') {
+      setActiveTab('fiscal');
     } else if (abaInicial) {
       setActiveTab(abaInicial);
     }
@@ -428,6 +431,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           ...(isDono ? [{ id: 'despesas', label: 'Despesas Fixas', icon: DollarSign }] : []),
           ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online & Vitrine', icon: Globe }] : []),
           { id: 'plano', label: 'Plano e Limites', icon: CreditCard },
+          ...((isDono || podeGerirServicos()) ? [{ id: 'fiscal', label: 'Dados Fiscais & NFS-e', icon: Receipt }] : []),
           ...((isDono || podeGerirServicos()) ? [{ id: 'pdf', label: 'Documentos PDF', icon: FileText }] : []),
           ...((isDono || podeGerirServicos()) ? [{ id: 'termos', label: 'Termos de Garantia', icon: ShieldCheck }] : []),
           ...(isDono ? [{ id: 'meta', label: 'Meta Mensal', icon: Target }] : []),
@@ -444,6 +448,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       {activeTab === 'meta' && <AbaMetaMensal />}
       {activeTab === 'feedbacks' && <AbaFeedbacks />}
       {activeTab === 'termos' && <AbaTermosGarantia />}
+      {activeTab === 'fiscal' && <AbaFiscal />}
 
       {activeTab === 'oficina' && (
         <div className="flex flex-col lg:flex-row items-start gap-6">

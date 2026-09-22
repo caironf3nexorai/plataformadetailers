@@ -24,6 +24,8 @@ import {
   X,
   AlertCircle,
   Sparkles,
+  Receipt,
+  MessageCircle,
 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
@@ -34,6 +36,8 @@ import { getEvidenciaSignedUrl, baixarFoto } from '../utils/evidencias';
 import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
 import { ModalEmitirCertificado } from '../components/garantia/ModalEmitirCertificado';
 import { AdesivoParabrisaModal } from '../components/garantia/AdesivoParabrisaModal';
+import { ModalEmitirNFSe } from '../components/atendimento/ModalEmitirNFSe';
+import { montarLinkWhatsapp } from '../utils/whatsapp';
 
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -76,6 +80,8 @@ export const VisualizarAtendimento: React.FC = () => {
   } | null>(null);
   const [modalEmitirCertificadoOpen, setModalEmitirCertificadoOpen] = useState(false);
   const [modalAdesivoOpen, setModalAdesivoOpen] = useState(false);
+  const [notaFiscal, setNotaFiscal] = useState<any | null>(null);
+  const [modalNFSeOpen, setModalNFSeOpen] = useState(false);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
     if (!agendamento || !tenant) return;
@@ -303,6 +309,17 @@ export const VisualizarAtendimento: React.FC = () => {
 
             if (certData) {
               setCertificadoExistente(certData);
+            }
+
+            // Busca se já possui NFS-e emitida para este atendimento
+            const { data: nfeData } = await supabase
+              .from('notas_fiscais')
+              .select('*')
+              .eq('atendimento_id', currentAgend.id)
+              .maybeSingle();
+
+            if (nfeData) {
+              setNotaFiscal(nfeData);
             }
           }
         }
@@ -653,6 +670,50 @@ export const VisualizarAtendimento: React.FC = () => {
             >
               <Sparkles size={16} className="text-amber-400" />
               <span>Emitir Garantia</span>
+            </Button>
+          )}
+
+          {/* Botão / Link de NFS-e */}
+          {notaFiscal ? (
+            <a
+              href={notaFiscal.url_danfe || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-[12px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 px-3 py-1.5 rounded-lg shrink-0 font-bold transition"
+              title="Visualizar DANFE / PDF da Nota Fiscal Emitida"
+            >
+              <Receipt size={16} className="text-emerald-400" />
+              <span>NFS-e #{notaFiscal.numero || 'Emitida'}</span>
+            </a>
+          ) : podeVerCusto ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setModalNFSeOpen(true)}
+              className="flex items-center gap-1.5 text-[12px] bg-graphite-800 hover:bg-graphite-700 text-emerald-400 border border-graphite-600 hover:border-emerald-500/50 shrink-0 font-semibold"
+              title="Emitir Nota Fiscal de Serviço Eletrônica para este atendimento"
+            >
+              <Receipt size={16} className="text-emerald-400" />
+              <span>Emitir NFS-e</span>
+            </Button>
+          ) : null}
+
+          {/* Botão de Enviar Lembrete de Agendamento no WhatsApp */}
+          {agendamento?.cliente?.telefone && (agendamento?.status === 'agendado' || agendamento?.status === 'confirmado') && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const dataInicioStr = agendamento.inicio ? formatarDataHora(agendamento.inicio) : 'horário marcado';
+                const msg = `Olá, *${agendamento.cliente?.nome || 'cliente'}*! Passando para confirmar e lembrar do seu agendamento na oficina *${tenant?.nome || 'nossa estética'}* para o dia *${dataInicioStr}* com o veículo *${agendamento.veiculo?.modelo || ''} (${agendamento.veiculo?.placa || ''})*. Qualquer dúvida ou imprevisto, estamos por aqui!`;
+                const link = montarLinkWhatsapp(agendamento.cliente.telefone, msg);
+                if (link) window.open(link, '_blank');
+              }}
+              className="flex items-center gap-1.5 text-[12px] bg-mint-500/10 text-mint-400 border border-mint-500/30 hover:bg-mint-500/20 shrink-0 font-medium"
+              title="Enviar mensagem amigável de lembrete do agendamento para o cliente no WhatsApp"
+            >
+              <MessageCircle size={16} className="text-mint-400" />
+              <span className="hidden sm:inline">Lembrete WhatsApp</span>
             </Button>
           )}
         </div>
@@ -1375,6 +1436,19 @@ export const VisualizarAtendimento: React.FC = () => {
             placa: agendamento.veiculos?.placa || '',
             cor: agendamento.veiculos?.cor
           }}
+        />
+      )}
+
+      {/* Modal de Emissão de NFS-e */}
+      {modalNFSeOpen && agendamento && (
+        <ModalEmitirNFSe
+          isOpen={modalNFSeOpen}
+          onClose={() => setModalNFSeOpen(false)}
+          onSuccess={(novaNota) => {
+            setNotaFiscal(novaNota);
+          }}
+          agendamento={agendamento}
+          valorTotal={Number(execucao?.valor_total_final ?? agendamento?.preco_estimado_total ?? agendamento?.preco_total ?? 0)}
         />
       )}
     </div>
