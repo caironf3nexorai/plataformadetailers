@@ -181,6 +181,7 @@ CREATE POLICY "Admins acessam todas as notas fiscais" ON public.notas_fiscais
 GRANT ALL ON public.notas_fiscais TO authenticated;
 
 -- 6. RPC: OBTER RESUMO FISCAL E CONSUMO DE COTAS NFS-E
+DROP FUNCTION IF EXISTS public.obter_resumo_nfse_tenant(UUID);
 CREATE OR REPLACE FUNCTION public.obter_resumo_nfse_tenant(p_tenant_id UUID DEFAULT NULL)
 RETURNS JSONB
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
@@ -246,6 +247,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.obter_resumo_nfse_tenant(UUID) TO authenticated;
 
 -- 7. RPC: SALVAR CONFIGURAÇÃO FISCAL DO TENANT (SUPORTA JSONB OU PARÂMETROS POSICIONAIS)
+DROP FUNCTION IF EXISTS public.salvar_config_fiscal_tenant(JSONB);
 CREATE OR REPLACE FUNCTION public.salvar_config_fiscal_tenant(p_config JSONB)
 RETURNS JSONB
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public
@@ -303,6 +305,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.salvar_config_fiscal_tenant(JSONB) TO authenticated;
 
 -- 8. RPC: REGISTRAR EMISSÃO DE NFS-E COM CONTROLE DE LIMITE DO PLANO
+DROP FUNCTION IF EXISTS public.registrar_emissao_nfse(JSONB);
 CREATE OR REPLACE FUNCTION public.registrar_emissao_nfse(p_dados JSONB)
 RETURNS JSONB
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public
@@ -386,6 +389,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.registrar_emissao_nfse(JSONB) TO authenticated;
 
 -- 9. ATUALIZAÇÃO DA RPC ATUALIZAR_REFERENCIAS_COMUNIDADE COM RETORNO FORMATADO
+DROP FUNCTION IF EXISTS public.atualizar_referencias_comunidade();
 CREATE OR REPLACE FUNCTION public.atualizar_referencias_comunidade()
 RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
