@@ -155,7 +155,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.salvar_config_whatsapp_tenant(JSONB) TO authenticated;
 
--- 4. RPC: GERAR FILA DE LEMBRETES AUTOMÁTICOS (VARREDURA DIÁRIA)
+-- 4. RPC: GERAR FILA DE LEMBRETES AUTOMÁTICOS (POR TENANT)
 DROP FUNCTION IF EXISTS public.gerar_fila_lembretes_whatsapp(UUID);
 CREATE OR REPLACE FUNCTION public.gerar_fila_lembretes_whatsapp(p_tenant_id UUID DEFAULT NULL)
 RETURNS JSONB
@@ -164,6 +164,7 @@ AS $$
 DECLARE
   v_tenant UUID;
   v_oficina_nome TEXT;
+  v_fuso TEXT;
   v_config RECORD;
   v_count_agendamentos INTEGER := 0;
   v_count_vitrificacoes INTEGER := 0;
@@ -178,8 +179,13 @@ BEGIN
     RAISE EXCEPTION 'Tenant não identificado';
   END IF;
 
-  SELECT nome INTO v_oficina_nome FROM public.tenants WHERE id = v_tenant;
+  SELECT nome, COALESCE(fuso_horario, 'America/Sao_Paulo')
+  INTO v_oficina_nome, v_fuso
+  FROM public.tenants
+  WHERE id = v_tenant;
+
   v_oficina_nome := COALESCE(v_oficina_nome, 'Nossa Oficina');
+  v_fuso := COALESCE(v_fuso, 'America/Sao_Paulo');
 
   -- Obter ou criar configuração padrão
   SELECT * INTO v_config FROM public.tenant_config_whatsapp WHERE tenant_id = v_tenant;
@@ -191,6 +197,7 @@ BEGIN
 
   -- ============================================================================
   -- REGRA 1: AGENDAMENTOS DO DIA SEGUINTE (Avisar 24h antes)
+  -- Usa o calendário nativo da plataforma (public.agendamentos)
   -- ============================================================================
   IF v_config.lembrete_agendamento_ativo THEN
     FOR r_item IN
@@ -199,8 +206,8 @@ BEGIN
         a.cliente_id,
         c.nome AS cliente_nome,
         c.telefone AS cliente_telefone,
-        to_char(a.data_inicio AT TIME ZONE 'America/Sao_Paulo', 'HH24:MI') AS hora_agendamento,
-        to_char(a.data_inicio AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS data_agendamento,
+        to_char(a.inicio AT TIME ZONE v_fuso, 'HH24:MI') AS hora_agendamento,
+        to_char(a.inicio AT TIME ZONE v_fuso, 'DD/MM/YYYY') AS data_agendamento,
         COALESCE(v.modelo, 'Veículo') AS veiculo_modelo,
         COALESCE(s.nome, 'Serviços Automotivos') AS servico_nome
       FROM public.agendamentos a
@@ -208,8 +215,8 @@ BEGIN
       LEFT JOIN public.veiculos v ON v.id = a.veiculo_id
       LEFT JOIN public.servicos s ON s.id = a.servico_id
       WHERE a.tenant_id = v_tenant
-        AND a.status IN ('pendente', 'confirmado')
-        AND (a.data_inicio AT TIME ZONE 'America/Sao_Paulo')::date = (CURRENT_DATE + 1)
+        AND a.status IN ('agendado', 'confirmado')
+        AND (a.inicio AT TIME ZONE v_fuso)::date = (CURRENT_DATE + 1)
         AND c.telefone IS NOT NULL
         AND trim(c.telefone) != ''
     LOOP
@@ -253,17 +260,17 @@ BEGIN
         c.telefone AS cliente_telefone,
         v.modelo AS veiculo_modelo,
         s.nome AS servico_nome,
-        (CURRENT_DATE - a.data_fim::date) AS dias_passados
+        (CURRENT_DATE - COALESCE(e.finalizado_em, a.inicio)::date) AS dias_passados
       FROM public.agendamentos a
+      LEFT JOIN public.execucoes e ON e.agendamento_id = a.id
       JOIN public.clientes c ON c.id = a.cliente_id AND c.ativo = true
       LEFT JOIN public.veiculos v ON v.id = a.veiculo_id
       JOIN public.servicos s ON s.id = a.servico_id
       WHERE a.tenant_id = v_tenant
-        AND a.status = 'concluido'
-        AND a.data_fim IS NOT NULL
+        AND (a.status = 'concluido' OR e.status = 'finalizado')
         -- Identifica serviços de vitrificação / proteção de pintura
         AND (s.nome ~* 'vitrif|coating|grafeno|protecao|cristaliz' OR s.categoria ~* 'vitrif|estetica')
-        AND (CURRENT_DATE - a.data_fim::date) BETWEEN (v_config.lembrete_vitrificacao_dias - 5) AND (v_config.lembrete_vitrificacao_dias + 15)
+        AND (CURRENT_DATE - COALESCE(e.finalizado_em, a.inicio)::date) BETWEEN (v_config.lembrete_vitrificacao_dias - 5) AND (v_config.lembrete_vitrificacao_dias + 15)
         AND c.telefone IS NOT NULL
         AND trim(c.telefone) != ''
     LOOP
@@ -303,8 +310,8 @@ BEGIN
         c.id AS cliente_id,
         c.nome AS cliente_nome,
         c.telefone AS cliente_telefone,
-        COALESCE(MAX(a.data_fim::date), MAX(a.data_inicio::date)) AS ultima_data,
-        (CURRENT_DATE - COALESCE(MAX(a.data_fim::date), MAX(a.data_inicio::date))) AS dias_sem_visita
+        MAX(a.inicio::date) AS ultima_data,
+        (CURRENT_DATE - MAX(a.inicio::date)) AS dias_sem_visita
       FROM public.clientes c
       JOIN public.agendamentos a ON a.cliente_id = c.id AND a.tenant_id = v_tenant
       WHERE c.tenant_id = v_tenant
@@ -313,7 +320,7 @@ BEGIN
         AND c.telefone IS NOT NULL
         AND trim(c.telefone) != ''
       GROUP BY c.id, c.nome, c.telefone
-      HAVING (CURRENT_DATE - COALESCE(MAX(a.data_fim::date), MAX(a.data_inicio::date))) BETWEEN v_config.lembrete_retorno_inativo_dias AND (v_config.lembrete_retorno_inativo_dias + 7)
+      HAVING (CURRENT_DATE - MAX(a.inicio::date)) BETWEEN v_config.lembrete_retorno_inativo_dias AND (v_config.lembrete_retorno_inativo_dias + 7)
     LOOP
       v_tel_limpo := regexp_replace(r_item.cliente_telefone, '[^0-9]', '', 'g');
       IF length(v_tel_limpo) >= 10 THEN
@@ -353,7 +360,68 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.gerar_fila_lembretes_whatsapp(UUID) TO authenticated;
 
--- 5. RPC: OBTER RESUMO E FILA DE MENSAGENS WHATSAPP
+-- 5. RPC GLOBAL DO ROBÔ: EXECUTA A VARREDURA PARA TODOS OS TENANTS (MULTI-TENANT)
+DROP FUNCTION IF EXISTS public.cron_processar_lembretes_whatsapp_todos_tenants();
+CREATE OR REPLACE FUNCTION public.cron_processar_lembretes_whatsapp_todos_tenants()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r_tenant RECORD;
+  v_tenants_processados INTEGER := 0;
+  v_erros INTEGER := 0;
+BEGIN
+  -- Percorre todos os tenants ativos da plataforma
+  FOR r_tenant IN 
+    SELECT t.id, t.nome 
+    FROM public.tenants t
+    WHERE t.ativo = true
+  LOOP
+    BEGIN
+      PERFORM public.gerar_fila_lembretes_whatsapp(r_tenant.id);
+      v_tenants_processados := v_tenants_processados + 1;
+    EXCEPTION WHEN OTHERS THEN
+      -- Se falhar em um tenant isolado, não interrompe os outros 999 tenants!
+      v_erros := v_erros + 1;
+      RAISE WARNING '[Cron WhatsApp Multi-Tenant] Erro no tenant % (%): %', r_tenant.id, r_tenant.nome, SQLERRM;
+    END;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'sucesso', true,
+    'tenants_processados', v_tenants_processados,
+    'erros', v_erros,
+    'executado_em', now()
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.cron_processar_lembretes_whatsapp_todos_tenants() TO authenticated;
+
+-- 6. AGENDAMENTO NO PG_CRON: DIARIAMENTE ÀS 11:30 UTC (08:30 HORÁRIO DE BRASÍLIA)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    BEGIN
+      PERFORM cron.unschedule('cron_lembretes_whatsapp_diario');
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+
+    PERFORM cron.schedule(
+      'cron_lembretes_whatsapp_diario',
+      '30 11 * * *', -- 11:30 UTC = 08:30 Brasília
+      'SELECT public.cron_processar_lembretes_whatsapp_todos_tenants()'
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END;
+$$;
+
+-- 7. RPC: OBTER RESUMO E FILA DE MENSAGENS WHATSAPP
 DROP FUNCTION IF EXISTS public.obter_resumo_whatsapp_tenant(UUID);
 CREATE OR REPLACE FUNCTION public.obter_resumo_whatsapp_tenant(p_tenant_id UUID DEFAULT NULL)
 RETURNS JSONB
@@ -411,7 +479,7 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.obter_resumo_whatsapp_tenant(UUID) TO authenticated;
 
--- 6. RPC: ATUALIZAR STATUS DE MENSAGEM ENVIADA
+-- 8. RPC: ATUALIZAR STATUS DE MENSAGEM ENVIADA
 DROP FUNCTION IF EXISTS public.atualizar_status_mensagem_whatsapp(UUID, TEXT, TEXT);
 CREATE OR REPLACE FUNCTION public.atualizar_status_mensagem_whatsapp(
   p_id UUID,
