@@ -14,13 +14,8 @@ import {
   RefreshCw, 
   FileText, 
   Download, 
-  Eye, 
-  EyeOff, 
   CheckCircle2,
-  ShieldCheck,
-  ChevronDown,
-  ChevronUp,
-  Key
+  ShieldCheck
 } from 'lucide-react';
 
 interface ResumoNFSe {
@@ -56,8 +51,6 @@ export const AbaFiscal: React.FC = () => {
   const [notas, setNotas] = useState<NotaFiscalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [showToken, setShowToken] = useState(false);
-  const [showApiAvancada, setShowApiAvancada] = useState(false);
 
   // Form states
   const [cnpj, setCnpj] = useState('');
@@ -418,68 +411,36 @@ export const AbaFiscal: React.FC = () => {
               <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
               <div className="space-y-0.5 text-xs">
                 <div className="font-bold text-emerald-300">
-                  Emissão de NFS-e Simplificada e Inclusa no Plano
+                  Emissão de NFS-e Nativa e Integrada ao Sistema
                 </div>
                 <p className="text-vapor-300 font-sans leading-relaxed">
-                  A comunicação com as prefeituras e a emissão das suas notas fiscais de serviço são realizadas de forma 100% transparente pela plataforma NuvemWash. <strong>Você não precisa contratar planos à parte nem configurar chaves técnicas de API</strong>. Basta manter seus dados cadastrais (CNPJ, Razão Social e Inscrição Municipal) atualizados acima.
+                  A comunicação com as prefeituras e a emissão das suas notas fiscais de serviço ocorrem de forma 100% automatizada e nativa pela plataforma. <strong>Você não precisa contratar softwares externos nem configurar chaves técnicas</strong>. Basta manter seus dados cadastrais (CNPJ, Razão Social e Inscrição Municipal) atualizados acima.
                 </p>
               </div>
             </div>
 
-            {/* ACORDEÃO DE CONFIGURAÇÕES TÉCNICAS (OPCIONAL/AVANÇADO) */}
+            {/* SELEÇÃO DO AMBIENTE FISCAL */}
             <div className="sm:col-span-2 md:col-span-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowApiAvancada(!showApiAvancada)}
-                className="text-xs text-vapor-400 hover:text-vapor-200 flex items-center gap-1.5 font-mono py-1 transition-colors"
-              >
-                <Key className="w-3.5 h-3.5" />
-                <span>Configurações Técnicas de API (Avançado / Opcional)</span>
-                {showApiAvancada ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
-              </button>
-
-              {showApiAvancada && (
-                <div className="mt-3 p-4 bg-graphite-900 border border-graphite-700 rounded-xl grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-mono text-vapor-300 uppercase mb-1">
-                      Token Próprio da API Focus NFe
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showToken ? 'text' : 'password'}
-                        value={tokenFocusNfe}
-                        onChange={(e) => setTokenFocusNfe(e.target.value)}
-                        placeholder="Deixe em branco para usar a cota nativa da plataforma"
-                        className="w-full bg-graphite-950 border border-graphite-700 rounded-xl pl-3.5 pr-10 py-2.5 text-vapor-100 font-mono text-xs focus:border-amber-500 outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowToken(!showToken)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-vapor-400 hover:text-vapor-200"
-                      >
-                        {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                    <span className="text-[10px] text-vapor-500 mt-1 block">
-                      Apenas caso sua oficina possua conta própria na Focus NFe.
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-mono text-vapor-300 uppercase mb-1">
-                      Ambiente de Emissão
-                    </label>
-                    <select
-                      value={ambiente}
-                      onChange={(e) => setAmbiente(e.target.value as any)}
-                      className="w-full bg-graphite-950 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-vapor-100 font-sans text-xs focus:border-amber-500 outline-none"
-                    >
-                      <option value="homologacao">Homologação (Testes / Sem valor fiscal)</option>
-                      <option value="producao">Produção (Validade Jurídica Oficial)</option>
-                    </select>
-                  </div>
+              <div className="p-4 bg-graphite-900 border border-graphite-700 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <label className="block text-xs font-mono text-vapor-200 uppercase mb-0.5">
+                    Ambiente de Emissão
+                  </label>
+                  <p className="text-[11px] text-vapor-400 font-sans">
+                    Utilize Homologação para testes simulados sem validade fiscal. Alterne para Produção quando desejar emitir notas fiscais com validade jurídica oficial.
+                  </p>
                 </div>
-              )}
+                <div className="sm:w-64 shrink-0">
+                  <select
+                    value={ambiente}
+                    onChange={(e) => setAmbiente(e.target.value as any)}
+                    className="w-full bg-graphite-950 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-vapor-100 font-sans text-xs focus:border-amber-500 outline-none"
+                  >
+                    <option value="homologacao">Homologação (Testes / Simulado)</option>
+                    <option value="producao">Produção (Validade Jurídica Oficial)</option>
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 

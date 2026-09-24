@@ -145,7 +145,7 @@ export const ModalEmitirNFSe: React.FC<ModalEmitirNFSeProps> = ({
                   <span>Dados Fiscais Não Configurados</span>
                 </div>
                 <p className="leading-relaxed">
-                  Para emitir notas fiscais, configure previamente o CNPJ, Razão Social, CNAE e token tributário da sua oficina.
+                  Para emitir notas fiscais, configure previamente o CNPJ, Razão Social, Inscrição Municipal e CNAE da sua oficina.
                 </p>
                 <div className="pt-1">
                   <button
