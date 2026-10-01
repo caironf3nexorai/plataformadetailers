@@ -306,7 +306,7 @@ export const AdminPlanos: React.FC = () => {
         <button
           onClick={() => setShowCreateModal(true)}
           disabled={isReadOnly}
-          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 shadow-lg shadow-amber-500/10"
+          className="w-full sm:w-auto justify-center bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm transition flex items-center space-x-2 shadow-lg shadow-amber-500/10 shrink-0"
         >
           <Plus className="w-4 h-4" />
           <span>Criar Novo Plano</span>
@@ -314,29 +314,32 @@ export const AdminPlanos: React.FC = () => {
       </div>
 
       {/* Banner da Chave Central Beta */}
-      <div className={`p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+      <div className={`p-4 sm:p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
         bloqueioAtivo
           ? 'bg-rose-500/10 border-rose-500/40 shadow-lg shadow-rose-500/5'
           : 'bg-amber-500/10 border-amber-500/30 shadow-lg shadow-amber-500/5'
       }`}>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
+        <div className="space-y-1.5 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center items-start gap-1.5 sm:gap-2.5">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold font-mono uppercase tracking-wider leading-none shrink-0 ${
               bloqueioAtivo ? 'bg-rose-500 text-slate-950' : 'bg-amber-500 text-slate-950'
             }`}>
               {bloqueioAtivo ? 'Modo Bloqueio Rígido Ativo' : 'Modo Aviso (Beta)'}
             </span>
             <span className="text-xs text-slate-400 font-mono">Chave Central da Plataforma</span>
           </div>
-          <p className="text-xs text-slate-300 font-sans max-w-3xl">
+          <p className="text-xs text-slate-300 font-sans max-w-3xl leading-relaxed">
             {bloqueioAtivo
               ? 'O bloqueio está LIGADO. Quando uma oficina atinge os limites numéricos do plano, novos cadastros são bloqueados com avisos de upgrade.'
               : 'O sistema está em MODO AVISO (Beta). Recursos fora do plano exibem aviso de orientação, mas nenhuma ação é travada para os clientes.'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <label className="relative inline-flex items-center cursor-pointer">
+        <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 shrink-0">
+          <span className="text-xs font-bold text-slate-200 sm:order-2">
+            {bloqueioAtivo ? 'Bloqueio Ligado' : 'Chave Desligada'}
+          </span>
+          <label className="relative inline-flex items-center cursor-pointer sm:order-1">
             <input
               type="checkbox"
               checked={bloqueioAtivo}
@@ -346,36 +349,36 @@ export const AdminPlanos: React.FC = () => {
             />
             <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
           </label>
-          <span className="text-xs font-bold text-slate-200">
-            {bloqueioAtivo ? 'Bloqueio Ligado' : 'Chave Desligada'}
-          </span>
         </div>
       </div>
 
       {/* Banner da Chave do Trial de Cadastro (15 Dias Grátis) */}
-      <div className={`p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+      <div className={`p-4 sm:p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
         trialCadastroAtivo
           ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
           : 'bg-slate-900 border-slate-800 shadow-lg'
       }`}>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
+        <div className="space-y-1.5 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center items-start gap-1.5 sm:gap-2.5">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold font-mono uppercase tracking-wider leading-none shrink-0 ${
               trialCadastroAtivo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-300'
             }`}>
               {trialCadastroAtivo ? `Degustação Ativa (${trialDiasPadrao} Dias Pro)` : 'Degustação Desativada (Inicia Free)'}
             </span>
             <span className="text-xs text-slate-400 font-mono">Primeiro Acesso de Novos Usuários</span>
           </div>
-          <p className="text-xs text-slate-300 font-sans max-w-3xl">
+          <p className="text-xs text-slate-300 font-sans max-w-3xl leading-relaxed">
             {trialCadastroAtivo
               ? `Novos usuários que criam conta ganham automaticamente ${trialDiasPadrao} dias de degustação gratuita no Plano Pro. Após os ${trialDiasPadrao} dias, o sistema solicita a assinatura.`
               : 'Degustação desligada. Novos usuários entram diretamente no Plano Free sem dias grátis de Pro (exigindo contratação imediata para recursos Pro/Studio).'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <label className="relative inline-flex items-center cursor-pointer">
+        <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 shrink-0">
+          <span className="text-xs font-bold text-slate-200 sm:order-2">
+            {trialCadastroAtivo ? `${trialDiasPadrao} Dias Ativo` : 'Desligado (Free)'}
+          </span>
+          <label className="relative inline-flex items-center cursor-pointer sm:order-1">
             <input
               type="checkbox"
               checked={trialCadastroAtivo}
@@ -385,9 +388,6 @@ export const AdminPlanos: React.FC = () => {
             />
             <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
           </label>
-          <span className="text-xs font-bold text-slate-200">
-            {trialCadastroAtivo ? '15 Dias Ativo' : 'Desligado'}
-          </span>
         </div>
       </div>
 
@@ -490,10 +490,10 @@ export const AdminPlanos: React.FC = () => {
                         const conf = item.limites[rec.chave] || { valor: '', ilimitado: true };
 
                         return (
-                          <div key={rec.chave} className="flex items-center justify-between text-xs gap-2 py-1 border-b border-slate-800/50 last:border-0">
-                            <span className="text-slate-300 font-medium">{rec.nome}:</span>
+                          <div key={rec.chave} className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1.5 sm:gap-2 py-1.5 border-b border-slate-800/50 last:border-0">
+                            <span className="text-slate-300 font-medium break-words">{rec.nome}:</span>
 
-                            <div className="flex items-center space-x-2">
+                            <div className="flex items-center space-x-2 shrink-0 self-end sm:self-auto">
                               {!conf.ilimitado && (
                                 <CampoNumerico
                                   integerOnly

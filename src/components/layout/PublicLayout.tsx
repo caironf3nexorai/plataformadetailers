@@ -22,23 +22,24 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
     <div className="min-h-screen bg-graphite-900 text-vapor-100 flex flex-col font-sans selection:bg-amber-500 selection:text-graphite-900">
       {/* Header Simples */}
       <header 
-        className="min-h-[64px] border-b border-graphite-600 bg-graphite-800/80 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-8 flex items-center justify-between"
+        className="min-h-[56px] sm:min-h-[64px] border-b border-graphite-600 bg-graphite-800/80 backdrop-blur-md sticky top-0 z-40 px-3 sm:px-8 flex items-center justify-between gap-2"
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
       >
-        <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-          <LogoNuvemWash size="sm" />
+        <Link to="/" className="flex items-center gap-1.5 hover:opacity-90 transition-opacity shrink-0">
+          <LogoNuvemWash size="xs" className="sm:hidden" />
+          <LogoNuvemWash size="sm" className="hidden sm:block" />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {tenant && (
                 <Link to="/">
-                  <Button variant="secondary" className="text-[13px] px-3 py-1.5 min-h-[36px] flex items-center gap-1.5">
-                    <Wrench size={15} />
-                    <span>Minha Oficina</span>
+                  <Button variant="secondary" className="text-xs sm:text-[13px] px-2.5 sm:px-3 py-1.5 min-h-[34px] sm:min-h-[36px] flex items-center gap-1.5">
+                    <Wrench size={14} />
+                    <span className="hidden xs:inline">Minha Oficina</span>
                   </Button>
                 </Link>
               )}
@@ -49,10 +50,10 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
                 type="button"
                 variant="ghost"
                 onClick={handleSignOut}
-                className="text-[13px] text-vapor-300 hover:text-flare-400 px-3 py-1.5 min-h-[36px] flex items-center gap-1.5"
+                className="text-xs sm:text-[13px] text-vapor-300 hover:text-flare-400 px-2 sm:px-3 py-1.5 min-h-[34px] sm:min-h-[36px] flex items-center gap-1.5"
                 title="Sair da conta atual"
               >
-                <LogOut size={15} />
+                <LogOut size={14} />
                 <span className="hidden sm:inline">Sair</span>
               </Button>
             </div>
@@ -60,7 +61,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
             <>
               <Link
                 to="/entrar"
-                className="text-[14px] font-sans text-vapor-300 hover:text-vapor-100 transition-colors px-3 py-2 min-h-[44px] flex items-center font-medium"
+                className="text-xs sm:text-[14px] font-sans text-vapor-300 hover:text-vapor-100 transition-colors px-2 sm:px-3 py-1.5 sm:py-2 min-h-[34px] sm:min-h-[44px] flex items-center font-medium"
               >
                 Entrar
               </Link>
@@ -68,7 +69,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
                 <Button
                   type="button"
                   variant="primary"
-                  className="text-[13px] px-4 py-2 min-h-[44px] font-semibold"
+                  className="text-xs sm:text-[13px] px-2.5 sm:px-4 py-1.5 sm:py-2 min-h-[34px] sm:min-h-[44px] font-semibold whitespace-nowrap shrink-0"
                 >
                   Criar conta
                 </Button>

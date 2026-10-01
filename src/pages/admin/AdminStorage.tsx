@@ -6,7 +6,8 @@ import {
   RefreshCw, 
   AlertTriangle, 
   FileText, 
-  Clock
+  Clock,
+  ArrowLeftRight
 } from 'lucide-react';
 
 interface StorageSnapshotItem {
@@ -201,59 +202,131 @@ export const AdminStorage: React.FC = () => {
           Nenhum snapshot de storage registrado até o momento. Clique em &quot;Recalcular Storage sob Demanda&quot; para atualizar.
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="px-6 py-4">Oficina</th>
-                <th className="px-6 py-4">Evidências (Privado)</th>
-                <th className="px-6 py-4">Catálogo (Público)</th>
-                <th className="px-6 py-4 font-mono text-right">Total Consumido</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {sortedTenantList.map((t) => {
-                const aboveThreshold = t.totalBytes >= THRESHOLD_1GB;
-                const pct = totalPlatformBytes > 0 ? (t.totalBytes / totalPlatformBytes) * 100 : 0;
+        <div className="space-y-4">
+          {/* Dica de rolagem no mobile */}
+          <div className="md:hidden px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-400">
+            <span className="flex items-center gap-1.5 font-medium text-amber-400">
+              <ArrowLeftRight className="w-3.5 h-3.5 animate-pulse" />
+              <span>Arraste para o lado para ver todas as colunas</span>
+            </span>
+            <span className="font-mono text-slate-500">{sortedTenantList.length} oficinas</span>
+          </div>
 
-                return (
-                  <tr key={t.tenant_id} className="hover:bg-slate-800/40 transition">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-white">{t.nome}</span>
+          {/* Versão em Cards para Mobile (< md) */}
+          <div className="md:hidden space-y-3">
+            {sortedTenantList.map((t) => {
+              const aboveThreshold = t.totalBytes >= THRESHOLD_1GB;
+              const pct = totalPlatformBytes > 0 ? (t.totalBytes / totalPlatformBytes) * 100 : 0;
+
+              return (
+                <div key={t.tenant_id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-md">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-white text-sm">{t.nome}</span>
                         {aboveThreshold && (
-                          <span className="flex items-center space-x-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold" title="Oficina consumindo mais de 1 GB">
+                          <span className="flex items-center space-x-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono font-bold">
                             <AlertTriangle className="w-3 h-3" />
                             <span>&gt;1GB</span>
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-500 font-mono">/{t.slug}</div>
-                      
-                      {/* Proportion bar */}
-                      <div className="w-36 bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
-                        <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%` }}></div>
-                      </div>
-                    </td>
+                      <span className="text-xs text-slate-500 font-mono">/{t.slug}</span>
+                    </div>
 
-                    <td className="px-6 py-4 font-mono text-xs">
-                      <div className="text-slate-200 font-bold">{formatBytes(t.evidenciasBytes)}</div>
-                      <div className="text-slate-500">{t.evidenciasFiles} arquivos</div>
-                    </td>
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase text-slate-500 block font-mono">Total</span>
+                      <span className="font-mono font-bold text-amber-400 text-base">{formatBytes(t.totalBytes)}</span>
+                    </div>
+                  </div>
 
-                    <td className="px-6 py-4 font-mono text-xs">
-                      <div className="text-slate-200 font-bold">{formatBytes(t.catalogoBytes)}</div>
-                      <div className="text-slate-500">{t.catalogoFiles} arquivos</div>
-                    </td>
+                  {/* Barra de Proporção */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] font-mono text-slate-500">
+                      <span>Uso na Plataforma</span>
+                      <span>{pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%` }}></div>
+                    </div>
+                  </div>
 
-                    <td className="px-6 py-4 text-right font-mono font-bold text-amber-400 text-base">
-                      {formatBytes(t.totalBytes)}
-                    </td>
+                  {/* Grid de Evidências vs Catálogo */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800/50">
+                      <span className="text-slate-400 text-[10px] block uppercase font-mono">Evidências (Privado)</span>
+                      <strong className="text-slate-200 block text-xs mt-0.5">{formatBytes(t.evidenciasBytes)}</strong>
+                      <span className="text-slate-500 text-[10px] font-mono">{t.evidenciasFiles} arquivos</span>
+                    </div>
+
+                    <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800/50">
+                      <span className="text-slate-400 text-[10px] block uppercase font-mono">Catálogo (Público)</span>
+                      <strong className="text-slate-200 block text-xs mt-0.5">{formatBytes(t.catalogoBytes)}</strong>
+                      <span className="text-slate-500 text-[10px] font-mono">{t.catalogoFiles} arquivos</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Versão em Tabela Completa (Rolável em qualquer tela) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-xl overflow-hidden">
+            <div className="overflow-x-auto -webkit-overflow-scrolling-touch scrollbar-thin">
+              <table className="w-full min-w-[620px] text-left text-sm text-slate-300">
+                <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-6 py-4">Oficina</th>
+                    <th className="px-6 py-4">Evidências (Privado)</th>
+                    <th className="px-6 py-4">Catálogo (Público)</th>
+                    <th className="px-6 py-4 font-mono text-right">Total Consumido</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {sortedTenantList.map((t) => {
+                    const aboveThreshold = t.totalBytes >= THRESHOLD_1GB;
+                    const pct = totalPlatformBytes > 0 ? (t.totalBytes / totalPlatformBytes) * 100 : 0;
+
+                    return (
+                      <tr key={t.tenant_id} className="hover:bg-slate-800/40 transition">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-white">{t.nome}</span>
+                            {aboveThreshold && (
+                              <span className="flex items-center space-x-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold" title="Oficina consumindo mais de 1 GB">
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>&gt;1GB</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 font-mono">/{t.slug}</div>
+                          
+                          {/* Proportion bar */}
+                          <div className="w-36 bg-slate-950 rounded-full h-1.5 mt-2 overflow-hidden border border-slate-800">
+                            <div className="bg-amber-500 h-full rounded-full" style={{ width: `${Math.min(pct, 100)}%` }}></div>
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 font-mono text-xs">
+                          <div className="text-slate-200 font-bold">{formatBytes(t.evidenciasBytes)}</div>
+                          <div className="text-slate-500">{t.evidenciasFiles} arquivos</div>
+                        </td>
+
+                        <td className="px-6 py-4 font-mono text-xs">
+                          <div className="text-slate-200 font-bold">{formatBytes(t.catalogoBytes)}</div>
+                          <div className="text-slate-500">{t.catalogoFiles} arquivos</div>
+                        </td>
+
+                        <td className="px-6 py-4 text-right font-mono font-bold text-amber-400 text-base">
+                          {formatBytes(t.totalBytes)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

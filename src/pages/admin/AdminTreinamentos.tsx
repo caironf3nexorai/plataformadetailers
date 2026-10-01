@@ -16,7 +16,8 @@ import {
   Eye,
   AlertTriangle,
   BookOpen,
-  Filter
+  Filter,
+  ArrowLeftRight
 } from 'lucide-react';
 import { parseVideoUrl, getEmbedUrl } from '../../utils/videoExtractor';
 import { AdminAbaMateriaisDidaticos } from '../../components/admin/AdminAbaMateriaisDidaticos';
@@ -334,34 +335,50 @@ export const AdminTreinamentos: React.FC = () => {
           <p className="text-sm">Carregando catálogo de treinamentos...</p>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="px-4 py-4 text-center">Ordem</th>
-                <th className="px-6 py-4">Treinamento / Categoria</th>
-                <th className="px-4 py-4">Duração</th>
-                <th className="px-4 py-4">Planos Permitidos</th>
-                <th className="px-6 py-4 text-center">Oficinas Engajadas</th>
-                <th className="px-4 py-4">Status</th>
-                <th className="px-6 py-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500 font-mono">
-                    Nenhum treinamento encontrado nesta categoria.
-                  </td>
-                </tr>
-              ) : (
-                treinamentos
-                  .filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin)
-                  .map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-800/40 transition">
-                    {/* Botões de Reordenamento */}
-                    <td className="px-4 py-4 text-center">
-                      <div className="flex flex-col items-center justify-center gap-1 font-mono text-xs">
+        <div className="space-y-4">
+          {/* Indicador de rolagem no mobile */}
+          <div className="md:hidden px-3.5 py-2 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between text-xs text-slate-400">
+            <span className="flex items-center gap-1.5 font-medium text-amber-400">
+              <ArrowLeftRight className="w-3.5 h-3.5 animate-pulse" />
+              <span>Arraste para o lado ou veja os cards abaixo</span>
+            </span>
+            <span className="font-mono text-slate-500">
+              {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length} aulas
+            </span>
+          </div>
+
+          {/* Versão em Cards para Mobile (< md) */}
+          <div className="md:hidden space-y-3">
+            {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-500 font-mono text-xs">
+                Nenhum treinamento encontrado nesta categoria.
+              </div>
+            ) : (
+              treinamentos
+                .filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin)
+                .map((item) => (
+                  <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-md">
+                    {/* Topo do Card: Ordem, Título e Essencial */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono font-bold text-xs border border-amber-500/40">
+                            #{item.ordem}
+                          </span>
+                          <strong className="text-white text-sm">{item.titulo}</strong>
+                          {item.essencial && (
+                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                              Essencial
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 font-mono">
+                          {item.categoria} • {item.plataforma.toUpperCase()}
+                        </p>
+                      </div>
+
+                      {/* Botões Reordenar */}
+                      <div className="flex items-center gap-1 font-mono text-xs bg-slate-950 p-1 rounded-lg border border-slate-800">
                         <button
                           onClick={() => handleReorder(item, -1)}
                           disabled={isReadOnly || item.ordem <= 0}
@@ -370,7 +387,6 @@ export const AdminTreinamentos: React.FC = () => {
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
                         </button>
-                        <span className="font-bold text-amber-400">{item.ordem}</span>
                         <button
                           onClick={() => handleReorder(item, 1)}
                           disabled={isReadOnly}
@@ -380,102 +396,225 @@ export const AdminTreinamentos: React.FC = () => {
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    </td>
+                    </div>
 
-                    {/* Título e Categoria */}
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <strong className="text-white text-sm">{item.titulo}</strong>
-                          {item.essencial && (
-                            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
-                              Essencial (Onboarding)
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-400 font-mono">
-                          Categoria: <span className="text-slate-300">{item.categoria}</span> • {item.plataforma.toUpperCase()} ({item.video_id})
-                        </p>
+                    {/* Metadados: Duração, Planos e Oficinas */}
+                    <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-800/80">
+                      <div className="flex items-center gap-1.5 text-slate-300 font-mono">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{item.duracao_minutos} min</span>
                       </div>
-                    </td>
 
-                    {/* Duração */}
-                    <td className="px-4 py-4 font-mono text-xs text-slate-300 whitespace-nowrap">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {item.duracao_minutos} min
-                      </span>
-                    </td>
-
-                    {/* Planos Permitidos */}
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-1 flex-wrap font-mono text-[10px]">
+                      <div className="flex items-center justify-end gap-1 flex-wrap font-mono text-[10px]">
                         {(item.planos_permitidos || []).map(p => (
-                          <span key={p} className="px-2 py-0.5 rounded bg-slate-800 text-amber-400 border border-slate-700 uppercase font-bold">
+                          <span key={p} className="px-1.5 py-0.5 rounded bg-slate-800 text-amber-400 border border-slate-700 uppercase font-bold">
                             {p}
                           </span>
                         ))}
                       </div>
-                    </td>
+                    </div>
 
-                    {/* Métrica: Oficinas Distintas Assistiram */}
-                    <td className="px-6 py-4 text-center">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-emerald-400 font-mono text-xs font-bold">
-                        <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>{item.oficinas_assistiram_count} oficina(s)</span>
+                    {/* Rodapé do Card: Status e Ações */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleAtivo(item)}
+                          disabled={isReadOnly}
+                          className={`inline-flex items-center space-x-1 text-xs font-semibold px-2.5 py-1 rounded border transition ${
+                            item.ativo
+                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                              : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                          }`}
+                        >
+                          {item.ativo ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Ativo</span>
+                            </>
+                          ) : (
+                            <>
+                              <X className="w-3.5 h-3.5" />
+                              <span>Inativo</span>
+                            </>
+                          )}
+                        </button>
+
+                        <span className="text-[11px] font-mono text-slate-500">
+                          {item.oficinas_assistiram_count} assistiram
+                        </span>
                       </div>
-                    </td>
 
-                    {/* Status Ativo */}
-                    <td className="px-4 py-4">
-                      <button
-                        onClick={() => handleToggleAtivo(item)}
-                        disabled={isReadOnly}
-                        className={`inline-flex items-center space-x-1 text-xs font-semibold px-2.5 py-1 rounded border transition ${
-                          item.ativo
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                        }`}
-                      >
-                        {item.ativo ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Ativo</span>
-                          </>
-                        ) : (
-                          <>
-                            <X className="w-3.5 h-3.5" />
-                            <span>Inativo</span>
-                          </>
-                        )}
-                      </button>
-                    </td>
-
-                    {/* Ações */}
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end space-x-2">
+                      <div className="flex items-center space-x-2">
                         <button
                           onClick={() => setPreviewVideo(item)}
-                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                          className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center space-x-1 transition"
                           title="Visualizar Vídeo"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Assistir</span>
                         </button>
                         <button
                           onClick={() => openEditModal(item)}
                           disabled={isReadOnly}
-                          className="p-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition border border-amber-500/30"
+                          className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg text-xs font-medium flex items-center space-x-1 transition border border-amber-500/30"
                           title="Editar Treinamento"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Editar</span>
                         </button>
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 ))
-              )}
-            </tbody>
-          </table>
+            )}
+          </div>
+
+          {/* Versão em Tabela Completa (Rolável em Desktop/Tablet) */}
+          <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto -webkit-overflow-scrolling-touch scrollbar-thin">
+              <table className="w-full min-w-[760px] text-left text-sm text-slate-300">
+                <thead className="bg-slate-950 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-4 text-center">Ordem</th>
+                    <th className="px-6 py-4">Treinamento / Categoria</th>
+                    <th className="px-4 py-4">Duração</th>
+                    <th className="px-4 py-4">Planos Permitidos</th>
+                    <th className="px-6 py-4 text-center">Oficinas Engajadas</th>
+                    <th className="px-4 py-4">Status</th>
+                    <th className="px-6 py-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500 font-mono">
+                        Nenhum treinamento encontrado nesta categoria.
+                      </td>
+                    </tr>
+                  ) : (
+                    treinamentos
+                      .filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin)
+                      .map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-800/40 transition">
+                        {/* Botões de Reordenamento */}
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex flex-col items-center justify-center gap-1 font-mono text-xs">
+                            <button
+                              onClick={() => handleReorder(item, -1)}
+                              disabled={isReadOnly || item.ordem <= 0}
+                              className="p-1 text-slate-400 hover:text-amber-400 disabled:opacity-20"
+                              title="Subir ordem"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="font-bold text-amber-400">{item.ordem}</span>
+                            <button
+                              onClick={() => handleReorder(item, 1)}
+                              disabled={isReadOnly}
+                              className="p-1 text-slate-400 hover:text-amber-400 disabled:opacity-20"
+                              title="Descer ordem"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Título e Categoria */}
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <strong className="text-white text-sm">{item.titulo}</strong>
+                              {item.essencial && (
+                                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                                  Essencial (Onboarding)
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-400 font-mono">
+                              Categoria: <span className="text-slate-300">{item.categoria}</span> • {item.plataforma.toUpperCase()} ({item.video_id})
+                            </p>
+                          </div>
+                        </td>
+
+                        {/* Duração */}
+                        <td className="px-4 py-4 font-mono text-xs text-slate-300 whitespace-nowrap">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            {item.duracao_minutos} min
+                          </span>
+                        </td>
+
+                        {/* Planos Permitidos */}
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1 flex-wrap font-mono text-[10px]">
+                            {(item.planos_permitidos || []).map(p => (
+                              <span key={p} className="px-2 py-0.5 rounded bg-slate-800 text-amber-400 border border-slate-700 uppercase font-bold">
+                                {p}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+
+                        {/* Métrica: Oficinas Distintas Assistiram */}
+                        <td className="px-6 py-4 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-emerald-400 font-mono text-xs font-bold">
+                            <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>{item.oficinas_assistiram_count} oficina(s)</span>
+                          </div>
+                        </td>
+
+                        {/* Status Ativo */}
+                        <td className="px-4 py-4">
+                          <button
+                            onClick={() => handleToggleAtivo(item)}
+                            disabled={isReadOnly}
+                            className={`inline-flex items-center space-x-1 text-xs font-semibold px-2.5 py-1 rounded border transition ${
+                              item.ativo
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                            }`}
+                          >
+                            {item.ativo ? (
+                              <>
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Ativo</span>
+                              </>
+                            ) : (
+                              <>
+                                <X className="w-3.5 h-3.5" />
+                                <span>Inativo</span>
+                              </>
+                            )}
+                          </button>
+                        </td>
+
+                        {/* Ações */}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => setPreviewVideo(item)}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                              title="Visualizar Vídeo"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openEditModal(item)}
+                              disabled={isReadOnly}
+                              className="p-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition border border-amber-500/30"
+                              title="Editar Treinamento"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

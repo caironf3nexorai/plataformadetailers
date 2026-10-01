@@ -550,50 +550,53 @@ export const AdminOficinas: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs pt-1">
-                    <div className="flex items-center space-x-1 text-slate-400">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span className="font-mono">
-                        Acesso: {t.ultimo_acesso ? new Date(t.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
-                      </span>
-                      {churn && (
-                        <span className="bg-amber-500/10 text-amber-400 text-[10px] px-1 rounded border border-amber-500/30">
-                          Churn?
+                  {/* Rodapé e Ações do Card (Mobile Safe) */}
+                  <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-1.5 text-slate-400">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="font-mono text-[11px]">
+                          Acesso: {t.ultimo_acesso ? new Date(t.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
                         </span>
-                      )}
+                        {churn && (
+                          <span className="bg-amber-500/10 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 font-semibold">
+                            Churn?
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full pt-1">
                       <button
                         onClick={() => handleAcessarOficina(t.id)}
-                        className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs font-medium border border-emerald-500/30 flex items-center space-x-1"
+                        className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition"
                         title="Acessar painel desta oficina no App"
                       >
-                        <LogIn className="w-3 h-3" />
+                        <LogIn className="w-3.5 h-3.5" />
                         <span>Acessar</span>
                       </button>
 
                       <button
                         onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
-                        className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 flex items-center space-x-1"
+                        className="w-full bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 text-amber-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-amber-500/30 flex items-center justify-center space-x-1.5 transition"
                       >
-                        <Edit2 className="w-3 h-3" />
+                        <Edit2 className="w-3.5 h-3.5" />
                         <span>Plano</span>
                       </button>
 
                       <button
                         onClick={() => handleOpenDetail(t.id)}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-xs font-semibold border border-slate-700 cursor-pointer"
+                        className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 py-2 px-2.5 rounded-lg text-xs font-semibold border border-slate-700 flex items-center justify-center space-x-1.5 transition cursor-pointer"
                       >
-                        Detalhes
+                        <span>Detalhes</span>
                       </button>
 
                       <button
                         onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
-                        className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-medium border border-red-500/30 flex items-center space-x-1 cursor-pointer"
+                        className="w-full bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-red-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer"
                         title="Excluir oficina"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                         <span>Excluir</span>
                       </button>
                     </div>

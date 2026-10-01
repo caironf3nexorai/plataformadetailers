@@ -62,6 +62,11 @@ export const AdminCampanhas: React.FC = () => {
   const [beneficiosTexto, setBeneficiosTexto] = useState('');
   const [ativo, setAtivo] = useState(true);
 
+  // Chave Central de Degustação no Cadastro Geral (15 dias Pro)
+  const [trialCadastroAtivo, setTrialCadastroAtivo] = useState(true);
+  const [trialDiasPadrao, setTrialDiasPadrao] = useState(15);
+  const [alterandoTrial, setAlterandoTrial] = useState(false);
+
   // Previne rolagem de fundo no modal
   useEffect(() => {
     if (modalAberto) {
@@ -73,6 +78,41 @@ export const AdminCampanhas: React.FC = () => {
       document.body.style.overflow = '';
     };
   }, [modalAberto]);
+
+  const fetchConfigPlataforma = async () => {
+    try {
+      const { data } = await supabase.rpc('obter_config_plataforma');
+      if (data) {
+        if (typeof data.trial_cadastro_ativo === 'boolean') {
+          setTrialCadastroAtivo(data.trial_cadastro_ativo);
+        }
+        if (typeof data.trial_dias_padrao === 'number') {
+          setTrialDiasPadrao(data.trial_dias_padrao);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao buscar configuracao da plataforma no campanhas:', err);
+    }
+  };
+
+  const handleToggleTrialCadastro = async (novoValor: boolean) => {
+    setAlterandoTrial(true);
+    try {
+      const { error } = await supabase.rpc('admin_alterar_trial_cadastro', {
+        p_ativo: novoValor,
+        p_dias: trialDiasPadrao
+      });
+      if (error) throw error;
+      setTrialCadastroAtivo(novoValor);
+      showSuccess(novoValor
+        ? `Degustação gratuita no cadastro (Trial de ${trialDiasPadrao} dias Pro) ATIVADA para novos usuários!`
+        : 'Degustação gratuita no cadastro DESATIVADA. Novos usuários entrarão diretamente no Plano Free sem dias grátis de Pro.');
+    } catch (err: any) {
+      showError('Erro ao alterar configuração de trial de cadastro: ' + err.message);
+    } finally {
+      setAlterandoTrial(false);
+    }
+  };
 
   const carregarCampanhas = async () => {
     setLoading(true);
@@ -90,6 +130,7 @@ export const AdminCampanhas: React.FC = () => {
 
   useEffect(() => {
     carregarCampanhas();
+    fetchConfigPlataforma();
   }, []);
 
   const abrirModalNovo = () => {
@@ -245,11 +286,50 @@ export const AdminCampanhas: React.FC = () => {
 
         <button
           onClick={abrirModalNovo}
-          className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Nova Campanha de Lançamento</span>
         </button>
+      </div>
+
+      {/* Banner da Chave do Trial de Cadastro (15 Dias Grátis) */}
+      <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+        trialCadastroAtivo
+          ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
+          : 'bg-slate-900 border-slate-800 shadow-lg'
+      }`}>
+        <div className="space-y-1.5 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center items-start gap-1.5 sm:gap-2.5">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold font-mono uppercase tracking-wider leading-none shrink-0 ${
+              trialCadastroAtivo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-300'
+            }`}>
+              {trialCadastroAtivo ? `Degustação Ativa (${trialDiasPadrao} Dias Pro)` : 'Degustação Desativada (Inicia Free)'}
+            </span>
+            <span className="text-xs text-slate-400 font-mono">Chave Central de Novos Cadastros</span>
+          </div>
+          <p className="text-xs text-slate-300 font-sans max-w-3xl leading-relaxed">
+            {trialCadastroAtivo
+              ? `Novos usuários que criam conta ganham automaticamente ${trialDiasPadrao} dias de degustação gratuita no Plano Pro. Desative este botão a qualquer momento se desejar que novos cadastros comecem direto no Free.`
+              : 'Degustação desligada. Novos usuários entram diretamente no Plano Free sem dias grátis de Pro (exigindo contratação imediata para recursos Pro/Studio).'}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 shrink-0">
+          <span className="text-xs font-bold text-slate-200 sm:order-2">
+            {trialCadastroAtivo ? `${trialDiasPadrao} Dias Ativo` : 'Desligado (Free)'}
+          </span>
+          <label className="relative inline-flex items-center cursor-pointer sm:order-1">
+            <input
+              type="checkbox"
+              checked={trialCadastroAtivo}
+              disabled={alterandoTrial}
+              onChange={(e) => handleToggleTrialCadastro(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </div>
       </div>
 
       {/* Cards de Métricas */}

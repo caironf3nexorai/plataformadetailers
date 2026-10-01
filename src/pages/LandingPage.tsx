@@ -63,9 +63,9 @@ export const LandingPage: React.FC = () => {
           paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
       >
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[56px] sm:min-h-[80px] h-14 sm:h-20 flex items-center justify-between gap-1.5 sm:gap-4 w-full">
-          <Link to="/" className="flex items-center gap-1.5 group transition-transform hover:scale-105 shrink-0 min-w-0">
-            <LogoNuvemWash size="sm" className="sm:hidden" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[52px] sm:min-h-[80px] h-13 sm:h-20 flex items-center justify-between gap-2 sm:gap-4 w-full">
+          <Link to="/" className="flex items-center gap-1.5 group transition-transform hover:scale-105 shrink-0">
+            <LogoNuvemWash size="xs" className="sm:hidden" />
             <LogoNuvemWash size="md" className="hidden sm:block" />
           </Link>
 
@@ -90,11 +90,11 @@ export const LandingPage: React.FC = () => {
           </nav>
 
           {/* Botões de Ação */}
-          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <Link to="/entrar">
               <Button
                 variant="ghost"
-                className="text-xs sm:text-sm font-medium text-vapor-200 hover:text-white hover:bg-graphite-800 min-h-[34px] sm:min-h-[40px] px-2 sm:px-4"
+                className="text-xs sm:text-sm font-medium text-vapor-200 hover:text-white hover:bg-graphite-800 min-h-[32px] sm:min-h-[40px] px-2 sm:px-4"
               >
                 Entrar
               </Button>
@@ -102,11 +102,11 @@ export const LandingPage: React.FC = () => {
             <Link to="/criar-conta">
               <Button
                 variant="primary"
-                className="text-xs sm:text-sm font-semibold min-h-[34px] sm:min-h-[42px] px-2.5 sm:px-5 shadow-lg shadow-amber-500/20 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
+                className="text-xs sm:text-sm font-semibold min-h-[32px] sm:min-h-[42px] px-2.5 sm:px-5 shadow-lg shadow-amber-500/20 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0"
               >
                 <span className="sm:hidden">Criar Conta</span>
                 <span className="hidden sm:inline">Criar Conta Grátis</span>
-                <ArrowRight size={13} className="shrink-0" />
+                <ArrowRight size={12} className="shrink-0" />
               </Button>
             </Link>
           </div>
