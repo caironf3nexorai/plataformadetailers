@@ -124,6 +124,7 @@ export const SidebarNav: React.FC = () => {
       titulo: 'GESTÃO & SISTEMA',
       itens: [
         { path: '/configuracoes', label: 'Minha Oficina', icon: Building2, visible: true },
+        { path: '/configuracoes?aba=termos', label: 'Termos & Garantias (CDC)', icon: ShieldCheck, visible: podeGerirServicos() },
         { path: '/planos', label: 'Planos & Assinatura', icon: Sparkles, visible: !isOperador },
       ],
     },

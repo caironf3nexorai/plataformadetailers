@@ -206,6 +206,9 @@ function App() {
                 <Route path="configuracoes" element={<Configuracoes />} />
                 <Route path="minha-oficina" element={<Navigate to="/configuracoes" replace />} />
                 <Route path="ajustes" element={<Navigate to="/configuracoes" replace />} />
+                <Route path="termos" element={<Navigate to="/configuracoes?aba=termos" replace />} />
+                <Route path="termos-garantia" element={<Navigate to="/configuracoes?aba=termos" replace />} />
+                <Route path="garantias" element={<Navigate to="/configuracoes?aba=termos" replace />} />
                 <Route path="indique" element={<IndiqueEGanhe />} />
                 <Route path="indicacoes" element={<Navigate to="/indique" replace />} />
                 <Route path="diluicao" element={<DiluicaoInterna />} />

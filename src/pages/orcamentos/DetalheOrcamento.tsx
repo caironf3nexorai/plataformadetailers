@@ -52,6 +52,8 @@ import type { Servico } from '../../types/servicos';
 import {
   type TermoGarantia,
   TERMO_RESPONSABILIDADE_PADRAO,
+  TERMO_GARANTIA_PADRAO_ADVOGADO,
+  TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO,
   MODELOS_TERMOS_PLATAFORMA_PADRAO,
   type ServicoParaTermo,
   type DadosPreenchimentoTermo,
@@ -305,7 +307,9 @@ export const DetalheOrcamento: React.FC = () => {
         .replace(/\[PRAZO DE GARANTIA\]/g, prazoTexto)
         .replace(/\[NOME DA EMPRESA\]/g, nomeEmpresa);
     }
-    return `A ${nomeEmpresa} garante os serviços executados pelo prazo de ${prazoTexto} informado na OS, exclusivamente contra falhas decorrentes da execução do serviço. EXCLUSÕES DE GARANTIA: acidentes, impactos, desgaste natural, falta de manutenção, uso inadequado, produtos químicos ou corrosivos, seivas, dejetos de aves, agentes ambientais, lavagem incorreta, intervenção de terceiros, defeitos preexistentes ou problemas sem relação com o serviço realizado. O cliente declara estar ciente das condições e orientações de conservação.`;
+    return TERMO_GARANTIA_PADRAO_ADVOGADO
+      .replace(/\[PRAZO DE GARANTIA\]/g, prazoTexto)
+      .replace(/\[NOME DA EMPRESA\]/g, nomeEmpresa);
   }, [termoGarantiaAtual, garantiaMeses, tenant?.nome]);
 
   // Modal de Novo Serviço Rápido
@@ -2248,7 +2252,7 @@ export const DetalheOrcamento: React.FC = () => {
         {/* SELETOR DE MODELO DE TERMO DE GARANTIA */}
         {incluirTermoGarantia && (
           <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex flex-col gap-0.5 min-w-0">
+            <div className="flex flex-col gap-1 min-w-0">
               <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
                 <ShieldCheck size={14} className="text-amber-400" />
                 <span>Modelo de Garantia da Proposta:</span>
@@ -2256,6 +2260,20 @@ export const DetalheOrcamento: React.FC = () => {
               <span className="text-[11px] text-vapor-400">
                 Selecione a minuta do advogado (CDC padrão) ou uma garantia técnica específica para os serviços executados.
               </span>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleSelecionarTermoGarantia('padrao')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                    !termoGarantiaSelecionado
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                  }`}
+                >
+                  <ShieldCheck size={12} />
+                  <span>⚡ Aplicar Minuta Oficial de Garantia (Advogado)</span>
+                </button>
+              </div>
             </div>
 
             <select
@@ -2433,14 +2451,41 @@ export const DetalheOrcamento: React.FC = () => {
           {/* SELETOR DE MODELO DE TERMO DE RESPONSABILIDADE */}
           {incluirTermoResponsabilidade && (
             <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex flex-col gap-0.5 min-w-0">
+              <div className="flex flex-col gap-1 min-w-0">
                 <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
                   <Scale size={14} className="text-amber-400" />
                   <span>Modelo de Responsabilidade na Proposta / Impressão:</span>
                 </span>
                 <span className="text-[11px] text-vapor-400">
-                  Selecione o modelo adequado para o perfil do carro (padrão CDC por serviços, veículos antigos, etc.).
+                  Selecione o modelo adequado para o perfil do carro (padrão CDC por serviços, minuta do advogado, veículos antigos, etc.).
                 </span>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const advTermo = termosResponsabilidadeDisponiveis.find((t) =>
+                        t.titulo.toLowerCase().includes('advogado')
+                      );
+                      if (advTermo) {
+                        handleSelecionarTermoResp(advTermo.id);
+                      } else {
+                        setModoTermoResp('personalizado');
+                        setEditandoTermoResp(false);
+                        setTermoResponsabilidade(TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO);
+                        termoResponsabilidadeRef.current = TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO;
+                        showSuccess('Minuta Oficial do Advogado (CDC) aplicada neste orçamento e no PDF!');
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                      termoRespSelecionadoId.includes('advogado') || (modoTermoResp === 'personalizado' && termoResponsabilidade.includes('CDC'))
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                        : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                    }`}
+                  >
+                    <Scale size={12} />
+                    <span>⚡ Aplicar Minuta Oficial do Advogado (CDC)</span>
+                  </button>
+                </div>
               </div>
 
               <select

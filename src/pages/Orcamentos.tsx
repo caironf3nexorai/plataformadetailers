@@ -24,7 +24,9 @@ import {
   Trash2,
   Clock,
   Lock,
+  Scale,
 } from 'lucide-react';
+import { ModalBibliotecaTermos } from '../components/termos/ModalBibliotecaTermos';
 import { usePlano } from '../hooks/usePlano';
 import type { Orcamento } from '../types/orcamento';
 import type { Cliente, Veiculo, CategoriaVeiculo } from '../types/clientes';
@@ -42,6 +44,7 @@ export const Orcamentos: React.FC = () => {
 
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [modalBibliotecaOpen, setModalBibliotecaOpen] = useState<boolean>(false);
 
   // Filtros
   const [busca, setBusca] = useState<string>('');
@@ -330,26 +333,38 @@ export const Orcamentos: React.FC = () => {
       <PageHeader
         title="Orçamentos"
         action={
-          <Button
-            tone="amber"
-            onClick={() => {
-              setModoEntrada('existente');
-              setClienteId('');
-              setVeiculoId('');
-              setCategoriaId('');
-              setTitulo('');
-              setNovoNome('');
-              setNovoTelefone('');
-              setNovoModelo('');
-              setNovaCor('');
-              setNovaPlaca('');
-              setShowModal(true);
-            }}
-            className="flex items-center gap-2"
-          >
-            <Plus size={18} />
-            <span>Novo Orçamento</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              tone="graphite"
+              onClick={() => setModalBibliotecaOpen(true)}
+              className="flex items-center gap-1.5 text-xs text-amber-400 border border-amber-500/30 hover:border-amber-500 hover:bg-amber-500/10 h-9 px-3"
+              title="Acessar Minuta Oficial do Advogado e Biblioteca de Modelos Jurídicos CDC"
+            >
+              <Scale size={15} />
+              <span className="hidden sm:inline">Minuta do Advogado (CDC)</span>
+              <span className="sm:hidden">Minuta CDC</span>
+            </Button>
+            <Button
+              tone="amber"
+              onClick={() => {
+                setModoEntrada('existente');
+                setClienteId('');
+                setVeiculoId('');
+                setCategoriaId('');
+                setTitulo('');
+                setNovoNome('');
+                setNovoTelefone('');
+                setNovoModelo('');
+                setNovaCor('');
+                setNovaPlaca('');
+                setShowModal(true);
+              }}
+              className="flex items-center gap-2 h-9 px-3"
+            >
+              <Plus size={16} />
+              <span>Novo Orçamento</span>
+            </Button>
+          </div>
         }
       />
 
@@ -887,6 +902,16 @@ export const Orcamentos: React.FC = () => {
             />
           </div>
 
+          <div className="flex items-center justify-between p-2.5 bg-graphite-950/60 rounded-lg border border-graphite-800 text-[11px] text-vapor-300">
+            <div className="flex items-center gap-2">
+              <Scale size={14} className="text-amber-400" />
+              <span>Proteção CDC & Minuta do Advogado</span>
+            </div>
+            <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+              VINCULADO AUTOMATICAMENTE
+            </span>
+          </div>
+
           <div className="flex justify-end gap-3 mt-4">
             <Button
               type="button"
@@ -920,6 +945,12 @@ export const Orcamentos: React.FC = () => {
         textoCancelar="Cancelar"
         variant="danger"
         loading={excluindoOrcamento}
+      />
+
+      {/* Modal da Biblioteca de Modelos Jurídicos & Minuta do Advogado */}
+      <ModalBibliotecaTermos
+        isOpen={modalBibliotecaOpen}
+        onClose={() => setModalBibliotecaOpen(false)}
       />
     </div>
   );

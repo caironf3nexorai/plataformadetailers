@@ -23,7 +23,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { TIPOS_TERMOS_GARANTIA } from '../../types/termos';
+import { TIPOS_TERMOS_GARANTIA, MODELOS_TERMOS_PLATAFORMA_PADRAO } from '../../types/termos';
 import type { PlataformaModeloTermo } from '../../types/termos';
 
 export const AdminModelosTermos: React.FC = () => {
@@ -71,10 +71,19 @@ export const AdminModelosTermos: React.FC = () => {
     try {
       const { data, error } = await supabase.rpc('admin_listar_modelos_termos');
       if (error) throw error;
-      setModelos(data || []);
+      const doBanco = (data || []) as PlataformaModeloTermo[];
+      const titulosBanco = new Set(doBanco.map((m) => m.titulo.toLowerCase().trim()));
+
+      // Complementa com modelos essenciais da plataforma caso não estejam gravados no banco
+      const complementares = MODELOS_TERMOS_PLATAFORMA_PADRAO.filter(
+        (padrao) => !titulosBanco.has(padrao.titulo.toLowerCase().trim())
+      );
+
+      setModelos([...doBanco, ...complementares]);
     } catch (err: any) {
       console.error('Erro ao carregar modelos de termos:', err);
-      showError(err.message || 'Erro ao carregar modelos de termos.');
+      // Fallback seguro caso o banco ainda não tenha a tabela ou RPC
+      setModelos(MODELOS_TERMOS_PLATAFORMA_PADRAO);
     } finally {
       setLoading(false);
     }
@@ -195,8 +204,10 @@ export const AdminModelosTermos: React.FC = () => {
         setUploadandoArquivo(false);
       }
 
+      const isUuid = modeloEmEdicao && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modeloEmEdicao.id);
+
       const { error } = await supabase.rpc('admin_salvar_modelo_termo', {
-        p_id: modeloEmEdicao ? modeloEmEdicao.id : null,
+        p_id: isUuid ? modeloEmEdicao.id : null,
         p_titulo: titulo.trim(),
         p_categoria: categoria,
         p_tipo_servico: categoria === 'garantia' ? tipoServico : null,
@@ -213,7 +224,7 @@ export const AdminModelosTermos: React.FC = () => {
 
       if (error) throw error;
 
-      showSuccess(modeloEmEdicao ? 'Modelo atualizado com sucesso!' : 'Novo modelo de termo cadastrado!');
+      showSuccess(modeloEmEdicao ? 'Modelo salvo com sucesso!' : 'Novo modelo de termo cadastrado!');
       setModalAberto(false);
       await carregarDados();
     } catch (err: any) {
@@ -227,12 +238,32 @@ export const AdminModelosTermos: React.FC = () => {
 
   const handleToggleAtivo = async (item: PlataformaModeloTermo) => {
     const novoStatus = !(item.ativo !== false);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
     try {
-      const { error } = await supabase.rpc('admin_toggle_modelo_termo', {
-        p_id: item.id,
-        p_ativo: novoStatus
-      });
-      if (error) throw error;
+      if (isUuid) {
+        const { error } = await supabase.rpc('admin_toggle_modelo_termo', {
+          p_id: item.id,
+          p_ativo: novoStatus
+        });
+        if (error) throw error;
+      } else {
+        // Se for modelo inicial estático, salva no banco já com o novo status
+        await supabase.rpc('admin_salvar_modelo_termo', {
+          p_id: null,
+          p_titulo: item.titulo,
+          p_categoria: item.categoria,
+          p_tipo_servico: item.tipo_servico || null,
+          p_descricao: item.descricao || null,
+          p_conteudo_texto: item.conteudo_texto,
+          p_arquivo_url: item.arquivo_url || null,
+          p_arquivo_nome: item.arquivo_nome || null,
+          p_arquivo_tipo: item.arquivo_tipo || null,
+          p_arquivo_tamanho_bytes: item.arquivo_tamanho_bytes || null,
+          p_destaque: item.destaque,
+          p_ativo: novoStatus,
+          p_permitir_download: item.permitir_download !== false
+        });
+      }
 
       setModelos((prev) =>
         prev.map((m) => (m.id === item.id ? { ...m, ativo: novoStatus } : m))
@@ -664,9 +695,9 @@ export const AdminModelosTermos: React.FC = () => {
                 </div>
 
                 {/* Footer do Card */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-800/80 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-800/80 text-xs">
                   {/* Métricas de Uso */}
-                  <div className="flex items-center gap-3 text-slate-400 text-[11px] font-mono">
+                  <div className="flex items-center gap-3 text-slate-400 text-[11px] font-mono flex-wrap">
                     <span title="Downloads do arquivo original">
                       📥 <strong className="text-slate-200">{item.downloads_count || 0}</strong> downloads
                     </span>
@@ -676,14 +707,15 @@ export const AdminModelosTermos: React.FC = () => {
                   </div>
 
                   {/* Ações */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                     <button
                       type="button"
                       onClick={() => abrirModalEditar(item)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition"
+                      className="px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-amber-400 bg-slate-800/80 hover:bg-slate-800 transition flex items-center gap-1 text-xs font-semibold"
                       title="Editar Modelo"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span className="sm:hidden">Editar</span>
                     </button>
                     <button
                       type="button"

@@ -47,7 +47,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
-    const abaParam = queryParams.get('aba');
+    const abaParam = (queryParams.get('aba') || queryParams.get('tab') || '').toLowerCase();
     if (abaParam === 'treinamento') {
       navigate('/treinamentos', { replace: true });
       return;
@@ -66,6 +66,10 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setActiveTab('fiscal');
     } else if (abaParam === 'whatsapp' || abaParam === 'zap') {
       setActiveTab('whatsapp');
+    } else if (['termos', 'garantia', 'garantias', 'minuta', 'minutas'].includes(abaParam)) {
+      setActiveTab('termos');
+    } else if (['oficina', 'horarios', 'equipe', 'categorias', 'checklists', 'agendamento', 'pdf', 'meta', 'feedbacks'].includes(abaParam)) {
+      setActiveTab(abaParam as any);
     } else if (abaInicial) {
       setActiveTab(abaInicial);
     }

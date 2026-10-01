@@ -26,7 +26,12 @@ import type {
   TermoGarantia,
   TipoTermoGarantia,
 } from '../../types/termos';
-import { TIPOS_TERMOS_GARANTIA, TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
+import {
+  TIPOS_TERMOS_GARANTIA,
+  TERMO_RESPONSABILIDADE_PADRAO,
+  TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO,
+  TERMO_GARANTIA_PADRAO_ADVOGADO,
+} from '../../types/termos';
 
 export const AbaTermosGarantia: React.FC = () => {
   const { tenant } = useAuth();
@@ -146,6 +151,11 @@ export const AbaTermosGarantia: React.FC = () => {
   const handleRestaurarPadraoResponsabilidade = () => {
     setTermoResponsabilidade(TERMO_RESPONSABILIDADE_PADRAO);
     showSuccess('Texto padrão jurídico restaurado. Clique em "Salvar Termo Fixo" para confirmar.');
+  };
+
+  const handleAplicarMinutaAdvogado = () => {
+    setTermoResponsabilidade(TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO);
+    showSuccess('Minuta Oficial do Advogado (CDC) carregada no campo abaixo! Clique em "Salvar Termo Fixo" para confirmar.');
   };
 
   useEffect(() => {
@@ -338,7 +348,18 @@ export const AbaTermosGarantia: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleAplicarMinutaAdvogado}
+              className="text-xs font-bold h-9 px-3 text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40"
+              title="Carregar a Minuta Oficial do Advogado amparada no CDC"
+            >
+              <Scale size={13} className="mr-1.5" />
+              <span>⚡ Aplicar Minuta do Advogado</span>
+            </Button>
+
             <Button
               type="button"
               variant="secondary"
@@ -346,8 +367,8 @@ export const AbaTermosGarantia: React.FC = () => {
               className="text-xs h-9 px-3 text-amber-400 hover:text-amber-300 border-amber-500/30"
               title="Ver modelos sugeridos na biblioteca"
             >
-              <Scale size={13} className="mr-1.5" />
-              <span>Ver Sugestões</span>
+              <BookOpen size={13} className="mr-1.5" />
+              <span>Biblioteca de Modelos</span>
             </Button>
 
             <Button
@@ -421,7 +442,25 @@ export const AbaTermosGarantia: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setTermoEditando(null);
+              setTipo('geral');
+              setTitulo('Termo Oficial de Garantia Técnica (Minuta Oficial do Advogado)');
+              setConteudo(TERMO_GARANTIA_PADRAO_ADVOGADO);
+              setPadrao(true);
+              setModalOpen(true);
+            }}
+            className="text-xs font-bold h-10 px-3 flex items-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25"
+            title="Criar termo oficial de garantia validado pelo advogado"
+          >
+            <Scale size={14} />
+            <span>⚡ Minuta de Garantia do Advogado</span>
+          </Button>
+
           <Button
             type="button"
             variant="secondary"
