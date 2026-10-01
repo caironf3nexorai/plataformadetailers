@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Card } from '../components/ui/Card';
@@ -31,7 +31,11 @@ import { formatarDuracao } from '../utils/agenda';
 import { getFotoPublicUrl } from '../utils/imagens';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../utils/pdfOrcamento';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
-import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
+import { 
+  TERMO_RESPONSABILIDADE_PADRAO, 
+  gerarTermoDinamicoServicos, 
+  type ServicoParaTermo 
+} from '../types/termos';
 
 export const OrcamentoPublico: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -40,6 +44,7 @@ export const OrcamentoPublico: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [responding, setResponding] = useState<boolean>(false);
   const [escolhaSucesso, setEscolhaSucesso] = useState<string | null>(null);
+  const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
 
   // Estados do Agendamento Online
   const [dataSelecionada, setDataSelecionada] = useState<string>('');
@@ -88,13 +93,34 @@ export const OrcamentoPublico: React.FC = () => {
 
     try {
       console.log('token:', JSON.stringify(tokenLimpo), 'tipo:', typeof tokenLimpo);
+      setErroCarregamento(null);
+      let resDataFinal: any = null;
+
       const { data: resData, error } = await supabase.rpc('orcamento_publico', {
         p_token: tokenLimpo,
       });
 
-      if (error) throw error;
-      if (resData) {
-        const parsed = resData as OrcamentoPublicoData;
+      if (!error && resData) {
+        resDataFinal = resData;
+      } else {
+        if (error) {
+          console.warn('[OrcamentoPublico] RPC orcamento_publico retornou erro, tentando fallback obter_orcamento_publico_por_token:', error);
+        }
+        const { data: fallbackData, error: fallbackError } = await supabase.rpc('obter_orcamento_publico_por_token', {
+          p_token: tokenLimpo,
+        });
+
+        if (!fallbackError && fallbackData) {
+          resDataFinal = fallbackData;
+        } else if (error) {
+          throw error;
+        } else if (fallbackError) {
+          throw fallbackError;
+        }
+      }
+
+      if (resDataFinal) {
+        const parsed = resDataFinal as OrcamentoPublicoData;
         setData(parsed);
         if (parsed.status === 'aprovado' && parsed.nivel_aprovado) {
           setEscolhaSucesso(parsed.nivel_aprovado);
@@ -105,6 +131,7 @@ export const OrcamentoPublico: React.FC = () => {
       }
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao carregar orçamento:', err?.message || err, err?.details, err?.hint || '');
+      setErroCarregamento(err?.message || 'Erro ao carregar o orçamento. Verifique se as migrações estão aplicadas.');
     } finally {
       setLoading(false);
     }
@@ -194,6 +221,46 @@ export const OrcamentoPublico: React.FC = () => {
     }
   };
 
+  // Texto de responsabilidade com cláusulas técnicas dinâmicas dos serviços da proposta
+  const textoResponsabilidadeExibir = useMemo(() => {
+    const raw = data?.termo_responsabilidade?.trim();
+    if (raw && raw !== TERMO_RESPONSABILIDADE_PADRAO.trim() && raw.includes('CONDIÇÕES TÉCNICAS E RISCOS ESPECÍFICOS')) {
+      return raw;
+    }
+
+    if (data?.niveis && data.niveis.length > 0) {
+      const servicos: ServicoParaTermo[] = [];
+      const nomesVistos = new Set<string>();
+      data.niveis.forEach((n) => {
+        (n.itens || []).forEach((it: any) => {
+          const nome = it.servico_nome || it.servico?.nome;
+          if (nome && !nomesVistos.has(nome.toLowerCase())) {
+            nomesVistos.add(nome.toLowerCase());
+            servicos.push({ nome, grupo: it.servico?.grupo, riscos_especificos_padrao: null });
+          }
+        });
+      });
+
+      if (servicos.length > 0) {
+        const veicStr = `${data.veiculo?.modelo || 'Veículo'}${data.veiculo?.marca ? ` (${data.veiculo.marca})` : ''} - Placa: ${data.veiculo?.placa || 'N/I'}`;
+        const dinamico = gerarTermoDinamicoServicos(servicos, {
+          nomeEmpresa: data.oficina?.razao_social || data.oficina?.nome || 'Oficina Especializada',
+          prazoGarantia: `${data.garantia_meses || 3} meses`,
+          servicoContratado: servicos.map((s) => s.nome).join(', '),
+          clienteNome: (data as any)?.cliente_nome || data.cliente_primeiro_nome || '',
+          clienteCpf: data.cliente_documento || '',
+          veiculoPlaca: veicStr,
+          data: data.enviado_em ? formatarData(data.enviado_em) : new Date().toLocaleDateString('pt-BR'),
+        });
+        if (dinamico && dinamico.includes('CONDIÇÕES TÉCNICAS E RISCOS ESPECÍFICOS')) {
+          return dinamico;
+        }
+      }
+    }
+
+    return raw || TERMO_RESPONSABILIDADE_PADRAO;
+  }, [data]);
+
   // Gerar PDF do Orçamento
   const handleGerarPDF = async () => {
     if (!data) return;
@@ -234,11 +301,13 @@ export const OrcamentoPublico: React.FC = () => {
         validade_dias: data.validade_dias,
         data_validade_limite: data.data_validade_limite,
         observacoes: data.observacoes,
-        clienteNome: data.cliente_primeiro_nome || 'Cliente',
+        clienteNome: (data as any)?.cliente_nome || data.cliente_primeiro_nome || 'Cliente',
         clienteTelefone: data.cliente_telefone,
         veiculoModelo: data.veiculo?.modelo,
+        veiculoMarca: data.veiculo?.marca,
         veiculoPlaca: data.veiculo?.placa,
         veiculoCor: data.veiculo?.cor || null,
+        veiculoAno: (data.veiculo as any)?.ano,
         oficinaNome: data.oficina?.nome || 'Oficina',
         oficinaRazaoSocial: data.oficina?.razao_social,
         oficinaDocumento: data.oficina?.documento,
@@ -261,10 +330,16 @@ export const OrcamentoPublico: React.FC = () => {
         pdfTextoObservacoesOrcamento: data.oficina?.pdf_texto_observacoes_orcamento || undefined,
         pdfTextoRodape: (data.oficina as any)?.pdf_texto_rodape || undefined,
         pdfOcultarMarcaDagua: (data.oficina as any)?.pdf_ocultar_marca_dagua ?? undefined,
-        incluirTermos: (data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true) || (data.incluir_termo_garantia ?? data.incluir_termos ?? true),
+        incluirTermos: (data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true) || (data.incluir_termo_garantia ?? data.incluir_termos ?? true) || Boolean(data.incluir_termo_risco),
         incluirTermoResponsabilidade: data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true,
         incluirTermoGarantia: data.incluir_termo_garantia ?? data.incluir_termos ?? true,
-        termoResponsabilidade: data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
+        garantiaMeses: data.garantia_meses,
+        incluirTermoRisco: data.incluir_termo_risco,
+        termoRiscoServico: data.termo_risco_servico,
+        termoRiscoObservacoes: data.termo_risco_observacoes,
+        termoRiscoTexto: data.termo_risco_texto,
+        clienteCpfCnpj: data.cliente_documento,
+        termoResponsabilidade: textoResponsabilidadeExibir,
         termosGarantia: data.termo_garantia?.conteudo || undefined,
       });
     } catch (err: any) {
@@ -372,6 +447,20 @@ export const OrcamentoPublico: React.FC = () => {
           <p className="font-sans text-[14px] text-vapor-400">
             O link pode ter expirado ou estar incorreto. Verifique o endereço recebido com a oficina.
           </p>
+          {erroCarregamento && (
+            <div className="w-full text-left bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-xs text-rose-300">
+              <span className="font-bold block mb-1">Aviso técnico da consulta:</span>
+              <span className="font-mono text-[11px] break-all">{erroCarregamento}</span>
+            </div>
+          )}
+          <Button
+            tone="graphite"
+            size="sm"
+            onClick={fetchOrcamentoPublico}
+            className="mt-1"
+          >
+            Tentar novamente
+          </Button>
         </Card>
       </div>
     );
@@ -850,9 +939,13 @@ export const OrcamentoPublico: React.FC = () => {
         {/* CARD DE OBSERVAÇÕES E TERMOS DO ORÇAMENTO */}
         {(() => {
           const hasResp = data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true;
-          const hasGar = (data.incluir_termo_garantia ?? data.incluir_termos ?? true) && !!data.termo_garantia;
+          const hasGar = data.incluir_termo_garantia ?? data.incluir_termos ?? true;
+          const hasRiscoSeparado = Boolean(data.incluir_termo_risco) && !hasResp;
 
-          if (!data.observacoes && !hasResp && !hasGar) return null;
+          if (!data.observacoes && !hasResp && !hasGar && !hasRiscoSeparado) return null;
+
+          const mesesGar = data.garantia_meses || 3;
+          const prazoGarantiaFormatado = `${mesesGar} ${mesesGar === 1 ? 'mês' : 'meses'}`;
 
           return (
             <Card className="p-5 bg-graphite-900 border border-graphite-800 rounded-2xl flex flex-col gap-4 mt-4 shadow-xl">
@@ -876,34 +969,104 @@ export const OrcamentoPublico: React.FC = () => {
                 </div>
               )}
 
-              {/* Termo Fixo de Responsabilidade & Falhas Ocultas */}
+              {/* Termo de Responsabilidade & Riscos Técnicos (CDC) */}
               {hasResp && (
                 <div className="flex flex-col gap-1.5">
                   <span className="font-bold text-xs text-vapor-300 flex items-center gap-1.5">
-                    <FileText size={13} className="text-amber-400" />
-                    <span>Termo Fixo de Responsabilidade & Falhas Ocultas:</span>
+                    <FileText size={13} className="text-cyan-400" />
+                    <span>Termo de Responsabilidade & Riscos Técnicos (CDC):</span>
                   </span>
                   <p className="font-sans text-xs text-vapor-400 leading-relaxed whitespace-pre-line bg-graphite-950/80 p-3 rounded-xl border border-graphite-800">
-                    {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                    {textoResponsabilidadeExibir}
                   </p>
+                  {data.termo_risco_observacoes && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex flex-col gap-0.5 text-xs">
+                      <span className="text-[11px] font-bold text-amber-400">Condições & Riscos Observados:</span>
+                      <p className="text-vapor-300 whitespace-pre-line text-[11px]">{data.termo_risco_observacoes}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Termo Variável de Garantia (se houver vinculado) */}
-              {hasGar && data.termo_garantia && (
+              {/* Termo de Garantia (Específico ou Padrão Jurídico) */}
+              {hasGar && (
                 <div className="flex flex-col gap-1.5 pt-2 border-t border-graphite-800">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
                       <ShieldCheck size={14} />
-                      <span>Garantia do Serviço: {data.termo_garantia.titulo}</span>
+                      <span>Termo de Garantia ({data.termo_garantia?.titulo || `Prazo: ${prazoGarantiaFormatado}`})</span>
                     </span>
-                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-graphite-800 text-vapor-300">
-                      {data.termo_garantia.tipo}
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                      {prazoGarantiaFormatado}
                     </span>
                   </div>
-                  <p className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/20">
-                    {data.termo_garantia.conteudo}
-                  </p>
+                  <div className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line bg-amber-500/5 p-3 rounded-xl border border-amber-500/20 flex flex-col gap-2">
+                    {data.termo_garantia ? (
+                      <p>{data.termo_garantia.conteudo}</p>
+                    ) : (
+                      <>
+                        <p>
+                          A <strong>{data.oficina?.nome || 'empresa'}</strong> garante os serviços executados pelo prazo de <strong>{prazoGarantiaFormatado}</strong> informado na OS, exclusivamente contra falhas decorrentes da execução do serviço.
+                        </p>
+                        <p className="text-[11px] text-vapor-400">
+                          <strong>EXCLUSÕES DE GARANTIA:</strong> acidentes, impactos, desgaste natural, falta de manutenção, uso inadequado, produtos químicos ou corrosivos, seivas, dejetos de aves, agentes ambientais, lavagem incorreta, intervenção de terceiros, defeitos preexistentes ou problemas sem relação com o serviço realizado.
+                        </p>
+                        <p className="text-[11px] text-vapor-400 italic">
+                          O cliente declara estar ciente das condições e orientações de conservação.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Termo de Ciência e Autorização com Risco Específico (Caso responsabilidade não esteja ativa) */}
+              {hasRiscoSeparado && (
+                <div className="flex flex-col gap-2 pt-3 border-t border-amber-500/20 bg-amber-500/[0.03] -mx-5 -mb-5 p-5 rounded-b-2xl border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                      <AlertTriangle size={15} className="text-amber-400" />
+                      <span>Termo de Ciência e Autorização de Serviço com Risco Específico</span>
+                    </span>
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                      Anexo Contratual CDC
+                    </span>
+                  </div>
+
+                  <div className="bg-graphite-950 p-2.5 rounded-lg border border-graphite-800 text-xs">
+                    <span className="text-vapor-400 font-semibold">Serviço: </span>
+                    <span className="text-amber-400 font-bold">{data.termo_risco_servico || 'Procedimentos Especializados com Risco Técnico'}</span>
+                  </div>
+
+                  <div className="text-[11px] text-vapor-300 leading-relaxed flex flex-col gap-1.5">
+                    <p>
+                      Declaro estar ciente de que o serviço acima possui riscos inerentes à sua execução, especialmente em razão do estado de conservação, manutenção e condições preexistentes do veículo.
+                    </p>
+                    <p>
+                      Autorizo expressamente a <strong>{data.oficina?.nome || 'empresa'}</strong> a realizar o serviço, reconhecendo que a empresa não poderá ser responsabilizada por falhas ou danos decorrentes exclusivamente de defeitos preexistentes ou ocultos, falta de manutenção, desgaste natural, reparos anteriores, adaptações, peças, vedações, chicotes, conectores, módulos ou componentes já danificados, vencidos ou deteriorados e não identificáveis em inspeção visual comum.
+                    </p>
+                    <p>
+                      A empresa compromete-se a executar o serviço com técnica, cautela e procedimentos adequados, permanecendo responsável pelos danos que forem comprovadamente decorrentes de defeito na própria prestação do serviço.
+                    </p>
+                    <p className="text-[10px] text-vapor-400">
+                      Declaro ter recebido previamente informações sobre os riscos e autorizo a execução nos termos dos arts. 6º, III; 8º; 14, §3º; 40; 46 e 54, §4º, do Código de Defesa do Consumidor – Lei nº 8.078/90.
+                    </p>
+                  </div>
+
+                  {data.termo_risco_observacoes && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex flex-col gap-1">
+                      <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wide">
+                        Riscos específicos informados:
+                      </span>
+                      <p className="text-xs text-vapor-200 whitespace-pre-wrap font-sans">
+                        {data.termo_risco_observacoes}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="text-[11px] font-bold text-vapor-200 bg-graphite-950 p-2.5 rounded-lg border border-graphite-800 text-center">
+                    ✓ Li, compreendi os riscos informados e autorizo a execução do serviço ao aprovar esta proposta.
+                  </div>
                 </div>
               )}
             </Card>
@@ -1053,7 +1216,7 @@ export const OrcamentoPublico: React.FC = () => {
               <span>Ciência dos Termos e Condições:</span>
             </div>
             <p className="whitespace-pre-line text-vapor-400 text-[11.5px]">
-              {data.termo_responsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+              {textoResponsabilidadeExibir}
             </p>
 
             {data.termo_garantia && (

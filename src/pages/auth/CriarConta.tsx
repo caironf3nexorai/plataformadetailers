@@ -22,10 +22,32 @@ export const CriarConta: React.FC = () => {
   const [emailLocked, setEmailLocked] = useState(false);
   const [conviteOficina, setConviteOficina] = useState<string | null>(null);
   const [campanhaInfo, setCampanhaInfo] = useState<{ codigo: string; nome: string; plano_nome: string; dias_trial: number } | null>(null);
+  const [trialCadastroAtivo, setTrialCadastroAtivo] = useState<boolean>(true);
+  const [trialDiasPadrao, setTrialDiasPadrao] = useState<number>(15);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
+
+  // Buscar configuração central da plataforma sobre Trial de Cadastro
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const { data } = await supabase.rpc('obter_config_plataforma');
+        if (data) {
+          if (typeof data.trial_cadastro_ativo === 'boolean') {
+            setTrialCadastroAtivo(data.trial_cadastro_ativo);
+          }
+          if (typeof data.trial_dias_padrao === 'number') {
+            setTrialDiasPadrao(data.trial_dias_padrao);
+          }
+        }
+      } catch (err) {
+        console.warn('[CriarConta] Erro ao carregar config da plataforma:', err);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // Captura de Campanha de Lançamento
   useEffect(() => {
@@ -281,7 +303,13 @@ export const CriarConta: React.FC = () => {
                   </span>
                 </label>
                 <p className="text-[11px] text-vapor-500 font-mono pl-6">
-                  Trial de 14 dias sem cartão • Isolamento de dados LGPD • Cancele quando quiser
+                  {campanhaInfo ? (
+                    `Convite Especial ${campanhaInfo.nome}: ${campanhaInfo.dias_trial} dias grátis no Plano ${campanhaInfo.plano_nome}`
+                  ) : trialCadastroAtivo ? (
+                    `Trial de ${trialDiasPadrao} dias sem cartão • Isolamento de dados LGPD • Cancele quando quiser`
+                  ) : (
+                    'Crie sua conta em segundos • Isolamento de dados LGPD • Cancele quando quiser'
+                  )}
                 </p>
               </div>
 

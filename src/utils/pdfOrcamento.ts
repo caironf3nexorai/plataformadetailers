@@ -5,7 +5,13 @@ import { fetchImageAsBase64, obterAssinaturaBase64, getEvidenciaSignedUrl } from
 import { cabecalhoDocumento, rodapeDocumento, hexToRgb } from './pdf';
 import { formatarDuracao } from './agenda';
 import type { TipoNivelOrcamento } from '../types/orcamento';
-import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
+import { 
+  TERMO_RESPONSABILIDADE_PADRAO, 
+  TERMO_GARANTIA_PADRAO_ADVOGADO, 
+  preencherVariaveisTermo,
+  gerarTermoDinamicoServicos,
+  type ServicoParaTermo,
+} from '../types/termos';
 
 export interface PDFOrcamentoItemData {
   servico_nome: string;
@@ -40,9 +46,15 @@ export interface PDFOrcamentoData {
   // Cliente & Veículo
   clienteNome: string;
   clienteTelefone?: string | null;
+  clienteCpfCnpj?: string | null;
+  clienteEmail?: string | null;
+  clienteEndereco?: string | null;
   veiculoModelo?: string | null;
+  veiculoMarca?: string | null;
   veiculoPlaca?: string | null;
   veiculoCor?: string | null;
+  veiculoAno?: number | string | null;
+  veiculoKm?: number | string | null;
   categoriaNome?: string | null;
 
   // Oficina
@@ -76,8 +88,15 @@ export interface PDFOrcamentoData {
   incluirTermos?: boolean;
   incluirTermoResponsabilidade?: boolean;
   incluirTermoGarantia?: boolean;
+  garantiaMeses?: number | null;
   termosGarantia?: string | null;
   termoResponsabilidade?: string | null;
+
+  // Termo de Ciência e Autorização com Risco Específico (Folha Separada)
+  incluirTermoRisco?: boolean;
+  termoRiscoServico?: string | null;
+  termoRiscoObservacoes?: string | null;
+  termoRiscoTexto?: string | null;
 
   // Assinatura do Usuário/Oficina
   assinaturaUsuarioUrl?: string | null;
@@ -339,7 +358,7 @@ export async function gerarPDFOrcamento(
     doc.setFont('helvetica', 'bold');
     const duracaoNivel = nivel.duracao_total || (itens || []).reduce((acc, it) => acc + (it.duracao_minutos || 0), 0);
     const duracaoTextoNivel = duracaoNivel > 0 ? ` • ${formatarDuracao(duracaoNivel)}` : '';
-    const aprovadoBadge = isAprovado ? (isModoSimples ? '✓ [PROPOSTA APROVADA] ' : '✓ [OPÇÃO APROVADA] ') : '';
+    const aprovadoBadge = isAprovado ? (isModoSimples ? '[PROPOSTA APROVADA] ' : '[OPÇÃO APROVADA] ') : '';
     const tituloNivelTexto = isModoSimples && (!nivel.titulo || nivel.titulo.toLowerCase() === 'essencial')
       ? 'PROPOSTA DE SERVIÇOS'
       : nivel.titulo.toUpperCase();
@@ -443,8 +462,15 @@ export async function gerarPDFOrcamento(
   if (data.incluirFotos !== false && data.fotos && data.fotos.length > 0) {
     onProgress?.('Renderizando fotos de avaliação (antes e depois)...');
 
-    const fotosAntes = data.fotos.filter((f) => f.tipo === 'antes' || !f.tipo);
-    const fotosDepois = data.fotos.filter((f) => f.tipo === 'depois');
+    const fotosAntes = data.fotos.filter((f) => 
+      f.tipo === 'antes' || 
+      (f.descricao && f.descricao.includes('[ANTES]')) ||
+      (!f.tipo && (!f.descricao || !f.descricao.includes('[DEPOIS]')))
+    );
+    const fotosDepois = data.fotos.filter((f) => 
+      f.tipo === 'depois' || 
+      (f.descricao && f.descricao.includes('[DEPOIS]'))
+    );
 
     const renderGrupoFotos = async (titulo: string, fotosLista: typeof data.fotos) => {
       if (!fotosLista || fotosLista.length === 0) return;
@@ -500,11 +526,30 @@ export async function gerarPDFOrcamento(
             doc.roundedRect(photoX, photoY, boxWidth, boxHeight, 1.5, 1.5, 'FD');
             await drawProportionalImage(doc, base64, 'JPEG', photoX, photoY, boxWidth, boxHeight);
 
+            // Carimbo identificador do momento da foto (ANTES vs DEPOIS)
+            const ehDepois = f.tipo === 'depois' || (f.descricao && f.descricao.includes('[DEPOIS]'));
+            const carimboTexto = ehDepois ? 'DEPOIS' : 'ANTES';
+            const badgeW = 16;
+            const badgeH = 4.2;
+            const badgeX = photoX + 2;
+            const badgeY = photoY + 2;
+
+            doc.setFillColor(ehDepois ? 6 : 15, ehDepois ? 78 : 23, ehDepois ? 59 : 42);
+            doc.setDrawColor(ehDepois ? 52 : 34, ehDepois ? 211 : 211, ehDepois ? 153 : 238);
+            doc.setLineWidth(0.25);
+            doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 0.8, 0.8, 'FD');
+
+            doc.setTextColor(ehDepois ? 52 : 34, ehDepois ? 211 : 211, ehDepois ? 153 : 238);
+            doc.setFontSize(6.2);
+            doc.setFont('helvetica', 'bold');
+            doc.text(carimboTexto, badgeX + badgeW / 2, badgeY + 3.0, { align: 'center' });
+
             if (f.created_at) {
               doc.setFontSize(7);
               doc.setFont('helvetica', 'normal');
               doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-              const descExtra = f.descricao && !f.descricao.startsWith('[') ? ` · ${f.descricao}` : '';
+              const descLimpa = f.descricao ? f.descricao.replace(/\[ANTES\]/g, '').replace(/\[DEPOIS\]/g, '').trim() : '';
+              const descExtra = descLimpa ? ` - ${descLimpa}` : '';
               const horaTexto = `${formatarData(f.created_at)} ${formatarHora(f.created_at)}${descExtra}`;
               doc.text(horaTexto, photoX + boxWidth / 2, photoY + boxHeight + 3.8, { align: 'center' });
             }
@@ -525,27 +570,78 @@ export async function gerarPDFOrcamento(
     };
 
     if (fotosAntes.length > 0 && fotosDepois.length > 0) {
-      await renderGrupoFotos(`FOTOS ANTES · AVALIAÇÃO INICIAL DO VEÍCULO (${fotosAntes.length})`, fotosAntes);
-      await renderGrupoFotos(`FOTOS DEPOIS · RESULTADO DOS SERVIÇOS EXECUTADOS (${fotosDepois.length})`, fotosDepois);
+      await renderGrupoFotos(`FOTOS DE ENTRADA (ESTADO ANTERIOR - VISTORIA) - ${fotosAntes.length} ${fotosAntes.length === 1 ? 'REGISTRO' : 'REGISTROS'}`, fotosAntes);
+      await renderGrupoFotos(`FOTOS DE SAÍDA / CONCLUSÃO (DEPOIS DOS SERVIÇOS) - ${fotosDepois.length} ${fotosDepois.length === 1 ? 'REGISTRO' : 'REGISTROS'}`, fotosDepois);
     } else if (fotosDepois.length > 0) {
-      await renderGrupoFotos(`FOTOS DEPOIS · RESULTADO DOS SERVIÇOS (${fotosDepois.length})`, fotosDepois);
+      await renderGrupoFotos(`FOTOS DE SAÍDA / CONCLUSÃO (DEPOIS DOS SERVIÇOS) - ${fotosDepois.length} ${fotosDepois.length === 1 ? 'REGISTRO' : 'REGISTROS'}`, fotosDepois);
     } else {
-      await renderGrupoFotos(`FOTOS E EVIDÊNCIAS DE AVALIAÇÃO DO VEÍCULO (${fotosAntes.length})`, fotosAntes);
+      await renderGrupoFotos(`FOTOS DE ENTRADA (ESTADO ANTERIOR - VISTORIA) - ${fotosAntes.length} ${fotosAntes.length === 1 ? 'REGISTRO' : 'REGISTROS'}`, fotosAntes);
     }
   }
 
   // 6. Termos Contratuais (Responsabilidade e Garantia)
-  const deveIncluirResp = data.incluirTermoResponsabilidade !== undefined
-    ? data.incluirTermoResponsabilidade
-    : (data.incluirTermos !== false);
+  // SE a emissão em folha separada (Anexo CDC - data.incluirTermoRisco) estiver ATIVA,
+  // o Termo de Responsabilidade & Riscos Técnicos é emitido exclusivamente no Anexo Dedicado (Seção 8),
+  // evitando duplicidade do mesmo texto na proposta e no anexo, e mantendo a proposta comercial em 1 página.
+  const deveIncluirResp = (
+    data.incluirTermoResponsabilidade !== undefined
+      ? data.incluirTermoResponsabilidade
+      : (data.incluirTermos !== false)
+  ) && !data.incluirTermoRisco;
 
   const deveIncluirGar = data.incluirTermoGarantia !== undefined
     ? data.incluirTermoGarantia
     : (data.incluirTermos !== false);
 
-  // 6.1 Termo Fixo de Responsabilidade & Falhas Ocultas (Geral da Oficina)
+  // 6.1 Termo Fixo de Responsabilidade & Falhas Ocultas (Geral da Oficina ou Dinâmico por Serviços)
   if (deveIncluirResp) {
-    const textoResp = (data.termoResponsabilidade && data.termoResponsabilidade.trim()) || TERMO_RESPONSABILIDADE_PADRAO;
+    let textoResp = (data.termoResponsabilidade && data.termoResponsabilidade.trim()) || TERMO_RESPONSABILIDADE_PADRAO;
+
+    // Se o termo for o padrão estático ou não possuir as cláusulas técnicas dos serviços da proposta, enriquece dinamicamente
+    if (
+      !textoResp ||
+      textoResp.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim() ||
+      !textoResp.includes('CONDIÇÕES TÉCNICAS E RISCOS ESPECÍFICOS')
+    ) {
+      const servicosExtraidos: ServicoParaTermo[] = [];
+      const nomesVistos = new Set<string>();
+
+      // Se houver nível aprovado, prioriza os itens dele, senão usa todos os itens dos níveis da proposta
+      const niveisFiltrados = data.nivel_aprovado
+        ? data.niveis.filter((n) => n.nivel === data.nivel_aprovado)
+        : data.niveis;
+
+      (niveisFiltrados.length > 0 ? niveisFiltrados : data.niveis).forEach((n) => {
+        (n.itens || []).forEach((it) => {
+          const nome = it.servico_nome?.trim();
+          if (nome && !nomesVistos.has(nome.toLowerCase())) {
+            nomesVistos.add(nome.toLowerCase());
+            servicosExtraidos.push({
+              nome,
+              grupo: undefined,
+              riscos_especificos_padrao: null,
+            });
+          }
+        });
+      });
+
+      if (servicosExtraidos.length > 0) {
+        const veicStr = `${data.veiculoModelo || 'Veículo'}${data.veiculoMarca ? ` (${data.veiculoMarca})` : ''} - Placa: ${data.veiculoPlaca || 'N/I'}`;
+        const textoDinamico = gerarTermoDinamicoServicos(servicosExtraidos, {
+          nomeEmpresa: data.oficinaRazaoSocial || data.oficinaNome || 'Oficina Especializada',
+          prazoGarantia: `${data.garantiaMeses || 3} meses`,
+          servicoContratado: servicosExtraidos.map((s) => s.nome).join(', '),
+          clienteNome: data.clienteNome || '',
+          clienteCpf: data.clienteCpfCnpj || '',
+          veiculoPlaca: veicStr,
+          data: formatarData(data.enviado_em || new Date().toISOString()),
+        });
+        if (textoDinamico && textoDinamico.includes('CONDIÇÕES TÉCNICAS E RISCOS ESPECÍFICOS')) {
+          textoResp = textoDinamico;
+        }
+      }
+    }
+
     if (textoResp) {
       const splitResp = doc.splitTextToSize(textoResp.trim(), usableWidth - 10);
       const respBoxH = Math.max(14, 7 + splitResp.length * 3.6);
@@ -576,47 +672,90 @@ export async function gerarPDFOrcamento(
     }
   }
 
-  // 6.2 Termo Variável de Garantia Específica do Serviço
-  if (deveIncluirGar && data.termosGarantia && data.termosGarantia.trim()) {
-    const splitTermos = doc.splitTextToSize(data.termosGarantia.trim(), usableWidth - 10);
-      const termosBoxH = Math.max(14, 7 + splitTermos.length * 3.6);
+  // 6.2 Termo de Garantia do Serviço (Padrão com Prazo Selecionado e Exclusões)
+  if (deveIncluirGar) {
+    const prazoStr = data.garantiaMeses ? `${data.garantiaMeses} ${data.garantiaMeses === 1 ? 'mês' : 'meses'}` : '3 meses';
+    let textoBaseGarantia = (data.termosGarantia && data.termosGarantia.trim()) || TERMO_GARANTIA_PADRAO_ADVOGADO;
 
-      if (y + termosBoxH > 275) {
-        doc.addPage();
-        y = 15;
+    // Se for o texto padrão geral do CDC e houver serviços especializados de proteção, anexa as exclusões e cuidados técnicos
+    if (
+      (!data.termosGarantia || data.termosGarantia.trim() === TERMO_GARANTIA_PADRAO_ADVOGADO.trim()) &&
+      data.niveis && data.niveis.length > 0
+    ) {
+      const todosNomes = data.niveis
+        .flatMap((n) => (n.itens || []).map((i) => (i.servico_nome || '').toLowerCase()))
+        .join(' ');
+
+      const condicoesExtras: string[] = [];
+      if (todosNomes.includes('vitrific') || todosNomes.includes('coating') || todosNomes.includes('ceramico')) {
+        condicoesExtras.push('CUIDADOS DE GARANTIA PARA VITRIFICAÇÃO / COATING: Respeitar 7 dias de cura inicial sem lavagem química; utilizar exclusivamente shampoo de pH neutro e realizar revisões semestrais na oficina.');
+      }
+      if (todosNomes.includes('insulfilm') || todosNomes.includes('pelicula') || todosNomes.includes('película')) {
+        condicoesExtras.push('CUIDADOS DE GARANTIA PARA PELÍCULAS: É estritamente proibido acionar ou abaixar os vidros nas primeiras 72 horas para cura da fixação da cola.');
+      }
+      if (todosNomes.includes('ppf')) {
+        condicoesExtras.push('CUIDADOS DE GARANTIA PARA PPF: Não utilizar lavadoras de alta pressão com jato pontual a menos de 50cm das quinas e bordas da película.');
       }
 
-      doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
-      doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
-      doc.setLineWidth(0.25);
-      doc.roundedRect(pageMargin, y, usableWidth, termosBoxH, 1.5, 1.5, 'FD');
-
-      doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text('TERMO DE GARANTIA DO SERVIÇO E COBERTURAS:', pageMargin + 5, y + 5);
-
-      doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-      doc.setFontSize(6.8);
-      doc.setFont('helvetica', 'normal');
-      splitTermos.forEach((line: string, idx: number) => {
-        doc.text(line, pageMargin + 5, y + 8.8 + idx * 3.4);
-      });
-
-      y += termosBoxH + 4;
+      if (condicoesExtras.length > 0) {
+        textoBaseGarantia = `${textoBaseGarantia}\n\n${condicoesExtras.join('\n')}`;
+      }
     }
+
+    const textoFinalGarantia = preencherVariaveisTermo(textoBaseGarantia, {
+      nomeEmpresa: data.oficinaRazaoSocial || data.oficinaNome,
+      prazoGarantia: prazoStr,
+    });
+
+    const splitTermos = doc.splitTextToSize(textoFinalGarantia.trim(), usableWidth - 10);
+    const termosBoxH = Math.max(14, 7 + splitTermos.length * 3.6);
+
+    if (y + termosBoxH > 275) {
+      doc.addPage();
+      y = 15;
+    }
+
+    doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+    doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, y, usableWidth, termosBoxH, 1.5, 1.5, 'FD');
+
+    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`TERMO DE GARANTIA DO SERVIÇO (${prazoStr.toUpperCase()}):`, pageMargin + 5, y + 5);
+
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.setFontSize(6.8);
+    doc.setFont('helvetica', 'normal');
+    splitTermos.forEach((line: string, idx: number) => {
+      doc.text(line, pageMargin + 5, y + 8.8 + idx * 3.4);
+    });
+
+    y += termosBoxH + 4;
+  }
 
   // 7. Bloco de Assinaturas (Digital ou Linhas Físicas para Impressão Manual)
   const temAssinaturaDigital = Boolean(data.assinaturaUrl || data.assinaturaUsuarioUrl);
 
   if (temAssinaturaDigital) {
     onProgress?.('Iniciando renderização das assinaturas digitais...');
-    if (y + 44 > 275) {
+
+    doc.setFontSize(7.2);
+    doc.setFont('helvetica', 'italic');
+    const termoAceite = data.incluirTermoRisco
+      ? '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta. Condições técnicas e riscos específicos aceitos conforme Anexo Contratual emitido."'
+      : '"Declaro que li e concordo com as condições, prazos e valores apresentados nesta proposta de orçamento."';
+    const splitTermoAceite = doc.splitTextToSize(termoAceite, usableWidth - 10);
+    const termoAceiteH = splitTermoAceite.length * 3.3;
+    const sigBoxH = 15;
+    const boxH = Math.max(38, 12 + termoAceiteH + sigBoxH + 8);
+
+    if (y + boxH + 4 > 275) {
       doc.addPage();
       y = 15;
     }
 
-    const boxH = 40;
     doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
     doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
     doc.setLineWidth(0.25);
@@ -630,14 +769,14 @@ export async function gerarPDFOrcamento(
     doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.setFontSize(7.2);
     doc.setFont('helvetica', 'italic');
-    const termoAceite = '"Declaro que li e concordo com as condições, prazos e valores apresentados nesta proposta de orçamento."';
-    doc.text(termoAceite, pageMargin + 5, y + 9.5);
+    splitTermoAceite.forEach((line: string, idx: number) => {
+      doc.text(line, pageMargin + 5, y + 9.5 + idx * 3.3);
+    });
 
     const colW = (usableWidth - 14) / 2;
     const col1X = pageMargin + 5;
     const col2X = pageMargin + 5 + colW + 4;
-    const sigStartY = y + 12.5;
-    const sigBoxH = 15;
+    const sigStartY = y + 10.5 + termoAceiteH;
 
     // COLUNA 1: ASSINATURA DO CLIENTE
     if (data.assinaturaUrl) {
@@ -655,7 +794,8 @@ export async function gerarPDFOrcamento(
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-      doc.text(`Cliente: ${data.assinaturaNome || data.clienteNome}`, col1X, sigStartY + sigBoxH + 3.5);
+      const nomeCliExibir = doc.splitTextToSize(`Cliente: ${data.assinaturaNome || data.clienteNome}`, colW);
+      doc.text(nomeCliExibir[0] || '', col1X, sigStartY + sigBoxH + 3.5);
 
       if (data.assinaturaData) {
         doc.setFont('helvetica', 'normal');
@@ -675,10 +815,10 @@ export async function gerarPDFOrcamento(
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.8);
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-      doc.text('Assinatura do Cliente (Pendente)', col1X + colW / 2, sigStartY + 17.5, { align: 'center' });
+      doc.text('Assinatura do Cliente', col1X + colW / 2, sigStartY + 17.5, { align: 'center' });
     }
 
-    // COLUNA 2: ASSINATURA DA OFICINA / RESPONSÁVEL
+    // COLUNA 2: OFICINA (DIGITAL OU SELO DE EMISSÃO)
     if (data.assinaturaUsuarioUrl) {
       try {
         const assOficinaBase64 = await obterAssinaturaBase64(data.assinaturaUsuarioUrl);
@@ -733,7 +873,9 @@ export async function gerarPDFOrcamento(
     doc.setFontSize(7.2);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-    const termoTxt = '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta de orçamento."';
+    const termoTxt = data.incluirTermoRisco
+      ? '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta. Condições técnicas e riscos específicos aceitos conforme Anexo Contratual emitido."'
+      : '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta de orçamento."';
     const splitTermo = doc.splitTextToSize(termoTxt, usableWidth - 10);
     splitTermo.forEach((line: string, idx: number) => {
       doc.text(line, pageMargin + 5, y + 5 + idx * 3.5);
@@ -768,6 +910,318 @@ export async function gerarPDFOrcamento(
     doc.text('Responsável Técnico / Oficina', col2StartX + colW / 2, sigY + 15.5, { align: 'center' });
 
     y += 36;
+  }
+
+  // 8. TERMO DE CIÊNCIA E AUTORIZAÇÃO DE SERVIÇO COM RISCO ESPECÍFICO (FOLHA SEPARADA DEDICADA)
+  if (data.incluirTermoRisco) {
+    onProgress?.('Renderizando Termo de Risco em folha separada...');
+    doc.addPage();
+    let yRisco = 14;
+
+    // Cores específicas para Documento Legal Impresso (Garantia de 100% de Contraste e Legibilidade no Papel)
+    // NUNCA usar texto branco em folha A4 separada para impressão!
+    const corDocTextoDark: [number, number, number] = [15, 23, 42]; // Slate-900: texto principal escuro e nítido
+    const corDocTextoMuted: [number, number, number] = [71, 85, 105]; // Slate-600: texto secundário
+    const corDocBorda: [number, number, number] = [203, 213, 225]; // Slate-300: bordas elegantes
+    const corDocFundoCard: [number, number, number] = [248, 250, 252]; // Slate-50: fundo sutil
+    const corDocAccent: [number, number, number] = [180, 83, 9]; // Amber-700: destaque formal
+
+    // 1. Cabeçalho Oficial da Empresa / Oficina
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, 20, 1.5, 1.5, 'FD');
+
+    // Nome / Razão Social
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    const nomeOficinaCabecalho = data.oficinaRazaoSocial || data.oficinaNome || 'OFICINA ESPECIALIZADA';
+    doc.text(nomeOficinaCabecalho, pageMargin + 5, yRisco + 6.5);
+
+    // Dados da Oficina (CNPJ, Telefone, Cidade)
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    const docOfi = data.oficinaDocumento ? `CNPJ/CPF: ${data.oficinaDocumento}` : '';
+    const telOfi = data.oficinaTelefone ? `Tel: ${data.oficinaTelefone}` : '';
+    const cidOfi = data.oficinaCidadeUF ? `${data.oficinaCidadeUF}` : '';
+    const infoOficinaLinha = [docOfi, telOfi, cidOfi].filter(Boolean).join(' • ');
+    if (infoOficinaLinha) {
+      doc.text(infoOficinaLinha, pageMargin + 5, yRisco + 11.5);
+    }
+
+    // Linha de Conformidade CDC
+    const numRef = data.numero ? `#${formatarCodigoProposta(data)}` : (data.numero_os ? `OS #${data.numero_os}` : `#${data.id.substring(0, 8)}`);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text(`ANEXO CONTRATUAL AO ORÇAMENTO ${numRef} — INSTRUMENTO DE CONFORMIDADE COM A LEI Nº 8.078/1990 (CDC)`, pageMargin + 5, yRisco + 16.5);
+
+    yRisco += 25;
+
+    // 2. Título Central Destacado
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('TERMO DE CIÊNCIA E AUTORIZAÇÃO DE SERVIÇO COM RISCO TÉCNICO', pageMargin + usableWidth / 2, yRisco, { align: 'center' });
+    yRisco += 4;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    doc.text('Declaração de Esclarecimento Prévio, Vícios Preexistentes e Autorização Expressa de Execução (Arts. 6º, 8º, 14, 40 e 54 do CDC)', pageMargin + usableWidth / 2, yRisco, { align: 'center' });
+    yRisco += 3;
+
+    doc.setDrawColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.setLineWidth(0.4);
+    doc.line(pageMargin + 10, yRisco, rightMarginX - 10, yRisco);
+    yRisco += 6;
+
+    // 3. Quadro de Qualificação das Partes e do Veículo (Dossiê)
+    const boxDossieH = 35;
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, boxDossieH, 1.5, 1.5, 'FD');
+
+    // Título da Seção do Quadro
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('1. DADOS DE IDENTIFICAÇÃO E QUALIFICAÇÃO DAS PARTES', pageMargin + 5, yRisco + 5);
+
+    const col1X = pageMargin + 5;
+    const col2X = pageMargin + (usableWidth / 2) + 2;
+    const linY1 = yRisco + 10;
+    const linY2 = yRisco + 15;
+    const linY3 = yRisco + 20;
+    const linY4 = yRisco + 25;
+    const linY5 = yRisco + 30;
+
+    // Divisória vertical no meio do quadro
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.15);
+    doc.line(col2X - 4, yRisco + 7, col2X - 4, yRisco + boxDossieH - 2);
+
+    // COLUNA 1: CONTRATANTE (CLIENTE)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text('CONTRATANTE (CLIENTE):', col1X, linY1);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    // Nome
+    doc.text(`Nome: ${data.clienteNome || '________________________________________'}`, col1X, linY2);
+    // CPF / CNPJ (se tiver, mostra; se não, linha para caneta)
+    const cpfTxt = data.clienteCpfCnpj ? `CPF/CNPJ: ${data.clienteCpfCnpj}` : 'CPF/CNPJ: ____________________________________';
+    doc.text(cpfTxt, col1X, linY3);
+    // Telefone
+    const telTxt = data.clienteTelefone ? `Telefone/WhatsApp: ${data.clienteTelefone}` : 'Telefone/WhatsApp: ____________________________';
+    doc.text(telTxt, col1X, linY4);
+    // Endereço ou E-mail
+    const endTxt = data.clienteEndereco ? `Endereço: ${data.clienteEndereco}` : (data.clienteEmail ? `E-mail: ${data.clienteEmail}` : 'Endereço: ____________________________________');
+    doc.text(endTxt, col1X, linY5);
+
+    // COLUNA 2: VEÍCULO & CONTRATADA
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text('VEÍCULO OBJETO DO ATENDIMENTO:', col2X, linY1);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    // Modelo e Marca
+    const modeloMarca = `${data.veiculoMarca ? data.veiculoMarca + ' ' : ''}${data.veiculoModelo || 'Não informado'}`;
+    doc.text(`Veículo: ${modeloMarca}`, col2X, linY2);
+    // Placa e Cor
+    const placaTxt = data.veiculoPlaca ? data.veiculoPlaca.toUpperCase() : '_________';
+    const corTxt = data.veiculoCor || '________';
+    doc.text(`Placa: ${placaTxt}   |   Cor: ${corTxt}`, col2X, linY3);
+    // Ano e KM
+    const anoTxt = data.veiculoAno ? String(data.veiculoAno) : '________';
+    const kmTxt = data.veiculoKm ? `${data.veiculoKm} km` : '___________ km';
+    doc.text(`Ano/Modelo: ${anoTxt}   |   KM: ${kmTxt}`, col2X, linY4);
+    // Data de Emissão / Vistoria
+    const dataDoc = data.enviado_em ? formatarData(data.enviado_em) : new Date().toLocaleDateString('pt-BR');
+    doc.text(`Data da Proposta/Emissão: ${dataDoc}`, col2X, linY5);
+
+    yRisco += boxDossieH + 5;
+
+    // 4. Procedimento(s) com Risco Técnico
+    const servicoTitulo = data.termoRiscoServico || 'Procedimentos Especializados com Risco Técnico';
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, 9, 1.2, 1.2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text(`2. PROCEDIMENTO TÉCNICO ENVOLVIDO: ${servicoTitulo}`, pageMargin + 5, yRisco + 5.8);
+    yRisco += 13;
+
+    // 5. Fundamentação Legal e Declaração de Ciência (CDC Arts. 6º, 8º, 14, 40, 46 e 54)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('3. DECLARAÇÃO DE ESCLARECIMENTO PRÉVIO E LIMITES DE RESPONSABILIDADE (CDC)', pageMargin, yRisco);
+    yRisco += 4;
+
+    const p1 = 'I. DO DEVER DE INFORMAÇÃO E RISCOS INERENTES (Arts. 6º, III e 8º do CDC): O contratante declara ter sido prévia e adequadamente esclarecido pela equipe técnica acerca da metodologia de execução dos serviços contratados, seus limites técnicos e os riscos inerentes à intervenção, especialmente em razão do estado de conservação, histórico e condições preexistentes do veículo.';
+    const p2 = `II. DOS VÍCIOS OCULTOS E CONDICIONANTES PRÉVIAS (Art. 14, §3º, I e II do CDC): O contratante autoriza a execução dos serviços ciente de que a ${nomeOficinaCabecalho} não poderá ser responsabilizada por danos, quebras, falhas mecânicas, elétricas ou estéticas decorrentes exclusivamente de vícios preexistentes, desgastes naturais do tempo e uso, repinturas anteriores inadequadas, verniz fino/ressecado, conectores, borrachas ou chicotes fragilizados e componentes danificados não identificáveis em inspeção visual preliminar.`;
+    const p3 = 'III. DO PADRÃO TÉCNICO E BOA-FÉ: A empresa compromete-se a executar os procedimentos com técnica adequada, ferramentas profissionais e cautela, permanecendo responsável pelos danos que forem comprovadamente decorrentes de defeito culposo direto na prestação dos serviços.';
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+
+    const renderP = (txt: string) => {
+      const split = doc.splitTextToSize(txt, usableWidth);
+      split.forEach((linha: string) => {
+        doc.text(linha, pageMargin, yRisco);
+        yRisco += 3.6;
+      });
+      yRisco += 1.8;
+    };
+
+    renderP(p1);
+    renderP(p2);
+    renderP(p3);
+
+    // 6. Bloco de Riscos Específicos Informados (Art. 54, §4º do CDC)
+    let textoRiscosExibir = data.termoRiscoObservacoes?.trim() || '';
+    if (!textoRiscosExibir && data.termoResponsabilidade && data.termoResponsabilidade.trim()) {
+      textoRiscosExibir = data.termoResponsabilidade.trim();
+    }
+    if (!textoRiscosExibir) {
+      textoRiscosExibir = '• Vistoria preliminar realizada com o cliente. Riscos inerentes ao estado de conservação, pintura, componentes e agregados esclarecidos e aceitos.\n• Cuidados posteriores de cura, lavagem e preservação informados pelo técnico responsável.';
+    }
+
+    const splitRiscos = doc.splitTextToSize(textoRiscosExibir, usableWidth - 10);
+    const boxRiscosH = Math.max(16, 8 + splitRiscos.length * 3.5);
+
+    // Se não couber na folha atual com assinaturas, cria nova página
+    if (yRisco + boxRiscosH + 45 > 280) {
+      doc.addPage();
+      yRisco = 15;
+    }
+
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, boxRiscosH, 1.5, 1.5, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.6);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('4. RISCOS ESPECÍFICOS & CONDIÇÕES IDENTIFICADAS (ART. 54, §4º DO CDC):', pageMargin + 5, yRisco + 5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    splitRiscos.forEach((l: string, idx: number) => {
+      doc.text(l, pageMargin + 5, yRisco + 9.5 + idx * 3.5);
+    });
+
+    yRisco += boxRiscosH + 6;
+
+    // 7. Declaração expressa de consentimento
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('Declaro que li, compreendi os riscos informados e autorizo expressamente a execução dos serviços.', pageMargin + usableWidth / 2, yRisco, { align: 'center' });
+    yRisco += 7;
+
+    // Local e Data formal
+    const cidadeOficina = data.oficinaCidadeUF ? data.oficinaCidadeUF.split('/')[0].trim() : '';
+    const localDataStr = `${cidadeOficina ? cidadeOficina + ' - ' : ''}${dataDoc}`;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    doc.text(`Local e Data: ${localDataStr}`, pageMargin + 5, yRisco);
+    yRisco += 5;
+
+    // Colunas de Assinatura
+    const sigBoxW = (usableWidth - 16) / 2;
+    const colCliX = pageMargin + 5;
+    const colOfiX = rightMarginX - 5 - sigBoxW;
+
+    // COLUNA CLIENTE
+    if (data.assinaturaUrl) {
+      try {
+        const assBase64 = await obterAssinaturaBase64(data.assinaturaUrl);
+        if (assBase64) {
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+          doc.roundedRect(colCliX, yRisco, sigBoxW, 14, 1, 1, 'FD');
+          await drawProportionalImage(doc, assBase64, 'PNG', colCliX, yRisco, sigBoxW, 14);
+        }
+      } catch (e) {
+        console.error('[PDFOrcamento] Erro assinatura termo risco:', e);
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+      doc.text(`Assinado Digitalmente: ${data.assinaturaNome || data.clienteNome}`, colCliX, yRisco + 18);
+      if (data.assinaturaData) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.8);
+        doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+        doc.text(`Aceite em: ${formatarData(data.assinaturaData)} às ${formatarHora(data.assinaturaData)}`, colCliX, yRisco + 22);
+      }
+    } else {
+      doc.setDrawColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+      doc.setLineWidth(0.35);
+      doc.line(colCliX, yRisco + 12, colCliX + sigBoxW, yRisco + 12);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+      doc.text(data.clienteNome || 'Cliente / Contratante', colCliX + sigBoxW / 2, yRisco + 16, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.8);
+      doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+      const docAssinatura = data.clienteCpfCnpj ? `CPF/CNPJ: ${data.clienteCpfCnpj}` : 'Assinatura / Aceite do Cliente';
+      doc.text(docAssinatura, colCliX + sigBoxW / 2, yRisco + 19.5, { align: 'center' });
+    }
+
+    // COLUNA OFICINA
+    if (data.assinaturaUsuarioUrl) {
+      try {
+        const assOficinaBase64 = await obterAssinaturaBase64(data.assinaturaUsuarioUrl);
+        if (assOficinaBase64) {
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+          doc.roundedRect(colOfiX, yRisco, sigBoxW, 14, 1, 1, 'FD');
+          await drawProportionalImage(doc, assOficinaBase64, 'PNG', colOfiX, yRisco, sigBoxW, 14);
+        }
+      } catch (e) {
+        console.error('[PDFOrcamento] Erro assinatura oficina termo risco:', e);
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+      doc.text(`Confirmado por: ${data.assinaturaUsuarioNome || data.oficinaNome}`, colOfiX, yRisco + 18);
+      if (data.assinadoUsuarioEm) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.8);
+        doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+        doc.text(`Em: ${formatarData(data.assinadoUsuarioEm)} às ${formatarHora(data.assinadoUsuarioEm)}`, colOfiX, yRisco + 22);
+      }
+    } else {
+      doc.setDrawColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+      doc.setLineWidth(0.35);
+      doc.line(colOfiX, yRisco + 12, colOfiX + sigBoxW, yRisco + 12);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+      doc.text(data.assinaturaUsuarioNome || data.oficinaRazaoSocial || data.oficinaNome, colOfiX + sigBoxW / 2, yRisco + 16, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.8);
+      doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+      doc.text('Responsável Técnico / Oficina', colOfiX + sigBoxW / 2, yRisco + 19.5, { align: 'center' });
+    }
   }
 
   // Rodapé padrão em todas as páginas

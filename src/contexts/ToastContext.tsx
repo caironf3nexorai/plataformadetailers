@@ -70,8 +70,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast, showError, showSuccess }}>
       {children}
-      {/* CONTAINER DOS TOASTS (FIXO NO CANTO SUPERIOR DIREITO) */}
-      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-3 sm:px-0">
+      {/* CONTAINER DOS TOASTS (FIXO COM SAFE AREA PARA EVITAR NOTCH, DYNAMIC ISLAND E RELÓGIO) */}
+      <div 
+        className="fixed left-0 right-0 sm:left-auto sm:right-4 z-[99999] flex flex-col items-center sm:items-end gap-2 max-w-sm sm:w-full mx-auto sm:mx-0 pointer-events-none px-4 sm:px-0"
+        style={{
+          top: 'max(calc(env(safe-area-inset-top, 0px) + 16px), 2.75rem)',
+        }}
+      >
         {toasts.map((toast) => {
           let bgColor = 'bg-graphite-900 border-graphite-700 text-vapor-100';
           let icon = <Info size={18} className="text-cyan-400 shrink-0" />;

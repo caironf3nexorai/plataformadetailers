@@ -19,7 +19,7 @@ import { LeitorSeguroMaterial } from './LeitorSeguroMaterial';
 import { Link } from 'react-router-dom';
 
 export const AbaMateriaisDidaticos: React.FC = () => {
-  const { nomePlano } = usePlano();
+  const { nomePlano, isTrial, statusAssinatura } = usePlano();
   const { tenant } = useAuth();
   const [materiais, setMateriais] = useState<AcademiaMaterial[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,14 +52,18 @@ export const AbaMateriaisDidaticos: React.FC = () => {
       if (!rpcErr && data) {
         const listaBruta: any[] = Array.isArray(data) ? data : (data.materiais || []);
         const userPlano = tenant?.plano || 'free';
+        const temPagamento = data.tem_pagamento_ativo ?? (statusAssinatura === 'ativa');
+
         const processados: AcademiaMaterial[] = listaBruta.map((m: any) => {
           const planosPerm: string[] = Array.isArray(m.planos_permitidos) ? m.planos_permitidos : [];
-          const disponivel = planosPerm.length === 0 || planosPerm.includes(userPlano);
+          const noPlano = planosPerm.length === 0 || planosPerm.includes(userPlano);
+          // Regra: Somente liberado após pagamento confirmado pelo Asaas (nunca em trial/free)
+          const disponivel = !isTrial && temPagamento && noPlano;
 
           return {
             ...m,
             disponivel_no_plano_atual: m.disponivel_no_plano_atual !== undefined
-              ? m.disponivel_no_plano_atual
+              ? (m.disponivel_no_plano_atual && !isTrial)
               : disponivel
           };
         });
@@ -79,9 +83,11 @@ export const AbaMateriaisDidaticos: React.FC = () => {
       if (tabErr) throw tabErr;
 
       const userPlano = tenant?.plano || 'free';
+      const temPagamento = statusAssinatura === 'ativa';
       const processados: AcademiaMaterial[] = (mats || []).map((m: any) => {
         const planosPerm: string[] = Array.isArray(m.planos_permitidos) ? m.planos_permitidos : [];
-        const disponivel = planosPerm.length === 0 || planosPerm.includes(userPlano);
+        const noPlano = planosPerm.length === 0 || planosPerm.includes(userPlano);
+        const disponivel = !isTrial && temPagamento && noPlano;
 
         return {
           ...m,
@@ -100,7 +106,7 @@ export const AbaMateriaisDidaticos: React.FC = () => {
 
   useEffect(() => {
     fetchMateriais();
-  }, [tenant?.plano]);
+  }, [tenant?.plano, isTrial, statusAssinatura]);
 
   const materiaisFiltrados = materiais.filter(m => {
     if (categoriaAtiva === 'Todas') return true;
@@ -182,6 +188,31 @@ export const AbaMateriaisDidaticos: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Alerta de Degustação / Liberação Pós-Pagamento */}
+      {isTrial && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-lg shadow-amber-500/5">
+          <div className="flex items-start gap-3.5 text-amber-300">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5">
+              <Lock className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h4 className="font-bold text-amber-200 text-sm">
+                Materiais Didáticos Exclusivos para Assinantes Pagantes
+              </h4>
+              <p className="text-amber-300/80 mt-1 leading-relaxed max-w-2xl">
+                Sua oficina está no período de degustação gratuita (Trial). Para garantir a exclusividade dos materiais técnicos, planilhas e e-books da plataforma, o download e a leitura dos arquivos são liberados imediatamente após o Asaas detectar seu primeiro pagamento.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/configuracoes?aba=assinatura"
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-neutral-950 font-bold text-xs uppercase tracking-wide transition shadow-lg shadow-amber-500/10 self-stretch sm:self-auto text-center"
+          >
+            Ativar Assinatura
+          </Link>
+        </div>
+      )}
 
       {/* Filtros por Categoria */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
@@ -352,16 +383,25 @@ export const AbaMateriaisDidaticos: React.FC = () => {
             </h3>
 
             <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-              Este material didático está disponível exclusivamente para oficinas nos planos <strong>Pro</strong> e <strong>Studio</strong>.
-              Faça o upgrade agora para ter acesso ilimitado a todos os guias, planilhas e e-books da Academia!
+              {isTrial ? (
+                <>
+                  Os materiais didáticos, e-books e planilhas técnicas são um benefício exclusivo liberado após a confirmação do pagamento no Asaas.
+                  Como sua oficina está no período de degustação (Trial), <strong>ative sua assinatura agora</strong> para liberar o acesso imediato a toda a biblioteca!
+                </>
+              ) : (
+                <>
+                  Este material didático está disponível exclusivamente para oficinas nos planos <strong>Pro</strong> e <strong>Studio</strong> com assinatura ativa.
+                  Faça a assinatura agora para ter acesso ilimitado a todos os guias, planilhas e e-books da Academia!
+                </>
+              )}
             </p>
 
             <div className="flex flex-col gap-2.5">
               <Link
-                to="/planos"
+                to="/configuracoes?aba=assinatura"
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-neutral-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all text-center"
               >
-                Conhecer Planos Pro & Studio
+                {isTrial ? 'Ativar Assinatura no Asaas' : 'Conhecer Planos Pro & Studio'}
               </Link>
               <button
                 type="button"

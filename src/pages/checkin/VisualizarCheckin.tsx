@@ -34,9 +34,11 @@ import {
   CheckCircle2,
   ShieldCheck,
   Sparkles,
+  Send,
 } from 'lucide-react';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
 import { TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
+import { montarLinkWhatsapp } from '../../utils/whatsapp';
 
 export const VisualizarCheckin: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -330,6 +332,12 @@ export const VisualizarCheckin: React.FC = () => {
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
           termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
           termoGarantia: termoGarantia?.texto || null,
+          garantiaMeses: (agendamento as any)?.garantia_meses ?? 3,
+          incluirTermoRisco: (agendamento as any)?.incluir_termo_risco ?? false,
+          termoRiscoServico: (agendamento as any)?.termo_risco_servico || null,
+          termoRiscoObservacoes: (agendamento as any)?.termo_risco_observacoes || null,
+          termoRiscoTexto: (agendamento as any)?.termo_risco_texto || null,
+          assinaturaClienteNome: checkin.assinatura_nome || agendamento.cliente?.nome,
         },
         (msg) => setPdfProgress(msg),
         acao
@@ -339,6 +347,33 @@ export const VisualizarCheckin: React.FC = () => {
     } finally {
       setGeneratingPdf(false);
       setPdfProgress('');
+    }
+  };
+
+  const handleEnviarWhatsappCopiaVistoria = () => {
+    if (!checkin || !agendamento) return;
+    const telefone = agendamento.cliente?.telefone;
+    if (!telefone) {
+      setError('O cliente não possui telefone/WhatsApp cadastrado.');
+      return;
+    }
+
+    const nomeCliente = agendamento.cliente?.nome ? agendamento.cliente.nome.split(' ')[0] : 'Cliente';
+    const veiculoDesc = `${agendamento.veiculo?.modelo || 'Veículo'}${agendamento.veiculo?.placa ? ` (${agendamento.veiculo.placa})` : ''}`;
+    const urlVistoria = checkin.token_aceite ? `${window.location.origin}/vistoria/${checkin.token_aceite}` : '';
+
+    const msg =
+      `🚗 *Laudo da Vistoria de Entrada*\n\n` +
+      `Olá, *${nomeCliente}*! Tudo bem?\n\n` +
+      `A vistoria de entrada do seu *${veiculoDesc}* foi realizada com sucesso!\n\n` +
+      (urlVistoria ? `Você pode acompanhar o laudo completo com fotos e observações pelo link:\n🔗 ${urlVistoria}\n\n` : '') +
+      `Já iniciamos os cuidados com o seu veículo com toda a dedicação. Qualquer dúvida estamos à sua inteira disposição! ✨`;
+
+    const linkWa = montarLinkWhatsapp(telefone, msg);
+    if (linkWa) {
+      window.open(linkWa, '_blank');
+    } else {
+      setError('Número de telefone inválido para o WhatsApp.');
     }
   };
 
@@ -499,6 +534,18 @@ export const VisualizarCheckin: React.FC = () => {
           >
             <Printer size={18} />
             <span>Imprimir</span>
+          </Button>
+
+          {/* 2.2 Enviar Cópia via WhatsApp */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleEnviarWhatsappCopiaVistoria}
+            className="min-h-[56px] px-4 font-bold flex items-center justify-center gap-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40"
+            title="Enviar cópia digital do laudo da vistoria no WhatsApp do cliente"
+          >
+            <Send size={18} />
+            <span>Enviar no WhatsApp</span>
           </Button>
 
           {/* 3. Voltar — terciária, discreta */}

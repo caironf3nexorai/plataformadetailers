@@ -14,7 +14,6 @@ import { AbaEquipe } from './configuracoes/AbaEquipe';
 import { AbaCategorias } from './configuracoes/AbaCategorias';
 import { AbaHorarios } from './configuracoes/AbaHorarios';
 import { AbaChecklists } from './configuracoes/AbaChecklists';
-import { AbaDespesasFixas } from './configuracoes/AbaDespesasFixas';
 import { AbaAgendamentoOnline } from '../components/configuracoes/AbaAgendamentoOnline';
 import { AbaPersonalizacaoPDF } from '../components/configuracoes/AbaPersonalizacaoPDF';
 import { AbaMetaMensal } from './configuracoes/AbaMetaMensal';
@@ -23,7 +22,7 @@ import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
 import { AbaFiscal } from '../components/configuracoes/AbaFiscal';
 import { AbaWhatsApp } from '../components/configuracoes/AbaWhatsApp';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, DollarSign, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle } from 'lucide-react';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
@@ -55,6 +54,10 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     }
     if (abaParam === 'arquivos' || location.pathname.includes('arquivos-digitais')) {
       navigate('/arquivos-digitais', { replace: true });
+      return;
+    }
+    if (abaParam === 'despesas' || abaParam === 'contas' || abaInicial === 'despesas') {
+      navigate('/financeiro/despesas', { replace: true });
       return;
     }
     if (abaParam === 'plano' || abaParam === 'assinatura') {
@@ -431,7 +434,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           ...(podeGerirEquipe() ? [{ id: 'equipe', label: 'Equipe', icon: Users }] : []),
           ...(isDono ? [{ id: 'categorias', label: 'Categorias', icon: Tag }] : []),
           ...((isDono || podeGerirEquipe()) ? [{ id: 'checklists', label: 'Checklists', icon: CheckSquare }] : []),
-          ...(isDono ? [{ id: 'despesas', label: 'Despesas Fixas', icon: DollarSign }] : []),
           ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online & Vitrine', icon: Globe }] : []),
           { id: 'plano', label: 'Plano e Limites', icon: CreditCard },
           ...((isDono || podeGerirServicos()) ? [{ id: 'fiscal', label: 'Dados Fiscais & NFS-e', icon: Receipt }] : []),
@@ -1018,8 +1020,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           </Card>
         </div>
       )}
-
-      {activeTab === 'despesas' && isDono && <AbaDespesasFixas />}
 
       {activeTab === 'agendamento' && isDono && <AbaAgendamentoOnline />}
 

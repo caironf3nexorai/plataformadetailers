@@ -15,8 +15,16 @@ import {
   FileText, 
   Download, 
   CheckCircle2,
-  ShieldCheck
+  ShieldCheck,
+  UploadCloud,
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff,
+  FileCheck2
 } from 'lucide-react';
+import { sincronizarDadosFiscais } from '../../services/fiscalSyncService';
+import { gerarDanfsePDF } from '../../utils/pdfNFSe';
 
 interface ResumoNFSe {
   configurada: boolean;
@@ -41,6 +49,7 @@ interface NotaFiscalItem {
   url_danfe: string | null;
   motivo_cancelamento: string | null;
   emitido_em: string;
+  discriminacao?: string | null;
 }
 
 export const AbaFiscal: React.FC = () => {
@@ -61,8 +70,17 @@ export const AbaFiscal: React.FC = () => {
   const [cnaePadrao, setCnaePadrao] = useState('4520-0/05');
   const [itemListaServico, setItemListaServico] = useState('14.01');
   const [aliquotaIss, setAliquotaIss] = useState('2.00');
-  const [tokenFocusNfe, setTokenFocusNfe] = useState('');
   const [ambiente, setAmbiente] = useState<'homologacao' | 'producao'>('homologacao');
+
+  // Certificado Digital A1 states
+  const [certificadoStatus, setCertificadoStatus] = useState<'pendente' | 'ativo' | 'expirado'>('pendente');
+  const [certificadoValidoAte, setCertificadoValidoAte] = useState<string | null>(null);
+  const [certificadoNomeArquivo, setCertificadoNomeArquivo] = useState<string | null>(null);
+  const [certificadoArquivo, setCertificadoArquivo] = useState<File | null>(null);
+  const [certificadoBase64, setCertificadoBase64] = useState<string | null>(null);
+  const [certificadoSenha, setCertificadoSenha] = useState('');
+  const [mostrarSenhaCertificado, setMostrarSenhaCertificado] = useState(false);
+  const [substituindoCertificado, setSubstituindoCertificado] = useState(false);
 
   const formatarCNPJ = (v: string) => {
     const digits = v.replace(/\D/g, '').slice(0, 14);
@@ -92,8 +110,10 @@ export const AbaFiscal: React.FC = () => {
         setCnaePadrao(info.config.cnae_padrao || '4520-0/05');
         setItemListaServico(info.config.item_lista_servico || '14.01');
         setAliquotaIss(info.config.aliquota_iss ? String(info.config.aliquota_iss) : '2.00');
-        setTokenFocusNfe(info.config.token_focus_nfe || '');
         setAmbiente(info.config.ambiente || 'homologacao');
+        setCertificadoStatus(info.config.certificado_status || 'pendente');
+        setCertificadoValidoAte(info.config.certificado_valido_ate || null);
+        setCertificadoNomeArquivo(info.config.certificado_nome_arquivo || null);
       } else if (tenant) {
         // Pré-preenche com dados básicos da oficina se não houver config
         if (tenant.documento && tenant.documento_tipo === 'cnpj') {
@@ -125,6 +145,66 @@ export const AbaFiscal: React.FC = () => {
     carregarDados();
   }, []);
 
+  const handleAbrirDanfe = async (nota: NotaFiscalItem) => {
+    // Se for URL externa válida da Focus (ex: arquivos/....pdf) e não o mock placeholder
+    if (nota.url_danfe && !nota.url_danfe.includes('/v2/nfse/')) {
+      window.open(nota.url_danfe, '_blank');
+      return;
+    }
+
+    try {
+      await gerarDanfsePDF({
+        numero: nota.numero || '000001',
+        serie: '1',
+        dataEmissao: nota.emitido_em || new Date(),
+        status: nota.status,
+        ambiente: ambiente,
+        prestador: {
+          razaoSocial: razaoSocial || tenant?.nome || 'Oficina Detailer',
+          nomeFantasia: nomeFantasia || tenant?.nome || undefined,
+          cnpj: cnpj || '',
+          inscricaoMunicipal: inscricaoMunicipal || undefined,
+          telefone: tenant?.telefone || undefined,
+          cidade: tenant?.cidade || undefined,
+          uf: tenant?.uf || undefined,
+        },
+        tomador: {
+          nome: nota.tomador_nome || 'Cliente',
+          cpfCnpj: nota.tomador_cpf_cnpj || undefined,
+          email: nota.tomador_email || undefined,
+        },
+        servico: {
+          discriminacao: nota.discriminacao || 'Serviços de estética automotiva.',
+          itemListaServico: itemListaServico || '14.01',
+          cnae: cnaePadrao || '4520-0/05',
+          valorTotal: Number(nota.valor_total || 0),
+          aliquotaIss: Number(aliquotaIss || 2.0),
+        },
+        formaPagamento: (nota as any).forma_pagamento || undefined,
+      }, 'download');
+    } catch (err) {
+      console.error('[AbaFiscal] Erro ao gerar DANFSe PDF:', err);
+    }
+  };
+
+  const handleArquivoCertificadoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.pfx') && !lower.endsWith('.p12')) {
+      showError('Por favor selecione um arquivo de certificado digital válido (.pfx ou .p12).');
+      return;
+    }
+    setCertificadoArquivo(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      setCertificadoBase64(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSalvarConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCnpj = cnpj.replace(/\D/g, '');
@@ -134,6 +214,11 @@ export const AbaFiscal: React.FC = () => {
     }
     if (!razaoSocial.trim()) {
       showError('Informe a Razão Social da empresa.');
+      return;
+    }
+
+    if (certificadoArquivo && !certificadoSenha.trim()) {
+      showError('Informe a senha do certificado digital para validação e instalação.');
       return;
     }
 
@@ -148,17 +233,32 @@ export const AbaFiscal: React.FC = () => {
         cnae_padrao: cnaePadrao.trim(),
         item_lista_servico: itemListaServico.trim(),
         aliquota_iss: parseFloat(aliquotaIss.replace(',', '.')) || 2.0,
-        token_focus_nfe: tokenFocusNfe.trim(),
-        ambiente: ambiente
+        ambiente: ambiente,
+        certificado_base64: certificadoBase64 || null,
+        senha_certificado: certificadoSenha.trim() || null,
+        certificado_nome_arquivo: certificadoArquivo?.name || certificadoNomeArquivo || null,
       };
 
-      const { error } = await supabase.rpc('salvar_config_fiscal_tenant', {
-        p_config: payload
-      });
+      await sincronizarDadosFiscais(payload);
 
-      if (error) throw error;
+      // Atualiza também os dados cadastrais da oficina no perfil principal do tenant
+      if (tenant?.id) {
+        await supabase
+          .from('tenants')
+          .update({
+            documento: cleanCnpj,
+            documento_tipo: 'cnpj',
+            razao_social: razaoSocial.trim(),
+            nome: nomeFantasia.trim() || razaoSocial.trim(),
+          })
+          .eq('id', tenant.id);
+      }
 
-      showSuccess('Configurações fiscais salvas com sucesso!');
+      showSuccess('Configurações fiscais e certificado digital salvos com sucesso!');
+      setCertificadoArquivo(null);
+      setCertificadoBase64(null);
+      setCertificadoSenha('');
+      setSubstituindoCertificado(false);
       await carregarDados();
     } catch (err: any) {
       console.error('[AbaFiscal] Erro ao salvar config fiscal:', err);
@@ -406,6 +506,136 @@ export const AbaFiscal: React.FC = () => {
               </span>
             </div>
 
+            {/* SEÇÃO DO CERTIFICADO DIGITAL A1 */}
+            <div className="sm:col-span-2 md:col-span-3 p-4 bg-graphite-900 border border-graphite-700 rounded-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span className="font-display text-xs text-vapor-100 font-bold uppercase tracking-wider">
+                    Certificado Digital A1 (.pfx ou .p12)
+                  </span>
+                </div>
+
+                {certificadoStatus === 'ativo' && !substituindoCertificado ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <CheckCircle2 size={12} />
+                    <span>Certificado Ativo e Instalado</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                    <AlertTriangle size={12} />
+                    <span>Obrigatório para Produção</span>
+                  </span>
+                )}
+              </div>
+
+              {certificadoStatus === 'ativo' && !substituindoCertificado ? (
+                <div className="p-3 bg-graphite-950 border border-emerald-500/20 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <FileCheck2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                      <div className="font-semibold text-vapor-100">
+                        {certificadoNomeArquivo || 'Certificado Digital A1 Instalado'}
+                      </div>
+                      <div className="text-[11px] text-vapor-400 font-mono mt-0.5">
+                        {certificadoValidoAte ? `Válido até: ${formatarDataHora(certificadoValidoAte).split(' ')[0]}` : 'Pronto para emissão oficial'}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setSubstituindoCertificado(true)}
+                    className="text-xs py-1.5 px-3 self-start sm:self-center"
+                  >
+                    Substituir / Renovar
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Upload do Arquivo */}
+                    <div>
+                      <label className="block text-[11px] font-mono text-vapor-300 uppercase mb-1">
+                        Arquivo do Certificado (.pfx ou .p12) {ambiente === 'producao' ? '*' : '(Opcional em testes)'}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="file"
+                          id="input-certificado-pfx"
+                          accept=".pfx,.p12"
+                          onChange={handleArquivoCertificadoChange}
+                          className="sr-only"
+                        />
+                        <label
+                          htmlFor="input-certificado-pfx"
+                          className="flex items-center justify-between w-full bg-graphite-950 border border-dashed border-graphite-600 hover:border-amber-500/80 rounded-xl px-3.5 py-2.5 cursor-pointer text-xs text-vapor-300 transition-colors"
+                        >
+                          <span className="truncate max-w-[200px] text-vapor-200">
+                            {certificadoArquivo ? certificadoArquivo.name : 'Selecionar arquivo .pfx'}
+                          </span>
+                          <UploadCloud className="w-4 h-4 text-amber-400 shrink-0 ml-2" />
+                        </label>
+                      </div>
+                      <span className="text-[10px] text-vapor-500 mt-1 block">
+                        Arquivo digital A1 fornecido pela certificadora (Serasa, Certisign, Soluti, etc.)
+                      </span>
+                    </div>
+
+                    {/* Senha do Certificado */}
+                    <div>
+                      <label className="block text-[11px] font-mono text-vapor-300 uppercase mb-1">
+                        Senha do Certificado Digital {certificadoArquivo ? '*' : ''}
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={mostrarSenhaCertificado ? 'text' : 'password'}
+                          value={certificadoSenha}
+                          onChange={(e) => setCertificadoSenha(e.target.value)}
+                          placeholder="Digite a senha do arquivo"
+                          className="w-full bg-graphite-950 border border-graphite-700 rounded-xl pl-3.5 pr-10 py-2.5 text-vapor-100 font-mono text-xs focus:border-amber-500 outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setMostrarSenhaCertificado(!mostrarSenhaCertificado)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-vapor-400 hover:text-vapor-200"
+                        >
+                          {mostrarSenhaCertificado ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                      <span className="text-[10px] text-vapor-500 mt-1 block">
+                        Senha de proteção do arquivo .pfx
+                      </span>
+                    </div>
+                  </div>
+
+                  {substituindoCertificado && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubstituindoCertificado(false);
+                          setCertificadoArquivo(null);
+                          setCertificadoBase64(null);
+                          setCertificadoSenha('');
+                        }}
+                        className="text-[11px] text-vapor-400 hover:text-vapor-200 underline font-mono"
+                      >
+                        Cancelar substituição
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="p-2.5 bg-graphite-950/60 rounded-lg border border-graphite-800 text-[11px] text-vapor-400 flex items-start gap-2">
+                    <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Segurança de Ponta a Ponta:</strong> O certificado é transmitido diretamente para o cofre seguro da emissora fiscal para assinar suas notas fiscais oficiais. Nenhuma pessoa tem acesso à chave privada.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* INFORMAÇÃO DE EMISSÃO INTEGRADA NUVEMWASH */}
             <div className="sm:col-span-2 md:col-span-3 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
@@ -523,19 +753,15 @@ export const AbaFiscal: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right space-x-2">
-                      {n.url_danfe ? (
-                        <a
-                          href={n.url_danfe}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:underline"
-                        >
-                          <Download size={12} />
-                          <span>PDF</span>
-                        </a>
-                      ) : (
-                        <span className="text-vapor-500 text-[11px]">PDF indisp.</span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirDanfe(n)}
+                        className="inline-flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 hover:underline transition"
+                        title="Visualizar e Baixar DANFSe (PDF)"
+                      >
+                        <Download size={12} />
+                        <span>PDF</span>
+                      </button>
 
                       {n.url_xml && (
                         <a

@@ -82,6 +82,11 @@ export interface Orcamento {
   incluir_termos?: boolean;
   incluir_termo_responsabilidade?: boolean;
   incluir_termo_garantia?: boolean;
+  garantia_meses?: number | null;
+  incluir_termo_risco?: boolean;
+  termo_risco_servico?: string | null;
+  termo_risco_observacoes?: string | null;
+  termo_risco_texto?: string | null;
   termo_garantia_id?: string | null;
   modo_orcamento?: 'simples' | '3_niveis' | string | null;
   cliente?: {
@@ -152,6 +157,8 @@ export interface OrcamentoPublicoData {
   assinatura_nome?: string | null;
   assinatura_url?: string | null;
   cliente_telefone?: string | null;
+  cliente_documento?: string | null;
+  cliente_cpf?: string | null;
   desconto?: {
     tipo: 'porcentagem' | 'valor_fixo';
     valor: number;
@@ -163,6 +170,11 @@ export interface OrcamentoPublicoData {
   incluir_termos?: boolean;
   incluir_termo_responsabilidade?: boolean;
   incluir_termo_garantia?: boolean;
+  garantia_meses?: number | null;
+  incluir_termo_risco?: boolean;
+  termo_risco_servico?: string | null;
+  termo_risco_observacoes?: string | null;
+  termo_risco_texto?: string | null;
   termo_responsabilidade?: string | null;
   termo_garantia?: {
     id: string;

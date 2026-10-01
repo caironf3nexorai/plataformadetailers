@@ -7,12 +7,19 @@ import { MobileNavDrawer } from './MobileNavDrawer';
 import { BotaoFeedbackFlutuante } from '../feedback/BotaoFeedbackFlutuante';
 import { ModalComunicadoGlobal } from '../comunicados/ModalComunicadoGlobal';
 import { ModalAvisoAssinatura } from '../assinatura/ModalAvisoAssinatura';
+import { ModalRadarFinanceiroDoDia } from '../financeiro/ModalRadarFinanceiroDoDia';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
+import { usePermissao } from '../../hooks/usePermissao';
 
 export const AppShell: React.FC = () => {
   const location = useLocation();
+  const { tenant } = useAuth();
+  const { isDono, isGerente } = usePermissao();
   const [assinatura, setAssinatura] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [radarAberto, setRadarAberto] = useState(false);
+  const [radarDados, setRadarDados] = useState<any>(null);
 
   const isTelaCheiaOperacional = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
 
@@ -27,6 +34,56 @@ export const AppShell: React.FC = () => {
     }
     carregarAssinatura();
   }, []);
+
+  // Escuta evento customizado para abertura manual do Radar Financeiro
+  useEffect(() => {
+    const handleAbrirRadar = () => setRadarAberto(true);
+    window.addEventListener('abrir_radar_financeiro', handleAbrirRadar);
+    return () => window.removeEventListener('abrir_radar_financeiro', handleAbrirRadar);
+  }, []);
+
+  // Disparo diário automático: ao entrar no sistema, verifica contas e cobranças do dia para Dono e Gerente (Apenas planos pagos/trial)
+  useEffect(() => {
+    const isTenantFree = !tenant?.plano || tenant.plano === 'free';
+    if (!tenant?.id || (!isDono && !isGerente) || isTenantFree) return;
+
+    const hojeStr = new Date().toISOString().slice(0, 10);
+    const chaveVisto = `radar_financeiro_visto_${tenant.id}_${hojeStr}`;
+
+    async function verificarRadarDiario() {
+      try {
+        const { data, error } = await supabase.rpc('obter_radar_financeiro_do_dia');
+        if (error || !data || data.erro) return;
+
+        setRadarDados(data);
+
+        // Se ainda não dispensou hoje e possui cobranças pendentes ou contas a pagar
+        const jaDispensouHoje = localStorage.getItem(chaveVisto);
+        const temPendencias =
+          (data.metricas?.qtd_cobrancas_total || 0) > 0 ||
+          (data.metricas?.qtd_despesas_pendentes || 0) > 0;
+
+        if (!jaDispensouHoje && temPendencias) {
+          const timer = setTimeout(() => {
+            setRadarAberto(true);
+          }, 800);
+          return () => clearTimeout(timer);
+        }
+      } catch (err) {
+        console.error('[RadarFinanceiro] Falha na verificação diária:', err);
+      }
+    }
+
+    verificarRadarDiario();
+  }, [tenant?.id, isDono, isGerente]);
+
+  const handleDispensarRadarHoje = () => {
+    if (tenant?.id) {
+      const hojeStr = new Date().toISOString().slice(0, 10);
+      localStorage.setItem(`radar_financeiro_visto_${tenant.id}_${hojeStr}`, 'true');
+    }
+    setRadarAberto(false);
+  };
 
   return (
     <div className="min-h-screen bg-graphite-900 text-vapor-100 flex w-full max-w-full flex-col selection:bg-amber-500 selection:text-graphite-950">
@@ -74,6 +131,18 @@ export const AppShell: React.FC = () => {
 
           {/* Modal Global de Comunicados, Banners e Brindes */}
           <ModalComunicadoGlobal />
+
+          {/* Modal Diário de Radar Financeiro (Contas a Pagar & Cobranças do Dia) */}
+          <ModalRadarFinanceiroDoDia
+            aberto={radarAberto}
+            onFechar={() => setRadarAberto(false)}
+            onDispensarHoje={handleDispensarRadarHoje}
+            dadosIniciais={radarDados}
+            onItemBaixado={() => {
+              // Notificar qualquer lista aberta que um recebimento foi baixado
+              window.dispatchEvent(new CustomEvent('financeiro_atualizado'));
+            }}
+          />
         </div>
       </div>
     </div>

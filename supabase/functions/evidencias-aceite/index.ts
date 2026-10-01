@@ -37,11 +37,12 @@ serve(async (req: Request) => {
     // 2. Busca o registro do checkin pelo token público de aceite
     const { data: checkin, error: checkinErr } = await supabase
       .from('checkins')
-      .select('id, tenant_id, enviado_em, expirado_em, finalizado, assinado_em, assinatura_path, assinatura_nome')
+      .select('id, tenant_id, enviado_em, finalizado, assinado_em, assinatura_path, assinatura_nome')
       .eq('token_aceite', tokenAceite)
       .maybeSingle();
 
     if (checkinErr || !checkin) {
+      console.error('[evidencias-aceite] checkinErr:', checkinErr);
       return new Response(
         JSON.stringify({ error: 'Vistoria não encontrada ou token inválido.' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -53,17 +54,6 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: 'Esta vistoria ainda não foi enviada para aceite remoto.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 4. Validação de expiração do link (checkins.expirado_em)
-    if (checkin.expirado_em && new Date(checkin.expirado_em) < new Date()) {
-      return new Response(
-        JSON.stringify({
-          error: 'Este link de vistoria expirou. Entre em contato com a oficina para receber um novo link.',
-          expirado: true,
-        }),
-        { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 

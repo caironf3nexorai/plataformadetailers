@@ -39,13 +39,26 @@ import {
   Pencil,
   UserCheck,
   Lock,
+  RefreshCw,
+  Edit3,
+  Scale,
+  Plus,
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
 import { ModalAlterarClienteOrcamento } from '../../components/orcamentos/ModalAlterarClienteOrcamento';
 import type { Orcamento, TipoNivelOrcamento } from '../../types/orcamento';
 import type { Servico } from '../../types/servicos';
-import { type TermoGarantia, TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
+import {
+  type TermoGarantia,
+  TERMO_RESPONSABILIDADE_PADRAO,
+  MODELOS_TERMOS_PLATAFORMA_PADRAO,
+  type ServicoParaTermo,
+  type DadosPreenchimentoTermo,
+  gerarTermoDinamicoServicos,
+  obterClausulasDetectadas,
+  mesclarClausulasComTextoExistente,
+} from '../../types/termos';
 import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
 import { formatarDuracao } from '../../utils/agenda';
@@ -196,12 +209,104 @@ export const DetalheOrcamento: React.FC = () => {
   const [incluirFotos, setIncluirFotos] = useState<boolean>(true);
   const [incluirTermoResponsabilidade, setIncluirTermoResponsabilidade] = useState<boolean>(true);
   const [incluirTermoGarantia, setIncluirTermoGarantia] = useState<boolean>(true);
+  const [garantiaMeses, setGarantiaMeses] = useState<number>(3);
+  const [incluirTermoRisco, setIncluirTermoRisco] = useState<boolean>(false);
+  const [termoRiscoServico, setTermoRiscoServico] = useState<string>('');
+  const [termoRiscoObservacoes, setTermoRiscoObservacoes] = useState<string>('');
 
   // Termos de Garantia, Responsabilidade e Validade
   const [termosDisponiveis, setTermosDisponiveis] = useState<TermoGarantia[]>([]);
   const [termoGarantiaSelecionado, setTermoGarantiaSelecionado] = useState<string>('');
   const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
+  const termoResponsabilidadeRef = useRef<string>('');
+  termoResponsabilidadeRef.current = termoResponsabilidade;
+  const [modoTermoResp, setModoTermoResp] = useState<'dinamico' | 'fixo_loja' | 'personalizado'>('dinamico');
+  const [termoRespSelecionadoId, setTermoRespSelecionadoId] = useState<string>('dinamico');
+  const [editandoTermoResp, setEditandoTermoResp] = useState<boolean>(false);
   const [validadeDiasOrcamento, setValidadeDiasOrcamento] = useState<number>(7);
+  const [veiculoKm, setVeiculoKm] = useState<number | null>(null);
+
+  // Termos de responsabilidade ativos disponíveis para a oficina selecionar
+  // Termos de responsabilidade ativos disponíveis para a oficina selecionar
+  const termosResponsabilidadeDisponiveis = useMemo(() => {
+    const daOficina = termosDisponiveis.filter((t) => 
+      t.categoria === 'responsabilidade' || 
+      t.tipo === 'responsabilidade' ||
+      (t.titulo && t.titulo.toLowerCase().includes('responsabilidade')) ||
+      (t.titulo && t.titulo.toLowerCase().includes('veículos antigos'))
+    );
+
+    // Complementa com modelos padrão de responsabilidade da plataforma (minuta advogado CDC, veículos antigos, pátio, etc.)
+    const titulosOficina = new Set(daOficina.map((t) => t.titulo.toLowerCase().trim()));
+    const complementares = MODELOS_TERMOS_PLATAFORMA_PADRAO
+      .filter((m) => 
+        m.categoria === 'responsabilidade' && 
+        !titulosOficina.has(m.titulo.toLowerCase().trim())
+      )
+      .map((m) => ({
+        id: `plataforma_${m.id}`,
+        tenant_id: tenant?.id || '',
+        tipo: m.tipo_servico || 'geral',
+        categoria: 'responsabilidade' as const,
+        titulo: m.titulo,
+        conteudo: m.conteudo_texto,
+        padrao: false,
+        ativo: true,
+      }));
+
+    return [...daOficina, ...complementares];
+  }, [termosDisponiveis, tenant?.id]);
+
+  // Termos de garantia disponíveis para a oficina selecionar no dropdown
+  const termosGarantiaDisponiveis = useMemo(() => {
+    const daOficina = termosDisponiveis.filter((t) => 
+      t.categoria !== 'responsabilidade' && 
+      t.tipo !== 'responsabilidade' &&
+      !(t.titulo && t.titulo.toLowerCase().includes('responsabilidade')) &&
+      !(t.titulo && t.titulo.toLowerCase().includes('veículos antigos'))
+    );
+
+    // Complementa com modelos padrão da biblioteca da plataforma (incluindo minuta oficial do advogado CDC e garantias por serviço)
+    const titulosOficina = new Set(daOficina.map((t) => t.titulo.toLowerCase().trim()));
+    const complementares = MODELOS_TERMOS_PLATAFORMA_PADRAO
+      .filter((m) => 
+        m.categoria === 'garantia' && 
+        !titulosOficina.has(m.titulo.toLowerCase().trim())
+      )
+      .map((m) => ({
+        id: `plataforma_${m.id}`,
+        tenant_id: tenant?.id || '',
+        tipo: m.tipo_servico || 'geral',
+        categoria: 'garantia' as const,
+        titulo: m.titulo,
+        conteudo: m.conteudo_texto,
+        padrao: false,
+        ativo: true,
+      }));
+
+    return [...daOficina, ...complementares];
+  }, [termosDisponiveis, tenant?.id]);
+
+  // Termo de garantia atualmente selecionado
+  const termoGarantiaAtual = useMemo(() => {
+    if (!termoGarantiaSelecionado) return null;
+    return termosGarantiaDisponiveis.find(
+      (t) => t.id === termoGarantiaSelecionado || `plataforma_${t.id}` === termoGarantiaSelecionado
+    ) || null;
+  }, [termoGarantiaSelecionado, termosGarantiaDisponiveis]);
+
+  // Texto formatado de preview da garantia com substituição de variáveis
+  const textoPreviewGarantia = useMemo(() => {
+    const prazoTexto = `${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'}`;
+    const nomeEmpresa = tenant?.nome || 'nossa oficina';
+
+    if (termoGarantiaAtual?.conteudo) {
+      return termoGarantiaAtual.conteudo
+        .replace(/\[PRAZO DE GARANTIA\]/g, prazoTexto)
+        .replace(/\[NOME DA EMPRESA\]/g, nomeEmpresa);
+    }
+    return `A ${nomeEmpresa} garante os serviços executados pelo prazo de ${prazoTexto} informado na OS, exclusivamente contra falhas decorrentes da execução do serviço. EXCLUSÕES DE GARANTIA: acidentes, impactos, desgaste natural, falta de manutenção, uso inadequado, produtos químicos ou corrosivos, seivas, dejetos de aves, agentes ambientais, lavagem incorreta, intervenção de terceiros, defeitos preexistentes ou problemas sem relação com o serviço realizado. O cliente declara estar ciente das condições e orientações de conservação.`;
+  }, [termoGarantiaAtual, garantiaMeses, tenant?.nome]);
 
   // Modal de Novo Serviço Rápido
   const [showModalServicoRapido, setShowModalServicoRapido] = useState<boolean>(false);
@@ -231,8 +336,8 @@ export const DetalheOrcamento: React.FC = () => {
         .from('orcamentos')
         .select(`
           *,
-          cliente:clientes(id, nome, telefone),
-          veiculo:veiculos(id, placa, modelo, marca, cor),
+          cliente:clientes(id, nome, telefone, email, documento),
+          veiculo:veiculos(id, placa, modelo, marca, cor, ano),
           categoria:categorias_veiculo(id, nome),
           niveis:orcamento_niveis(
             *,
@@ -252,6 +357,21 @@ export const DetalheOrcamento: React.FC = () => {
         return;
       }
 
+      if (quoteData?.agendamento_id) {
+        try {
+          const { data: ck } = await supabase
+            .from('checkins')
+            .select('km')
+            .eq('agendamento_id', quoteData.agendamento_id)
+            .maybeSingle();
+          if (ck?.km) {
+            setVeiculoKm(ck.km);
+          }
+        } catch (e) {
+          console.error('[DetalheOrcamento] Erro ao buscar km do checkin:', e);
+        }
+      }
+
       const quote = quoteData as Orcamento;
       setOrcamento(quote);
 
@@ -266,6 +386,11 @@ export const DetalheOrcamento: React.FC = () => {
       setIncluirTermoResponsabilidade((quote as any).incluir_termo_responsabilidade ?? baseTermos);
       setIncluirTermoGarantia((quote as any).incluir_termo_garantia ?? baseTermos);
       setTermoGarantiaSelecionado((quote as any).termo_garantia_id || '');
+      setGarantiaMeses((quote as any).garantia_meses ?? 3);
+      setIncluirTermoRisco(Boolean((quote as any).incluir_termo_risco));
+      setTermoRiscoServico((quote as any).termo_risco_servico || '');
+      setTermoRiscoObservacoes((quote as any).termo_risco_observacoes || '');
+
 
       // Carrega URLs assinadas das assinaturas existentes de forma independente
       if (quote.assinatura_path) {
@@ -295,15 +420,19 @@ export const DetalheOrcamento: React.FC = () => {
         const comUrls = await Promise.all(
           fotosData.map(async (ft: any) => {
             const url = await getEvidenciaSignedUrl(ft.path);
+            const tipoDetectado: 'antes' | 'depois' = 
+              ft.tipo === 'depois' || ft.descricao?.includes('[DEPOIS]') ? 'depois' : 'antes';
             return {
               id: ft.id,
+              path: ft.path,
               url: url || '',
+              tipo: tipoDetectado,
               descricao: ft.descricao,
               created_at: ft.created_at,
             };
           })
         );
-        setFotosAvaliacao(comUrls.filter((f) => Boolean(f.url)));
+        setFotosAvaliacao(comUrls.filter((f) => Boolean(f.url || f.path)));
       }
 
       // Carrega termos de garantia do tenant
@@ -320,24 +449,32 @@ export const DetalheOrcamento: React.FC = () => {
         if (salvosLocal) setTermosDisponiveis(JSON.parse(salvosLocal));
       }
 
-      // Carrega o termo fixo de responsabilidade da oficina (Geral)
-      let termoResp = (tenant as any)?.termo_responsabilidade;
-      if (!termoResp) {
-        try {
-          const { data: tData } = await supabase
-            .from('tenants')
-            .select('termo_responsabilidade')
-            .eq('id', tenant.id)
-            .single();
-          if (tData?.termo_responsabilidade) termoResp = tData.termo_responsabilidade;
-        } catch (err) {
-          console.warn('[DetalheOrcamento] Erro ao carregar termo_responsabilidade do tenant:', err);
+      // Carrega o termo de responsabilidade da proposta (ou prepara para preenchimento dinâmico)
+      const termoSalvoNoOrcamento = (quote as any)?.termo_responsabilidade_texto;
+      const modoSalvoNoOrcamento = (quote as any)?.modo_termo_responsabilidade;
+      const termoRespIdSalvo = (quote as any)?.termo_responsabilidade_id;
+
+      if (termoRespIdSalvo) {
+        setTermoRespSelecionadoId(termoRespIdSalvo);
+      }
+
+      if (
+        modoSalvoNoOrcamento === 'personalizado' &&
+        termoSalvoNoOrcamento &&
+        termoSalvoNoOrcamento.trim() &&
+        termoSalvoNoOrcamento.trim() !== TERMO_RESPONSABILIDADE_PADRAO.trim()
+      ) {
+        setTermoResponsabilidade(termoSalvoNoOrcamento);
+        setModoTermoResp('personalizado');
+        if (!termoRespIdSalvo) setTermoRespSelecionadoId('personalizado');
+      } else {
+        // Por padrão mantém dinâmico, para recalcular instantaneamente quando serviços forem marcados
+        setModoTermoResp('dinamico');
+        if (!termoRespIdSalvo) setTermoRespSelecionadoId('dinamico');
+        if (termoSalvoNoOrcamento && termoSalvoNoOrcamento.trim()) {
+          setTermoResponsabilidade(termoSalvoNoOrcamento);
         }
       }
-      if (!termoResp) {
-        termoResp = localStorage.getItem(`termo_responsabilidade_${tenant.id}`) || TERMO_RESPONSABILIDADE_PADRAO;
-      }
-      setTermoResponsabilidade(termoResp);
 
       // Carrega fotos de avaliação do veículo para este orçamento
       let fotosCarregadas: any[] = [];
@@ -387,10 +524,13 @@ export const DetalheOrcamento: React.FC = () => {
         const fotosComUrl = await Promise.all(
           fotosCarregadas.map(async (ft: any) => {
             const signed = ft.url && ft.url.startsWith('http') ? ft.url : (ft.path ? await getEvidenciaSignedUrl(ft.path) : '');
+            const tipoDetectado: 'antes' | 'depois' =
+              ft.tipo === 'depois' || ft.descricao?.includes('[DEPOIS]') ? 'depois' : 'antes';
             return {
               id: ft.id,
               path: ft.path,
               url: signed || ft.url || '',
+              tipo: tipoDetectado,
               descricao: ft.descricao,
               created_at: ft.created_at || new Date().toISOString(),
             };
@@ -580,15 +720,41 @@ export const DetalheOrcamento: React.FC = () => {
           }
         }
 
-        // Salvar observações do orçamento
+        // Salvar observações e termo de responsabilidade do orçamento
         const valObs = currentObservacoes !== undefined ? currentObservacoes : observacoes;
-        const { error: obsError } = await supabase
+        const payloadOrc: any = {
+          observacoes: valObs.trim() || null,
+          updated_at: new Date().toISOString(),
+        };
+        const textoSalvar = (modoTermoResp === 'dinamico' || !termoResponsabilidadeRef.current || termoResponsabilidadeRef.current.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim())
+          ? (gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo) || termoResponsabilidadeRef.current || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO)
+          : (termoResponsabilidadeRef.current || termoResponsabilidade);
+        if (textoSalvar) {
+          payloadOrc.termo_responsabilidade_texto = textoSalvar;
+        }
+        payloadOrc.modo_termo_responsabilidade = modoTermoResp;
+        if (termoRespSelecionadoId && termoRespSelecionadoId !== 'dinamico' && termoRespSelecionadoId !== 'personalizado') {
+          payloadOrc.termo_responsabilidade_id = termoRespSelecionadoId;
+        } else {
+          payloadOrc.termo_responsabilidade_id = null;
+        }
+        payloadOrc.termo_garantia_id = termoGarantiaSelecionado || null;
+        payloadOrc.garantia_meses = garantiaMeses;
+        payloadOrc.incluir_termo_garantia = incluirTermoGarantia;
+        payloadOrc.incluir_termo_responsabilidade = incluirTermoResponsabilidade;
+
+        let { error: obsError } = await supabase
           .from('orcamentos')
-          .update({
-            observacoes: valObs.trim() || null,
-            updated_at: new Date().toISOString(),
-          })
+          .update(payloadOrc)
           .eq('id', orcamento.id);
+
+        if (obsError && (obsError.message?.includes('termo_responsabilidade') || obsError.message?.includes('modo_termo'))) {
+          delete payloadOrc.termo_responsabilidade_texto;
+          delete payloadOrc.modo_termo_responsabilidade;
+          delete payloadOrc.termo_responsabilidade_id;
+          const retry = await supabase.from('orcamentos').update(payloadOrc).eq('id', orcamento.id);
+          obsError = retry.error;
+        }
 
         if (obsError) throw obsError;
 
@@ -966,12 +1132,14 @@ export const DetalheOrcamento: React.FC = () => {
 
       let novaFotoId = `ft_${Date.now()}`;
       try {
+        const descMomento = momentoFotoUpload === 'depois' ? '[DEPOIS]' : '[ANTES]';
         const { data: novaFoto } = await supabase
           .from('orcamento_fotos')
           .insert({
             tenant_id: tenant.id,
             orcamento_id: orcamento.id,
             path,
+            descricao: descMomento,
             created_at: capturadaEm || new Date().toISOString(),
           })
           .select('*')
@@ -1157,6 +1325,143 @@ export const DetalheOrcamento: React.FC = () => {
     showSuccess(`Serviço "${novoServico.nome}" criado e selecionado na proposta!`);
   };
 
+  // Lista de serviços constantes neste orçamento para preenchimento ágil
+  const servicosDoOrcamento = useMemo(() => {
+    if (!orcamento?.niveis) return [];
+    const map = new Map<string, { id: string; nome: string; riscos_especificos_padrao?: string }>();
+    for (const n of orcamento.niveis) {
+      for (const it of (n.itens || [])) {
+        const nome = (it as any).servico_nome || it.servico?.nome;
+        if (nome && !map.has(nome)) {
+          map.set(nome, {
+            id: it.servico_id || it.id,
+            nome,
+            riscos_especificos_padrao: (it.servico as any)?.riscos_especificos_padrao || '',
+          });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [orcamento]);
+
+  // Lista de serviços atualmente selecionados na proposta (reativo às mudanças nos níveis)
+  const servicosAtivosNoOrcamento = useMemo<ServicoParaTermo[]>(() => {
+    const todosIds = new Set<string>([
+      ...Array.from(itensNivel.essencial),
+      ...Array.from(itensNivel.recomendado),
+      ...Array.from(itensNivel.completo),
+    ]);
+
+    const list: ServicoParaTermo[] = [];
+    const seen = new Set<string>();
+
+    todosIds.forEach((sId) => {
+      const s = servicosCatalogo.find((cat) => cat.id === sId);
+      if (s && !seen.has(s.nome.toLowerCase())) {
+        seen.add(s.nome.toLowerCase());
+        list.push({
+          nome: s.nome,
+          grupo: s.grupo,
+          riscos_especificos_padrao: (s as any).riscos_especificos_padrao || null,
+        });
+      }
+    });
+
+    // Se houver itens em orcamento.niveis que estão selecionados ou se o catálogo ainda estiver carregando
+    if (orcamento?.niveis) {
+      for (const n of orcamento.niveis) {
+        for (const it of (n.itens || [])) {
+          const sId = it.servico_id || (it.servico as any)?.id;
+          const isSelected = todosIds.size === 0 || (sId && todosIds.has(sId));
+          if (isSelected) {
+            const nome = (it as any).servico_nome || it.servico?.nome || (it as any).nome;
+            if (nome && !seen.has(nome.toLowerCase())) {
+              seen.add(nome.toLowerCase());
+              list.push({
+                nome,
+                grupo: (it.servico as any)?.grupo,
+                riscos_especificos_padrao: (it.servico as any)?.riscos_especificos_padrao || null,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return list;
+  }, [itensNivel, servicosCatalogo, orcamento]);
+
+  // Dados do cliente, veículo e oficina para preenchimento de variáveis no termo
+  const dadosTermo = useMemo<DadosPreenchimentoTermo>(() => {
+    const veicStr = orcamento?.veiculo
+      ? `${orcamento.veiculo.modelo || 'Veículo'}${orcamento.veiculo.marca ? ` (${orcamento.veiculo.marca})` : ''} - Placa: ${orcamento.veiculo.placa || 'N/I'}`
+      : 'Veículo';
+    return {
+      nomeEmpresa: tenant?.nome || tenant?.razao_social || 'Oficina Especializada',
+      prazoGarantia: `${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'}`,
+      servicoContratado: servicosAtivosNoOrcamento.map((s) => s.nome).join(', ') || 'Procedimentos Especializados',
+      clienteNome: orcamento?.cliente?.nome || '',
+      clienteCpf: (orcamento?.cliente as any)?.documento || (orcamento?.cliente as any)?.cpf_cnpj || '',
+      veiculoPlaca: veicStr,
+      data: new Date().toLocaleDateString('pt-BR'),
+    };
+  }, [tenant, garantiaMeses, servicosAtivosNoOrcamento, orcamento]);
+
+  // Cláusulas técnicas ativas detectadas com base nos serviços selecionados (motor centralizado)
+  const clausulasDetectadasInfo = useMemo(() => {
+    return obterClausulasDetectadas(servicosAtivosNoOrcamento);
+  }, [servicosAtivosNoOrcamento]);
+
+  const clausulasDetectadas = useMemo(() => {
+    return clausulasDetectadasInfo.map((c) => c.badgeLabel);
+  }, [clausulasDetectadasInfo]);
+
+  // Efeito reativo: Sempre que os serviços mudarem na proposta, se estiver em modo dinâmico, auto-preenche o texto
+  useEffect(() => {
+    if (modoTermoResp === 'dinamico') {
+      const novoTexto = gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo);
+      setTermoResponsabilidade(novoTexto);
+      termoResponsabilidadeRef.current = novoTexto;
+    }
+  }, [modoTermoResp, servicosAtivosNoOrcamento, dadosTermo]);
+
+  // ANEXAR CLÁUSULAS DOS SERVIÇOS AO TEXTO ATUAL (Ex: na Minuta do Advogado ou termo de antigos)
+  const handleAnexarClausulasServicos = () => {
+    const textoMesclado = mesclarClausulasComTextoExistente(termoResponsabilidade, servicosAtivosNoOrcamento);
+    if (textoMesclado.trim() === termoResponsabilidade.trim()) {
+      showToast('Todas as cláusulas dos serviços selecionados já estão contempladas no texto atual.', 'info');
+      return;
+    }
+    setTermoResponsabilidade(textoMesclado);
+    termoResponsabilidadeRef.current = textoMesclado;
+    showSuccess('Cláusulas técnicas dos serviços selecionados anexadas ao texto com sucesso!');
+  };
+
+  // SELECIONAR MODELO DE RESPONSABILIDADE PARA O ORÇAMENTO / IMPRESSÃO
+  const handleSelecionarTermoResp = (idOuModo: string) => {
+    setTermoRespSelecionadoId(idOuModo);
+    if (idOuModo === 'dinamico') {
+      setModoTermoResp('dinamico');
+      setEditandoTermoResp(false);
+      const txt = gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo);
+      setTermoResponsabilidade(txt);
+      termoResponsabilidadeRef.current = txt;
+      showSuccess('Modo dinâmico ativado: cláusulas automáticas dos serviços vinculadas!');
+    } else if (idOuModo === 'personalizado') {
+      setModoTermoResp('personalizado');
+      setEditandoTermoResp(true);
+    } else {
+      const termoAchado = termosResponsabilidadeDisponiveis.find((t) => t.id === idOuModo);
+      if (termoAchado) {
+        setModoTermoResp('personalizado');
+        setEditandoTermoResp(false);
+        setTermoResponsabilidade(termoAchado.conteudo);
+        termoResponsabilidadeRef.current = termoAchado.conteudo;
+        showSuccess(`Termo "${termoAchado.titulo}" aplicado neste orçamento e no PDF!`);
+      }
+    }
+  };
+
   // ALTERAR VALIDADE DO ORÇAMENTO
   const handleAlterarValidade = async (dias: number) => {
     setValidadeDiasOrcamento(dias);
@@ -1167,6 +1472,178 @@ export const DetalheOrcamento: React.FC = () => {
       showSuccess(`Validade alterada para ${dias} dias.`);
     } catch (e) {
       console.error('[Alterar Validade Error]:', e);
+    }
+  };
+
+  // ALTERAR MESES DE GARANTIA DO ORÇAMENTO
+  const handleAlterarGarantiaMeses = async (meses: number) => {
+    setGarantiaMeses(meses);
+    if (!orcamento) return;
+    try {
+      await supabase.from('orcamentos').update({ garantia_meses: meses }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? { ...prev, garantia_meses: meses } as any : null);
+      showSuccess(`Garantia definida para ${meses} ${meses === 1 ? 'mês' : 'meses'}.`);
+    } catch (e) {
+      console.error('[Alterar Garantia Meses Error]:', e);
+    }
+  };
+
+  // SELECIONAR MODELO DE GARANTIA DO ORÇAMENTO
+  const handleSelecionarTermoGarantia = async (idOuModo: string) => {
+    if (!orcamento) return;
+
+    // Se selecionou vazio ou padrão (Minuta Padrão do Advogado)
+    if (!idOuModo || idOuModo === 'padrao') {
+      setTermoGarantiaSelecionado('');
+      try {
+        await supabase.from('orcamentos').update({ termo_garantia_id: null }).eq('id', orcamento.id);
+        setOrcamento((prev) => prev ? { ...prev, termo_garantia_id: null } as any : null);
+        showSuccess('Minuta padrão do advogado selecionada para a garantia.');
+      } catch (e) {
+        console.error('[Selecionar Minuta Advogado Error]:', e);
+      }
+      return;
+    }
+
+    let idFinal = idOuModo;
+    const termoEscolhido = termosGarantiaDisponiveis.find((t) => t.id === idOuModo);
+
+    // Se for um modelo da biblioteca da plataforma selecionado pela primeira vez, cria o registro em termos_garantia para a oficina
+    if (idOuModo.startsWith('plataforma_') && termoEscolhido && tenant) {
+      try {
+        const { data: novoTermo, error: insErr } = await supabase
+          .from('termos_garantia')
+          .insert({
+            tenant_id: tenant.id,
+            tipo: termoEscolhido.tipo || 'geral',
+            titulo: termoEscolhido.titulo,
+            conteudo: termoEscolhido.conteudo,
+            categoria: 'garantia',
+            padrao: false,
+            ativo: true,
+          })
+          .select()
+          .single();
+
+        if (!insErr && novoTermo) {
+          idFinal = novoTermo.id;
+          setTermosDisponiveis((prev) => [...prev, novoTermo as TermoGarantia]);
+        }
+      } catch (err) {
+        console.warn('[handleSelecionarTermoGarantia] Aviso ao persistir modelo da plataforma:', err);
+      }
+    }
+
+    setTermoGarantiaSelecionado(idFinal);
+
+    try {
+      await supabase.from('orcamentos').update({ termo_garantia_id: idFinal }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? { ...prev, termo_garantia_id: idFinal } as any : null);
+      showSuccess(`Modelo de garantia "${termoEscolhido?.titulo || 'selecionado'}" aplicado!`);
+    } catch (e) {
+      console.error('[Selecionar Termo Garantia Error]:', e);
+    }
+  };
+
+  // ATIVAR / DESATIVAR TERMO DE RESPONSABILIDADE & RISCOS
+  const handleToggleTermoResponsabilidade = async (ativo: boolean) => {
+    setIncluirTermoResponsabilidade(ativo);
+    if (!orcamento) return;
+    try {
+      await supabase.from('orcamentos').update({
+        incluir_termo_responsabilidade: ativo,
+        incluir_termos: ativo || incluirTermoGarantia,
+      }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? {
+        ...prev,
+        incluir_termo_responsabilidade: ativo,
+        incluir_termos: ativo || incluirTermoGarantia,
+      } as any : null);
+      showSuccess(ativo ? 'Termo de Responsabilidade & Riscos ativado!' : 'Termo de Responsabilidade & Riscos desativado.');
+    } catch (e) {
+      console.error('[Toggle Termo Responsabilidade Error]:', e);
+    }
+  };
+
+  // ATIVAR / DESATIVAR TERMO DE GARANTIA
+  const handleToggleTermoGarantia = async (ativo: boolean) => {
+    setIncluirTermoGarantia(ativo);
+    if (!orcamento) return;
+    try {
+      await supabase.from('orcamentos').update({
+        incluir_termo_garantia: ativo,
+        incluir_termos: ativo || incluirTermoResponsabilidade,
+      }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? {
+        ...prev,
+        incluir_termo_garantia: ativo,
+        incluir_termos: ativo || incluirTermoResponsabilidade,
+      } as any : null);
+      showSuccess(ativo ? 'Termo de Garantia ativado!' : 'Termo de Garantia desativado da proposta.');
+    } catch (e) {
+      console.error('[Toggle Termo Garantia Error]:', e);
+    }
+  };
+
+  // ATIVAR / DESATIVAR EMISSÃO EM FOLHA SEPARADA NO PDF (CDC)
+  const handleToggleTermoRisco = async (ativo: boolean) => {
+    setIncluirTermoRisco(ativo);
+    let sNome = termoRiscoServico;
+    let sRiscos = termoRiscoObservacoes;
+
+    // Se ligou e não tinha serviço selecionado, pré-carrega os serviços do orçamento
+    if (ativo && !sNome && servicosDoOrcamento.length > 0) {
+      sNome = servicosDoOrcamento.map((s) => s.nome).join(', ');
+      setTermoRiscoServico(sNome);
+    }
+
+    if (!orcamento) return;
+    try {
+      await supabase.from('orcamentos').update({
+        incluir_termo_risco: ativo,
+        termo_risco_servico: sNome || null,
+        termo_risco_observacoes: sRiscos || null,
+      }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? {
+        ...prev,
+        incluir_termo_risco: ativo,
+        termo_risco_servico: sNome || null,
+        termo_risco_observacoes: sRiscos || null,
+      } as any : null);
+      showSuccess(ativo ? 'Emissão em Folha Separada no PDF ativada!' : 'Emissão em Folha Separada desativada (será impresso no corpo).');
+    } catch (e) {
+      console.error('[Toggle Termo Risco Error]:', e);
+    }
+  };
+
+
+  // INSERÇÃO RÁPIDA DE RISCO
+  const handleInserirRiscoRapido = async (riscoTexto: string) => {
+    const atualResp = termoResponsabilidade ? termoResponsabilidade.trim() : '';
+    const novoResp = atualResp
+      ? `${atualResp}\n• Condição Específica Observada: ${riscoTexto}`
+      : `• Condição Específica Observada: ${riscoTexto}`;
+    setTermoResponsabilidade(novoResp);
+    setModoTermoResp('personalizado');
+
+    const atualRisco = termoRiscoObservacoes ? termoRiscoObservacoes.trim() : '';
+    const novoRisco = atualRisco ? `${atualRisco}\n• ${riscoTexto}` : `• ${riscoTexto}`;
+    setTermoRiscoObservacoes(novoRisco);
+
+    if (!orcamento) return;
+    try {
+      await supabase.from('orcamentos').update({ 
+        termo_responsabilidade_texto: novoResp,
+        termo_risco_observacoes: novoRisco,
+      }).eq('id', orcamento.id);
+      setOrcamento((prev) => prev ? { 
+        ...prev, 
+        termo_responsabilidade_texto: novoResp,
+        termo_risco_observacoes: novoRisco,
+      } as any : null);
+      showSuccess(`Risco específico adicionado: "${riscoTexto}"`);
+    } catch (e) {
+      console.error('[Inserir Risco Rapido Error]:', e);
     }
   };
 
@@ -1210,7 +1687,7 @@ export const DetalheOrcamento: React.FC = () => {
         };
       });
 
-      const termoEscolhido = termosDisponiveis.find((t) => t.id === termoGarantiaSelecionado);
+      const termoEscolhido = termosGarantiaDisponiveis.find((t) => t.id === termoGarantiaSelecionado) || termoGarantiaAtual;
 
       const diasVal = validadeDiasOrcamento || orcamento.validade_dias || 7;
       const baseDt = orcamento.enviado_em ? new Date(orcamento.enviado_em) : new Date(orcamento.created_at || Date.now());
@@ -1231,9 +1708,15 @@ export const DetalheOrcamento: React.FC = () => {
           observacoes: observacoes || orcamento.observacoes,
           clienteNome: orcamento.cliente?.nome || 'Cliente',
           clienteTelefone: orcamento.cliente?.telefone,
+          clienteEmail: (orcamento.cliente as any)?.email,
+          clienteCpfCnpj: (orcamento.cliente as any)?.documento || (orcamento.cliente as any)?.cpf_cnpj,
+          clienteEndereco: (orcamento.cliente as any)?.endereco,
           veiculoModelo: orcamento.veiculo?.modelo,
+          veiculoMarca: orcamento.veiculo?.marca,
           veiculoPlaca: orcamento.veiculo?.placa,
           veiculoCor: orcamento.veiculo?.cor || null,
+          veiculoAno: (orcamento.veiculo as any)?.ano,
+          veiculoKm: veiculoKm,
           categoriaNome: orcamento.categoria?.nome,
           oficinaNome: tenant.nome || 'Oficina',
           oficinaRazaoSocial: tenant.razao_social,
@@ -1252,14 +1735,21 @@ export const DetalheOrcamento: React.FC = () => {
           fotos: fotosAvaliacao.map((f) => ({
             url: f.url,
             path: (f as any).path,
+            tipo: f.tipo || (f.descricao?.includes('[DEPOIS]') ? 'depois' : 'antes'),
             created_at: f.created_at,
             descricao: f.descricao,
           })),
-          incluirTermos: incluirTermoResponsabilidade || incluirTermoGarantia,
+          incluirTermos: incluirTermoResponsabilidade || incluirTermoGarantia || incluirTermoRisco,
           incluirTermoResponsabilidade,
           incluirTermoGarantia,
-          termoResponsabilidade: termoResponsabilidade || (tenant as any)?.termo_responsabilidade || localStorage.getItem(`termo_responsabilidade_${tenant.id}`) || TERMO_RESPONSABILIDADE_PADRAO,
-          termosGarantia: termoEscolhido?.conteudo || undefined,
+          garantiaMeses,
+          incluirTermoRisco,
+          termoRiscoServico: termoRiscoServico || servicosAtivosNoOrcamento.map((s) => s.nome).join(', ') || 'Procedimentos Especializados com Risco Técnico',
+          termoRiscoObservacoes: termoRiscoObservacoes?.trim() || termoResponsabilidadeRef.current || termoResponsabilidade,
+          termoResponsabilidade: (modoTermoResp === 'dinamico' || !termoResponsabilidade || termoResponsabilidade.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim())
+            ? (gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo) || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO)
+            : termoResponsabilidade,
+          termosGarantia: termoEscolhido?.conteudo ? textoPreviewGarantia : undefined,
           desconto: orcamento.desconto_valor && orcamento.desconto_tipo ? {
             tipo: orcamento.desconto_tipo,
             valor: orcamento.desconto_valor,
@@ -1638,41 +2128,23 @@ export const DetalheOrcamento: React.FC = () => {
               <span className="font-semibold">Fotos no PDF / Link</span>
             </label>
 
-            {/* CHECK: TERMO DE RESPONSABILIDADE */}
-            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-vapor-100">
+            {/* CHECK: TERMO DE RESPONSABILIDADE & RISCOS (UNIFICADO) */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-cyan-300">
               <input
                 type="checkbox"
                 checked={incluirTermoResponsabilidade}
-                onChange={async (e) => {
-                  const val = e.target.checked;
-                  setIncluirTermoResponsabilidade(val);
-                  if (orcamento) {
-                    await supabase.from('orcamentos').update({ 
-                      incluir_termo_responsabilidade: val,
-                      incluir_termos: val || incluirTermoGarantia
-                    }).eq('id', orcamento.id);
-                  }
-                }}
+                onChange={(e) => handleToggleTermoResponsabilidade(e.target.checked)}
                 className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-cyan-400 focus:ring-0"
               />
-              <span className="font-semibold">Termo de Responsabilidade</span>
+              <span className="font-semibold">Termo de Responsabilidade & Riscos</span>
             </label>
 
-            {/* CHECK: TERMO DE GARANTIA */}
-            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-vapor-100">
+            {/* CHECK: TERMO DE GARANTIA (SELECIONÁVEL) */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none text-vapor-300 hover:text-amber-300">
               <input
                 type="checkbox"
                 checked={incluirTermoGarantia}
-                onChange={async (e) => {
-                  const val = e.target.checked;
-                  setIncluirTermoGarantia(val);
-                  if (orcamento) {
-                    await supabase.from('orcamentos').update({ 
-                      incluir_termo_garantia: val,
-                      incluir_termos: incluirTermoResponsabilidade || val
-                    }).eq('id', orcamento.id);
-                  }
-                }}
+                onChange={(e) => handleToggleTermoGarantia(e.target.checked)}
                 className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
               />
               <span className="font-semibold">Termo de Garantia</span>
@@ -1680,7 +2152,7 @@ export const DetalheOrcamento: React.FC = () => {
           </div>
         </div>
 
-        {/* SELETORES: VALIDADE DO ORÇAMENTO, TERMO GERAL E TERMO ESPECÍFICO */}
+        {/* SELETORES: VALIDADE DO ORÇAMENTO, PRAZO DE GARANTIA E TERMOS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-vapor-300">
@@ -1730,77 +2202,380 @@ export const DetalheOrcamento: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
+          <div className={`flex flex-col gap-1.5 transition-opacity ${incluirTermoGarantia ? 'opacity-100' : 'opacity-50'}`}>
             <label className="text-xs font-semibold text-vapor-300 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <ShieldCheck size={14} className={incluirTermoGarantia ? "text-amber-400" : "text-vapor-500"} />
-                Termo Específico de Garantia:
+                <ShieldCheck size={14} className={incluirTermoGarantia ? 'text-amber-400' : 'text-vapor-500'} />
+                Tempo de Garantia do Serviço:
               </span>
               {incluirTermoGarantia ? (
-                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-bold">
-                  Ativo na Proposta
+                <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  {garantiaMeses} {garantiaMeses === 1 ? 'mês' : 'meses'} (Jurídico Padrão)
                 </span>
               ) : (
-                <span className="text-[10px] text-vapor-400 bg-graphite-900 px-1.5 py-0.5 rounded border border-graphite-700 font-bold">
-                  Desmarcado acima
+                <span className="text-[10px] font-mono text-vapor-400 bg-graphite-900 px-2 py-0.5 rounded border border-graphite-800">
+                  Não inclusa na proposta
                 </span>
               )}
             </label>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[1, 3, 6, 12].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  disabled={!incluirTermoGarantia}
+                  onClick={() => handleAlterarGarantiaMeses(m)}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                    !incluirTermoGarantia
+                      ? 'bg-graphite-950/60 text-vapor-500 border border-graphite-800/40 cursor-not-allowed'
+                      : garantiaMeses === m
+                      ? 'bg-amber-500 text-graphite-950 font-bold shadow-md shadow-amber-500/20'
+                      : 'bg-graphite-950 text-vapor-300 border border-graphite-800 hover:bg-graphite-900 hover:text-vapor-100'
+                  }`}
+                >
+                  {m} {m === 1 ? 'mês' : 'meses'} {m === 3 ? '(CDC)' : ''}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10.5px] text-vapor-400 mt-0.5">
+              {incluirTermoGarantia
+                ? '• Acompanha a proposta com o termo de garantia padrão e exclusões legais do CDC.'
+                : '• Opção desmarcada acima: nenhuma cláusula de garantia será anexada a este orçamento ou PDF.'}
+            </span>
+          </div>
+        </div>
+
+        {/* SELETOR DE MODELO DE TERMO DE GARANTIA */}
+        {incluirTermoGarantia && (
+          <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
+                <ShieldCheck size={14} className="text-amber-400" />
+                <span>Modelo de Garantia da Proposta:</span>
+              </span>
+              <span className="text-[11px] text-vapor-400">
+                Selecione a minuta do advogado (CDC padrão) ou uma garantia técnica específica para os serviços executados.
+              </span>
+            </div>
+
             <select
               value={termoGarantiaSelecionado}
-              onChange={async (e) => {
-                const val = e.target.value;
-                setTermoGarantiaSelecionado(val);
-                if (orcamento) {
-                  await supabase.from('orcamentos').update({ termo_garantia_id: val || null }).eq('id', orcamento.id);
-                }
-              }}
-              disabled={!incluirTermoGarantia}
-              className={`w-full bg-graphite-950 border border-graphite-700 rounded-lg p-2 font-sans text-xs outline-none focus:border-amber-500 transition-opacity ${
-                !incluirTermoGarantia ? 'opacity-50 cursor-not-allowed text-vapor-500' : 'text-vapor-100'
-              }`}
+              onChange={(e) => handleSelecionarTermoGarantia(e.target.value)}
+              className="bg-graphite-900 border border-graphite-700 hover:border-amber-500 text-vapor-100 font-sans text-xs rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-colors cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
             >
-              <option value="">Nenhum termo específico selecionado</option>
-              {termosDisponiveis.map((t) => (
+              <option value="">
+                ⚡ Minuta do Advogado (Padrão Geral CDC - {garantiaMeses} {garantiaMeses === 1 ? 'mês' : 'meses'})
+              </option>
+              {termosGarantiaDisponiveis.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.titulo} ({t.tipo})
+                  🛡️ {t.titulo}
                 </option>
               ))}
             </select>
           </div>
-        </div>
+        )}
 
-        {/* CARD DO TERMO GERAL DE RESPONSABILIDADE & FALHAS OCULTAS (FIXO DA OFICINA) */}
+        {/* CARD DO TERMO DE GARANTIA COM PREVIEW */}
         <div
-          className={`flex flex-col gap-1.5 p-3 rounded-lg border transition-all ${
-            incluirTermoResponsabilidade
-              ? 'bg-graphite-950/80 border-graphite-800'
-              : 'bg-graphite-950/40 border-graphite-800/60 border-dashed opacity-60'
+          className={`flex flex-col gap-1.5 p-3 rounded-lg border text-xs transition-all ${
+            incluirTermoGarantia
+              ? 'bg-graphite-950/70 border-graphite-800'
+              : 'bg-graphite-950/30 border-graphite-800/40 border-dashed opacity-50'
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-vapor-200 flex items-center gap-1.5">
-              <ShieldCheck size={14} className={incluirTermoResponsabilidade ? 'text-cyan-400' : 'text-vapor-500'} />
-              Termo Fixo de Responsabilidade, Falhas Ocultas & Condições Gerais
+            <span className={`font-bold flex items-center gap-1.5 ${incluirTermoGarantia ? 'text-amber-400' : 'text-vapor-400'}`}>
+              <ShieldCheck size={14} />
+              {termoGarantiaAtual ? termoGarantiaAtual.titulo : `Termo de Garantia da Proposta (${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'})`}
             </span>
-            {incluirTermoResponsabilidade ? (
-              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
-                Ativo na Proposta / PDF
+            {incluirTermoGarantia ? (
+              <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
+                {termoGarantiaAtual ? 'Modelo Específico Ativo' : 'Minuta do Advogado Ativa'}
               </span>
             ) : (
-              <span className="text-[10px] text-vapor-400 bg-graphite-900 px-2 py-0.5 rounded-full border border-graphite-700 font-bold">
+              <span className="text-[10px] text-vapor-400 font-mono bg-graphite-900 px-2 py-0.5 rounded border border-graphite-800">
                 Desativado neste Orçamento
               </span>
             )}
           </div>
-          <p className="text-[11px] text-vapor-400 leading-relaxed italic bg-graphite-900/60 p-2.5 rounded border border-graphite-800 max-h-24 overflow-y-auto">
-            "{termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}"
-          </p>
-          <span className="text-[10px] text-vapor-500">
-            {incluirTermoResponsabilidade
-              ? '• Este termo geral acompanha a proposta comercial e o PDF para proteção jurídica contra falhas preexistentes.'
-              : '• A opção "Termo de Responsabilidade" está desmarcada acima. Nenhum termo de responsabilidade será anexado a esta proposta nem ao PDF.'}
-          </span>
+          {incluirTermoGarantia ? (
+            <p className="text-[11px] text-vapor-300 leading-relaxed italic bg-graphite-900/60 p-2.5 rounded border border-graphite-800/80 whitespace-pre-line">
+              {textoPreviewGarantia}
+            </p>
+          ) : (
+            <p className="text-[11px] text-vapor-400 italic bg-graphite-900/30 p-2 rounded">
+              Garantia não selecionada para esta proposta. Nenhuma obrigação extra de garantia será formalizada.
+            </p>
+          )}
+        </div>
+
+        {/* CARD UNIFICADO DO TERMO DE RESPONSABILIDADE & RISCOS TÉCNICOS (DINÂMICO PELOS SERVIÇOS + CDC) */}
+        <div
+          className={`flex flex-col gap-3 p-3.5 rounded-xl border transition-all ${
+            incluirTermoResponsabilidade
+              ? 'bg-graphite-950/90 border-cyan-500/30 shadow-lg shadow-cyan-950/20'
+              : 'bg-graphite-950/40 border-graphite-800/60 border-dashed opacity-60'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-graphite-800/80 pb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
+                <ShieldCheck size={16} />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-vapor-200 flex items-center gap-1.5 flex-wrap">
+                  Termo de Responsabilidade & Riscos Técnicos (CDC)
+                  {modoTermoResp === 'dinamico' && (
+                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold border border-cyan-500/30">
+                      ⚡ Cláusulas Inteligentes Dinâmicas
+                    </span>
+                  )}
+                </span>
+                <p className="text-[10.5px] text-vapor-400">
+                  Preenchido automaticamente com as variáveis do cliente, veículo e cláusulas técnicas dos serviços selecionados.
+                </p>
+              </div>
+            </div>
+            {incluirTermoResponsabilidade ? (
+              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold self-start sm:self-auto">
+                Ativo na Proposta / PDF
+              </span>
+            ) : (
+              <span className="text-[10px] text-vapor-400 bg-graphite-900 px-2 py-0.5 rounded-full border border-graphite-700 font-bold self-start sm:self-auto">
+                Desativado neste Orçamento
+              </span>
+            )}
+          </div>
+
+          {/* BADGES DAS CLÁUSULAS TÉCNICAS ATIVAS DETECTADAS */}
+          {incluirTermoResponsabilidade && clausulasDetectadas.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-semibold text-vapor-400 flex items-center gap-1">
+                <span>⚡ Cláusulas técnicas ativas:</span>
+              </span>
+              {clausulasDetectadas.map((c, i) => (
+                <span
+                  key={i}
+                  className="text-[10px] bg-graphite-900 text-cyan-300 px-2 py-0.5 rounded-md border border-cyan-500/20 font-medium flex items-center gap-1"
+                >
+                  <Check size={10} className="text-cyan-400" />
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* OPÇÃO DE EMISSÃO EM FOLHA SEPARADA NO PDF (CDC) */}
+          {incluirTermoResponsabilidade && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 bg-graphite-900/60 rounded-lg border border-graphite-800">
+              <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={incluirTermoRisco}
+                  onChange={(e) => handleToggleTermoRisco(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 sm:mt-0 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
+                />
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-vapor-200 flex items-center gap-1.5 flex-wrap">
+                    <span>Imprimir em Folha Separada no PDF</span>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase border border-amber-500/30">
+                      Anexo Dedicado CDC com Assinatura Exclusiva
+                    </span>
+                  </span>
+                  <span className="text-[10.5px] text-vapor-400">
+                    Gera folha anexa avulsa no PDF com campo de assinatura exclusiva para o cliente aceitar as condições de risco (Arts. 6º, 8º, 14, 40 e 54 CDC).
+                  </span>
+                </div>
+              </label>
+              {incluirTermoRisco && (
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold self-start sm:self-auto shrink-0">
+                  Folha Anexa Ativa
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* ATALHOS PARA INSERÇÃO RÁPIDA DE RISCO ESPECÍFICO */}
+          {incluirTermoResponsabilidade && (
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-1 border-t border-graphite-800/60">
+              <span className="text-vapor-400 font-semibold text-[10.5px]">Adicionar risco específico:</span>
+              <button
+                type="button"
+                onClick={() => handleInserirRiscoRapido('Lavagem técnica com risco em conectores/chicotes elétricos e módulos antigos ressecados')}
+                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+              >
+                + Motor / Chicote Elétrico
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInserirRiscoRapido('Pintura com repintura anterior ou verniz fino (< 80 micras), risco de queima')}
+                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+              >
+                + Verniz Fino / Repintura
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInserirRiscoRapido('Forro de teto/estofamento ressecado com fragilidade ou risco de descolamento')}
+                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+              >
+                + Higienização / Couro
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInserirRiscoRapido('Martelinho em vinco ou chapa estirada com tinta fragilizada')}
+                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+              >
+                + Martelinho / Vinco
+              </button>
+            </div>
+          )}
+
+          {/* SELETOR DE MODELO DE TERMO DE RESPONSABILIDADE */}
+          {incluirTermoResponsabilidade && (
+            <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
+                  <Scale size={14} className="text-amber-400" />
+                  <span>Modelo de Responsabilidade na Proposta / Impressão:</span>
+                </span>
+                <span className="text-[11px] text-vapor-400">
+                  Selecione o modelo adequado para o perfil do carro (padrão CDC por serviços, veículos antigos, etc.).
+                </span>
+              </div>
+
+              <select
+                value={termoRespSelecionadoId}
+                onChange={(e) => handleSelecionarTermoResp(e.target.value)}
+                className="bg-graphite-900 border border-graphite-700 hover:border-amber-500 text-vapor-100 font-sans text-xs rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-colors cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
+              >
+                <option value="dinamico">
+                  ⚡ Dinâmico (Cláusulas automáticas dos serviços)
+                </option>
+                {termosResponsabilidadeDisponiveis.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    📄 {t.titulo}
+                  </option>
+                ))}
+                <option value="personalizado">
+                  ✍️ Texto Personalizado (Edição Livre)
+                </option>
+              </select>
+            </div>
+          )}
+
+          {/* SELETOR DE MODO / STATUS / AÇÕES */}
+          {incluirTermoResponsabilidade && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs pt-1">
+              <div className="flex items-center gap-2 flex-wrap flex-1">
+                {modoTermoResp === 'dinamico' ? (
+                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
+                    <Sparkles size={12} className="text-emerald-400 animate-pulse" />
+                    <span>Sincronização Dinâmica Ativa (Atualiza ao marcar/desmarcar serviços)</span>
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/30 flex items-center gap-1.5">
+                    <Lock size={12} className="text-amber-400" />
+                    <span>Modelo Fixo / Manual Selecionado</span>
+                  </span>
+                )}
+                <span className="text-[10px] text-vapor-500 hidden md:inline">
+                  • Arts. 6º, 8º, 14, 40 e 54 CDC
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+                {modoTermoResp !== 'dinamico' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleAnexarClausulasServicos}
+                      className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded text-[11px] font-bold transition-colors flex items-center gap-1"
+                      title="Adiciona as cláusulas dos serviços selecionados neste orçamento ao final deste termo"
+                    >
+                      <Plus size={12} />
+                      + Cláusulas dos Serviços
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelecionarTermoResp('dinamico')}
+                      className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors flex items-center gap-1"
+                      title="Voltar ao modo onde o texto é atualizado automaticamente conforme os serviços marcados"
+                    >
+                      <RefreshCw size={11} />
+                      Voltar ao Dinâmico
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setEditandoTermoResp(!editandoTermoResp)}
+                  className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
+                    editandoTermoResp
+                      ? 'bg-cyan-500 text-graphite-950 font-bold border-cyan-400'
+                      : 'bg-graphite-900 text-vapor-300 border-graphite-700 hover:text-vapor-100'
+                  }`}
+                >
+                  <Edit3 size={11} />
+                  {editandoTermoResp ? 'Concluir Edição' : 'Editar Texto'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* VISUALIZAÇÃO OU EDIÇÃO DO TEXTO */}
+          {editandoTermoResp ? (
+            <div className="flex flex-col gap-2">
+              <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-md flex items-start gap-2 text-[11px] text-amber-200">
+                <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                <span className="leading-snug">
+                  <strong>Aviso de Segurança Jurídica (CDC):</strong> O modelo automático está amparado nos Arts. 6º, III e 14, §3º do CDC (desgaste preexistente). Cláusulas que tentem isentar a oficina de falhas próprias de execução são nulas por lei (Art. 51, I). Utilize a edição para apontar avarias pontuais deste veículo.
+                </span>
+              </div>
+              <textarea
+                rows={6}
+                value={termoResponsabilidade}
+                onChange={(e) => {
+                  setTermoResponsabilidade(e.target.value);
+                  setModoTermoResp('personalizado');
+                }}
+                className="w-full bg-graphite-900 border border-cyan-500/50 rounded-lg p-2.5 font-sans text-xs text-vapor-100 outline-none focus:border-cyan-400 leading-relaxed shadow-inner"
+                placeholder="Texto do termo de responsabilidade e riscos..."
+              />
+              <div className="flex items-center justify-between text-[10px] text-vapor-400">
+                <span>Modo manual ativado. As alterações serão salvas neste orçamento.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModoTermoResp('dinamico');
+                    const txt = gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo);
+                    setTermoResponsabilidade(txt);
+                    setEditandoTermoResp(false);
+                    showSuccess('Texto restaurado para o formato inteligente!');
+                  }}
+                  className="text-cyan-400 hover:underline font-semibold"
+                >
+                  Descartar e voltar ao automático
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[11px] text-vapor-300 leading-relaxed whitespace-pre-line bg-graphite-900/70 p-3 rounded-lg border border-graphite-800 max-h-36 overflow-y-auto">
+              {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+            </p>
+          )}
+
+          <div className="flex flex-col gap-1 text-[10px] text-vapor-500">
+            <span>
+              {incluirTermoResponsabilidade
+                ? '• Este termo com as cláusulas dos serviços selecionados acompanha a proposta comercial e o PDF para proteção jurídica blindada contra falhas preexistentes.'
+                : '• A opção "Termo de Responsabilidade & Riscos" está desmarcada acima. Nenhum termo de responsabilidade será anexado a esta proposta nem ao PDF.'}
+            </span>
+            {incluirTermoResponsabilidade && (
+              <span className="text-amber-400/90 font-medium">
+                ⚡ Recomendação CDC: Armazene fotos e vídeos do estado ANTES do serviço (na galeria abaixo) para juntar ao documento como comprovação do estado anterior do veículo.
+              </span>
+            )}
+          </div>
         </div>
 
         {/* GALERIA DE FOTOS DE AVALIAÇÃO (ANTES E DEPOIS) COM DATA IMUTÁVEL */}

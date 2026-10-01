@@ -164,7 +164,7 @@ export const AbaTermosGarantia: React.FC = () => {
 
   const handleEditarTermo = (termo: TermoGarantia) => {
     setTermoEditando(termo);
-    setTipo(termo.tipo);
+    setTipo((termo.tipo as TipoTermoGarantia) || 'polimento');
     setTitulo(termo.titulo);
     setConteudo(termo.conteudo);
     setPadrao(Boolean(termo.padrao));
@@ -372,6 +372,13 @@ export const AbaTermosGarantia: React.FC = () => {
               <span>{salvandoResponsabilidade ? 'Salvando...' : 'Salvar Termo Fixo'}</span>
             </Button>
           </div>
+        </div>
+
+        <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg flex items-start gap-2.5 text-xs text-amber-200">
+          <Scale size={16} className="text-amber-400 shrink-0 mt-0.5" />
+          <span className="leading-relaxed">
+            <strong>Orientação Jurídica (CDC Art. 51, I):</strong> Você tem total liberdade para personalizar o texto conforme a rotina da sua oficina. No entanto, lembre-se de que cláusulas que tentem isentar a empresa de danos decorrentes de falhas na própria execução do serviço são nulas por lei. Mantenha o foco em falhas preexistentes, desgaste natural, objetos deixados e regras de pátio/testes.
+          </span>
         </div>
 
         <textarea
@@ -712,6 +719,8 @@ export const AbaTermosGarantia: React.FC = () => {
         isOpen={modalBibliotecaOpen}
         onClose={() => setModalBibliotecaOpen(false)}
         onModeloAplicado={handleModeloAplicado}
+        termosTenant={termos}
+        termoRespTenant={termoResponsabilidade}
       />
     </div>
   );

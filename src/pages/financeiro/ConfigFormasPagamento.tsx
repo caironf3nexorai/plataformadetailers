@@ -16,6 +16,8 @@ import {
   ArrowDown,
   Save,
   Building2,
+  Trash2,
+  Star,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { NavegacaoFinanceiro } from '../../components/financeiro/NavegacaoFinanceiro';
@@ -90,10 +92,11 @@ export const ConfigFormasPagamento: React.FC = () => {
       if (errBandeiras) throw errBandeiras;
       setBandeiras(dataBandeiras || []);
 
-      // 2. Busca Maquininhas do tenant
+      // 2. Busca Maquininhas do tenant atual
       let { data: dataMaquininhas, error: errMaquininhas } = await supabase
         .from('tenant_maquininhas')
         .select('*')
+        .eq('tenant_id', tenant.id)
         .order('padrao', { ascending: false })
         .order('ordem', { ascending: true });
 
@@ -310,6 +313,58 @@ export const ConfigFormasPagamento: React.FC = () => {
     }
   };
 
+  const handleExcluirMaquininha = async (maq: Maquininha) => {
+    if (!tenant) return;
+    if (maquininhas.length <= 1) {
+      showToast('A oficina deve manter ao menos uma maquininha cadastrada.', 'error');
+      return;
+    }
+    if (!window.confirm(`Tem certeza que deseja excluir a maquininha "${maq.nome}"? Todas as taxas configuradas para ela serão excluídas.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('tenant_maquininhas')
+        .delete()
+        .eq('id', maq.id)
+        .eq('tenant_id', tenant.id);
+
+      if (error) throw error;
+      showToast(`Maquininha "${maq.nome}" removida com sucesso!`, 'success');
+      const restante = maquininhas.filter((m) => m.id !== maq.id);
+      if (activeMaquininhaId === maq.id) {
+        setActiveMaquininhaId(restante[0]?.id || '');
+      }
+      await fetchCatalogos();
+    } catch (err: any) {
+      console.error('Erro ao excluir maquininha:', err);
+      showToast(err.message || 'Erro ao excluir maquininha', 'error');
+    }
+  };
+
+  const handleDefinirPadrao = async (maq: Maquininha) => {
+    if (!tenant || maq.padrao) return;
+    try {
+      await supabase
+        .from('tenant_maquininhas')
+        .update({ padrao: false })
+        .eq('tenant_id', tenant.id);
+
+      const { error } = await supabase
+        .from('tenant_maquininhas')
+        .update({ padrao: true })
+        .eq('id', maq.id)
+        .eq('tenant_id', tenant.id);
+
+      if (error) throw error;
+      showToast(`"${maq.nome}" agora é a maquininha padrão!`, 'success');
+      await fetchCatalogos();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao definir maquininha padrão', 'error');
+    }
+  };
+
   // Salvar Grade em Lote via RPC salvar_taxas_cartao_lote com Fallback Direto
   const handleSalvarGradeLote = async () => {
     if (!activeMaquininhaId || !vigenciaInicio) {
@@ -507,7 +562,53 @@ export const ConfigFormasPagamento: React.FC = () => {
           {/* PAINEL DA MAQUININHA ATIVA */}
           {activeMaqObj && (
             <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 shadow-xl">
-              {/* Barra Superior de Ações em Lote */}
+              {/* Cabeçalho da Maquininha e Ações de Gerenciamento */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-graphite-700/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                    <Building2 size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-vapor-100">{activeMaqObj.nome}</h3>
+                      {activeMaqObj.padrao ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-semibold">
+                          <Star size={11} className="fill-amber-400" /> Padrão da Oficina
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleDefinirPadrao(activeMaqObj)}
+                          className="inline-flex items-center gap-1 text-[11px] text-vapor-400 hover:text-amber-400 hover:bg-graphite-700/60 px-2 py-0.5 rounded border border-graphite-600 transition-colors"
+                          title="Tornar esta a maquininha principal da oficina"
+                        >
+                          <Star size={11} /> Definir como Padrão
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-vapor-400 mt-0.5">
+                      Configure as taxas cobradas pela adquirente desta máquina para cálculo automático do líquido.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {maquininhas.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => handleExcluirMaquininha(activeMaqObj)}
+                      className="text-xs h-8 px-3 flex items-center gap-1.5"
+                      title="Excluir esta maquininha e suas taxas cadastradas"
+                    >
+                      <Trash2 size={13} />
+                      <span>Excluir Maquininha</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Barra Superior de Ações em Lote e Vigência */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-graphite-700 pb-4">
                 <div className="flex items-center gap-3">
                   <div className="flex flex-col">

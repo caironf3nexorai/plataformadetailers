@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { TrendingUp, Clock, CreditCard } from 'lucide-react';
+import { TrendingUp, Clock, CreditCard, DollarSign } from 'lucide-react';
 import { ScrollableTabs } from '../ui/ScrollableTabs';
 
 export const NavegacaoFinanceiro: React.FC = () => {
@@ -15,6 +15,12 @@ export const NavegacaoFinanceiro: React.FC = () => {
       to: '/financeiro/contas-a-receber',
       label: 'Contas a Receber',
       icon: Clock,
+      end: false,
+    },
+    {
+      to: '/financeiro/despesas',
+      label: 'Contas & Despesas',
+      icon: DollarSign,
       end: false,
     },
     {

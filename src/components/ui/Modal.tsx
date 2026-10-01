@@ -9,7 +9,7 @@ export interface ModalProps {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   icon?: React.ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl';
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
@@ -55,17 +55,23 @@ export const Modal: React.FC<ModalProps> = ({
     '2xl': 'max-w-2xl',
     '3xl': 'max-w-3xl',
     '4xl': 'max-w-4xl',
+    '5xl': 'max-w-5xl',
+    '6xl': 'max-w-6xl',
   };
 
   return createPortal(
     <div
       className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 md:p-8 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] animate-in fade-in duration-200"
+      style={{
+        paddingTop: 'max(calc(env(safe-area-inset-top, 0px) + 14px), 1.5rem)',
+        paddingBottom: 'max(calc(env(safe-area-inset-bottom, 0px) + 14px), 1.5rem)',
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <Card
-        className={`w-full ${maxWidthClasses[maxWidth]} my-auto bg-graphite-800 border-graphite-600 rounded-2xl shadow-2xl overflow-hidden [overscroll-behavior:contain] animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-4rem)] ${className}`}
+        className={`w-full ${maxWidthClasses[maxWidth]} my-auto !p-0 bg-graphite-800 border-graphite-600 rounded-2xl shadow-2xl overflow-hidden [overscroll-behavior:contain] animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[calc(100dvh-max(calc(env(safe-area-inset-top,0px)+env(safe-area-inset-bottom,0px)+2rem),3rem))] sm:max-h-[calc(100dvh-4rem)] ${className}`}
       >
         {/* Header */}
         {(title || showCloseButton) && (
@@ -100,7 +106,7 @@ export const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Body */}
-        <div className="p-4 sm:p-7 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] flex-1 flex flex-col gap-4.5 [-webkit-overflow-scrolling:touch]">{children}</div>
+        <div className="p-3.5 sm:p-6 overflow-y-auto overflow-x-hidden [overscroll-behavior:contain] flex-1 flex flex-col gap-4.5 [-webkit-overflow-scrolling:touch]">{children}</div>
 
         {/* Footer */}
         {footer && (

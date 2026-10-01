@@ -248,9 +248,9 @@ export const Financeiro: React.FC = () => {
             </div>
           </div>
           {isDono && (
-            <Link to="/configuracoes">
+            <Link to="/financeiro/despesas">
               <Button variant="primary" className="text-xs">
-                Cadastrar Despesas Fixas
+                Cadastrar Contas & Despesas
               </Button>
             </Link>
           )}

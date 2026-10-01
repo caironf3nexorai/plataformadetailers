@@ -13,12 +13,16 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import { formatarMoeda } from '../../utils/formatters';
+
 interface ModalEmitirNFSeProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (nota: any) => void;
   agendamento: any;
   valorTotal: number;
+  itens?: any[];
+  formaPagamento?: string | null;
 }
 
 export const ModalEmitirNFSe: React.FC<ModalEmitirNFSeProps> = ({
@@ -26,7 +30,9 @@ export const ModalEmitirNFSe: React.FC<ModalEmitirNFSeProps> = ({
   onClose,
   onSuccess,
   agendamento,
-  valorTotal
+  valorTotal,
+  itens,
+  formaPagamento,
 }) => {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
@@ -45,25 +51,78 @@ export const ModalEmitirNFSe: React.FC<ModalEmitirNFSeProps> = ({
 
   useEffect(() => {
     if (isOpen && agendamento) {
-      setValorFinal(valorTotal || 0);
+      // 1. Apuração minuciosa do Valor Total dos Serviços
+      let valTotalCalculado = Number(valorTotal || 0);
+      if (valTotalCalculado <= 0) {
+        if (itens && itens.length > 0) {
+          valTotalCalculado = itens.reduce(
+            (acc, it) => acc + (Number(it.preco || 0) * Number(it.quantidade || 1)),
+            0
+          );
+        } else if (agendamento.agendamento_itens && agendamento.agendamento_itens.length > 0) {
+          valTotalCalculado = agendamento.agendamento_itens.reduce((acc: number, it: any) => {
+            const p = Number(
+              it.preco_praticado ??
+              it.preco_estimado ??
+              it.preco ??
+              it.valor ??
+              it.servicos?.preco ??
+              0
+            );
+            return acc + (p * (it.quantidade || 1));
+          }, 0);
+        } else if (agendamento.preco_estimado_total && Number(agendamento.preco_estimado_total) > 0) {
+          valTotalCalculado = Number(agendamento.preco_estimado_total);
+        } else if (agendamento.preco_total && Number(agendamento.preco_total) > 0) {
+          valTotalCalculado = Number(agendamento.preco_total);
+        } else if (agendamento.valor_total && Number(agendamento.valor_total) > 0) {
+          valTotalCalculado = Number(agendamento.valor_total);
+        }
+      }
+
+      setValorFinal(valTotalCalculado);
       setTomadorNome(agendamento.cliente?.nome || '');
       setTomadorDoc(agendamento.cliente?.documento || agendamento.cliente?.cpf_cnpj || '');
       setTomadorEmail(agendamento.cliente?.email || '');
       setTomadorTelefone(agendamento.cliente?.telefone || '');
 
-      // Constrói discriminação padrão
-      const veiculoTexto = agendamento.veiculo 
-        ? `no veículo ${agendamento.veiculo.modelo || ''} (Placa: ${agendamento.veiculo.placa || 'Sem placa'})`
+      // 2. Constrói discriminação detalhada com lista de serviços, veículo e forma de pagamento
+      const itensLista = (itens && itens.length > 0)
+        ? itens
+        : (agendamento.agendamento_itens || agendamento.itens || []).map((it: any) => ({
+            servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+            preco: Number(it.preco_praticado ?? it.preco_estimado ?? it.preco ?? it.servicos?.preco ?? 0),
+            quantidade: it.quantidade || 1,
+          }));
+
+      const linhasServicos = itensLista.length > 0
+        ? itensLista.map((it: any) => {
+            const subtotal = Number(it.preco || 0) * (it.quantidade || 1);
+            const qtdStr = it.quantidade > 1 ? ` (${it.quantidade}x)` : '';
+            return `• ${it.servico_nome || it.nome || 'Serviço'}${qtdStr}: ${formatarMoeda(subtotal)}`;
+          }).join('\n')
+        : `• ${agendamento.servico?.nome || 'Serviços de Estética Automotiva'}: ${formatarMoeda(valTotalCalculado)}`;
+
+      const veiculoTexto = agendamento.veiculo
+        ? `Veículo: ${agendamento.veiculo.modelo || ''} (Placa: ${agendamento.veiculo.placa || 'Sem placa'}${agendamento.veiculo.cor ? ` · Cor: ${agendamento.veiculo.cor}` : ''})`
         : '';
-      const servicoTexto = agendamento.servico?.nome || 'Serviços de Estética Automotiva';
-      
-      setDiscriminacao(
-        `Serviços de estética e detalhamento automotivo prestados ${veiculoTexto}: ${servicoTexto}. Atendimento OS #${agendamento.numero_os || agendamento.id.slice(0, 6)}.`
-      );
+
+      const osTexto = `Atendimento OS #${agendamento.numero_os || agendamento.id?.slice(0, 6) || ''}`;
+      const pgtoTexto = formaPagamento ? `Forma de Pagamento: ${formaPagamento}` : '';
+
+      const blocoMeta = [veiculoTexto, osTexto, pgtoTexto].filter(Boolean).join(' | ');
+
+      const discriminacaoPadrao = [
+        'SERVIÇOS DE ESTÉTICA E DETALHAMENTO AUTOMOTIVO:',
+        linhasServicos,
+        blocoMeta,
+      ].filter(Boolean).join('\n\n');
+
+      setDiscriminacao(discriminacaoPadrao);
 
       verificarResumoFiscal();
     }
-  }, [isOpen, agendamento, valorTotal]);
+  }, [isOpen, agendamento, valorTotal, itens, formaPagamento]);
 
   const verificarResumoFiscal = async () => {
     setLoadingResumo(true);

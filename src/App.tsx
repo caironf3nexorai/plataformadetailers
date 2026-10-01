@@ -38,6 +38,7 @@ const OrcamentoPublico = lazyWithRetry(() => import('./pages/OrcamentoPublico').
 const Estoque = lazyWithRetry(() => import('./pages/Estoque').then(m => ({ default: m.Estoque })));
 const Financeiro = lazyWithRetry(() => import('./pages/Financeiro').then(m => ({ default: m.Financeiro })));
 const ContasReceber = lazyWithRetry(() => import('./pages/financeiro/ContasReceber').then(m => ({ default: m.ContasReceber })));
+const DespesasFinanceiro = lazyWithRetry(() => import('./pages/financeiro/DespesasFinanceiro').then(m => ({ default: m.DespesasFinanceiro })));
 const ConfigFormasPagamento = lazyWithRetry(() => import('./pages/financeiro/ConfigFormasPagamento').then(m => ({ default: m.ConfigFormasPagamento })));
 const Configuracoes = lazyWithRetry(() => import('./pages/Configuracoes').then(m => ({ default: m.Configuracoes })));
 const Treinamentos = lazyWithRetry(() => import('./pages/Treinamentos').then(m => ({ default: m.Treinamentos })));
@@ -56,6 +57,7 @@ const VisualizarCheckin = lazyWithRetry(() => import('./pages/checkin/Visualizar
 const ExecucaoPage = lazyWithRetry(() => import('./pages/Execucao').then(m => ({ default: m.ExecucaoPage })));
 const VisualizarAtendimento = lazyWithRetry(() => import('./pages/VisualizarAtendimento').then(m => ({ default: m.VisualizarAtendimento })));
 const VistoriaPublica = lazyWithRetry(() => import('./pages/VistoriaPublica').then(m => ({ default: m.VistoriaPublica })));
+const TermoRiscoPublico = lazyWithRetry(() => import('./pages/TermoRiscoPublico').then(m => ({ default: m.TermoRiscoPublico })));
 const CertificadoGarantiaPublico = lazyWithRetry(() => import('./pages/CertificadoGarantiaPublico').then(m => ({ default: m.CertificadoGarantiaPublico })));
 
 // Carregamento Tardio (Lazy Loading) do Módulo Admin da Plataforma
@@ -102,6 +104,7 @@ function App() {
             <Route path="/politica-privacidade" element={<PoliticaPrivacidade />} />
             <Route path="/orcamento/:token" element={<OrcamentoPublico />} />
             <Route path="/vistoria/:token" element={<VistoriaPublica />} />
+            <Route path="/termo-risco/:token" element={<TermoRiscoPublico />} />
             <Route path="/garantia/:codigo" element={<CertificadoGarantiaPublico />} />
             <Route path="/certificado/:codigo" element={<CertificadoGarantiaPublico />} />
             <Route path="/agendar/:slug/agendamento" element={<FluxoAgendamentoOnline />} />
@@ -180,6 +183,8 @@ function App() {
                   <Route path="estoque" element={<Estoque />} />
                   <Route path="financeiro" element={<Financeiro />} />
                   <Route path="financeiro/contas-a-receber" element={<ContasReceber />} />
+                  <Route path="financeiro/despesas" element={<DespesasFinanceiro />} />
+                  <Route path="financeiro/contas" element={<Navigate to="/financeiro/despesas" replace />} />
                   <Route path="financeiro/taxas" element={<ConfigFormasPagamento />} />
                   <Route path="servicos" element={<Servicos />} />
                   <Route path="servicos/novo" element={<FormularioServico />} />

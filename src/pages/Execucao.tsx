@@ -31,6 +31,7 @@ import {
 import { usePermissao } from '../hooks/usePermissao';
 import { ModalFinalizarExecucao } from '../components/execucao/ModalFinalizarExecucao';
 import { ModalOrcamentoComplementar } from '../components/orcamentos/ModalOrcamentoComplementar';
+import { ModalTermoRiscoAtendimento } from '../components/atendimento/ModalTermoRiscoAtendimento';
 import { Cronometro } from '../components/execucao/Cronometro';
 import { useTempoExecucao, obterEstadoDerivadoCronometro, notificarAtualizacaoTempo } from '../hooks/useTempoExecucao';
 import { uploadExecucaoFoto, getEvidenciaSignedUrl } from '../utils/evidencias';
@@ -65,6 +66,7 @@ export const ExecucaoPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [pauseActionLoading, setPauseActionLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [modalFinalizarOpen, setModalFinalizarOpen] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
@@ -80,6 +82,7 @@ export const ExecucaoPage: React.FC = () => {
 
   // Estados de OS e Serviços Complementares
   const [showModalComplementar, setShowModalComplementar] = useState(false);
+  const [showModalTermoRisco, setShowModalTermoRisco] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
     titulo: string;
     mensagem: string;
@@ -185,6 +188,11 @@ export const ExecucaoPage: React.FC = () => {
           desconto: Number(agendamento.desconto_valor || 0),
           forma_pagamento: agendamento.forma_pagamento,
           assinaturaClienteNome: agendamento.cliente?.nome,
+          garantiaMeses: (agendamento as any).garantia_meses ?? 3,
+          incluirTermoRisco: (agendamento as any).incluir_termo_risco ?? false,
+          termoRiscoServico: (agendamento as any).termo_risco_servico || null,
+          termoRiscoObservacoes: (agendamento as any).termo_risco_observacoes || null,
+          termoRiscoTexto: (agendamento as any).termo_risco_texto || null,
         },
         undefined,
         acao
@@ -201,6 +209,7 @@ export const ExecucaoPage: React.FC = () => {
     if (!execucaoId) return;
 
     setLoading(true);
+    setLoadError(null);
     setErrorMsg(null);
 
     try {
@@ -294,7 +303,7 @@ export const ExecucaoPage: React.FC = () => {
       setExecucaoValores(valData || []);
     } catch (err: any) {
       console.error('[Execucao load error]:', err);
-      setErrorMsg('Não foi possível abrir o atendimento. Tente novamente.');
+      setLoadError('Não foi possível abrir o atendimento. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -528,6 +537,7 @@ export const ExecucaoPage: React.FC = () => {
         const { data: fotoData, error: dbErr } = await supabase
           .from('execucao_fotos')
           .insert({
+            tenant_id: tenant.id,
             execucao_id: execucaoId,
             path,
             momento: 'durante',
@@ -713,7 +723,7 @@ export const ExecucaoPage: React.FC = () => {
     }
   };
 
-  if (errorMsg || !execucao) {
+  if (loadError || (!loading && !execucao)) {
     return (
       <div className="min-h-screen bg-graphite-950 text-vapor-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full p-6 bg-graphite-900 border border-graphite-800 rounded-xl text-center flex flex-col items-center gap-4 shadow-xl">
@@ -722,7 +732,7 @@ export const ExecucaoPage: React.FC = () => {
           </div>
           <h2 className="text-lg font-bold text-vapor-100 font-display">Ops! Atendimento indisponível</h2>
           <p className="text-sm text-vapor-400 font-sans leading-relaxed">
-            {errorMsg || 'Não foi possível abrir o atendimento. Tente novamente.'}
+            {loadError || 'Não foi possível abrir o atendimento. Tente novamente.'}
           </p>
           <div className="flex items-center justify-center gap-3 mt-2 w-full">
             <Button onClick={() => loadExecucaoData()} variant="primary" className="flex-1">
@@ -790,15 +800,47 @@ export const ExecucaoPage: React.FC = () => {
               </Button>
             </div>
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setShowModalComplementar(true)}
-              className="h-8 text-[11px] px-2.5 font-bold flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
-            >
-              <Sparkles size={13} className="text-amber-400" />
-              <span>+ Serviço Complementar</span>
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowModalTermoRisco(true)}
+                className={`h-8 text-[11px] px-2.5 font-bold flex items-center gap-1.5 border transition-all ${
+                  (agendamento as any)?.termo_risco_assinado
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 hover:bg-emerald-500/30'
+                    : (agendamento as any)?.incluir_termo_risco
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 hover:bg-amber-500/30'
+                    : 'bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border-graphite-700'
+                }`}
+                title="Registrar risco específico ou vício oculto detectado pós pré-lavagem (CDC)"
+              >
+                {(agendamento as any)?.termo_risco_assinado ? (
+                  <CheckCircle size={13} className="text-emerald-400" />
+                ) : (
+                  <AlertTriangle
+                    size={13}
+                    className={(agendamento as any)?.incluir_termo_risco ? 'text-amber-400' : 'text-vapor-400'}
+                  />
+                )}
+                <span>
+                  {(agendamento as any)?.termo_risco_assinado
+                    ? 'Termo Risco (Assinado)'
+                    : (agendamento as any)?.incluir_termo_risco
+                    ? 'Termo Risco Ativo'
+                    : '+ Termo de Risco'}
+                </span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setShowModalComplementar(true)}
+                className="h-8 text-[11px] px-2.5 font-bold flex items-center gap-1.5 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20"
+              >
+                <Sparkles size={13} className="text-amber-400" />
+                <span>+ Serviço Complementar</span>
+              </Button>
+            </div>
           </div>
 
           {/* CRONÔMETRO GRANDE VISÍVEL A 2 METROS */}
@@ -858,9 +900,19 @@ export const ExecucaoPage: React.FC = () => {
       {/* CONTEÚDO DA EXECUÇÃO */}
       <main className="max-w-xl mx-auto w-full p-4 flex flex-col gap-6">
         {errorMsg && (
-          <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded-lg text-flare-400 text-[13px] flex items-center gap-2">
-            <AlertCircle size={18} className="shrink-0" />
-            <span>{errorMsg}</span>
+          <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded-lg text-flare-400 text-[13px] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="text-flare-400 hover:text-flare-200 text-lg leading-none"
+              title="Fechar"
+            >
+              &times;
+            </button>
           </div>
         )}
 
@@ -875,6 +927,29 @@ export const ExecucaoPage: React.FC = () => {
             >
               &times;
             </button>
+          </div>
+        )}
+
+        {/* BANNER DE RISCO ESPECÍFICO / VÍCIO OCULTO REGISTRADO */}
+        {(agendamento as any)?.incluir_termo_risco && (
+          <div
+            onClick={() => setShowModalTermoRisco(true)}
+            className="p-3 bg-gradient-to-r from-amber-500/15 via-graphite-900 to-graphite-900 border border-amber-500/40 rounded-xl flex items-center justify-between gap-3 cursor-pointer hover:bg-amber-500/20 transition-all shadow-md"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-[12px] font-bold text-amber-300 uppercase tracking-wide truncate">
+                  Risco CDC Registrado: {(agendamento as any).termo_risco_servico || 'Serviço'}
+                </span>
+                <span className="text-[11px] text-vapor-300 truncate">
+                  {(agendamento as any).termo_risco_observacoes || 'Condições e riscos comunicados ao cliente.'}
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] text-amber-400 font-bold shrink-0 underline">
+              Ver / WhatsApp
+            </span>
           </div>
         )}
 
@@ -1419,6 +1494,19 @@ export const ExecucaoPage: React.FC = () => {
           clienteTelefone={agendamento.cliente?.telefone}
           onSuccess={() => {
             loadExecucaoData();
+          }}
+        />
+      )}
+
+      {/* MODAL DE TERMO DE RISCO / VÍCIO OCULTO (CDC) */}
+      {agendamento && (
+        <ModalTermoRiscoAtendimento
+          isOpen={showModalTermoRisco}
+          onClose={() => setShowModalTermoRisco(false)}
+          agendamento={agendamento}
+          execucaoId={execucaoId}
+          onSuccess={(dadosAtualizados) => {
+            setAgendamento((prev: any) => ({ ...prev, ...dadosAtualizados }));
           }}
         />
       )}

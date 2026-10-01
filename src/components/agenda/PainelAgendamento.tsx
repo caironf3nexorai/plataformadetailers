@@ -415,6 +415,11 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
           desconto: Number((agendamento as any).desconto_valor || 0),
           forma_pagamento: (agendamento as any).forma_pagamento,
           assinaturaClienteNome: agendamento.cliente?.nome,
+          garantiaMeses: (agendamento as any).garantia_meses ?? 3,
+          incluirTermoRisco: (agendamento as any).incluir_termo_risco ?? false,
+          termoRiscoServico: (agendamento as any).termo_risco_servico || null,
+          termoRiscoObservacoes: (agendamento as any).termo_risco_observacoes || null,
+          termoRiscoTexto: (agendamento as any).termo_risco_texto || null,
         },
         undefined,
         acao

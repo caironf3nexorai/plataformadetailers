@@ -1,7 +1,8 @@
 import React from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Menu, FlaskConical } from 'lucide-react';
+import { Menu, FlaskConical, BadgeDollarSign } from 'lucide-react';
 import { usePermissao } from '../../hooks/usePermissao';
+import { useAuth } from '../../contexts/AuthContext';
 import { CentralNotificacoesMenu } from '../notificacoes/CentralNotificacoesMenu';
 
 interface TopBarProps {
@@ -34,7 +35,9 @@ const routeNames: Record<string, string> = {
 
 export const TopBar: React.FC<TopBarProps> = ({ onOpenMenu, isMenuOpen }) => {
   const location = useLocation();
-  const { isOperador } = usePermissao();
+  const { isOperador, isDono, isGerente } = usePermissao();
+  const { tenant } = useAuth();
+  const isTenantFree = !tenant?.plano || tenant.plano === 'free';
 
   let title = routeNames[location.pathname];
   if (!title) {
@@ -66,6 +69,17 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenMenu, isMenuOpen }) => {
       </h1>
 
       <div className="flex items-center gap-1">
+        {!isTenantFree && (isDono || isGerente) && (
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('abrir_radar_financeiro'))}
+            title="Radar Financeiro (Cobranças & Contas do Dia)"
+            aria-label="Abrir Radar Financeiro"
+            className="p-2 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-graphite-800/60 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          >
+            <BadgeDollarSign size={20} />
+          </button>
+        )}
         <Link
           to="/diluicao"
           title="Calculadora de Diluição"

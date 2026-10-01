@@ -53,7 +53,7 @@ export const LandingPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-graphite-950 text-vapor-100 font-sans selection:bg-amber-500 selection:text-graphite-950 flex flex-col antialiased">
+    <div className="min-h-screen bg-graphite-950 text-vapor-100 font-sans selection:bg-amber-500 selection:text-graphite-950 flex flex-col antialiased overflow-x-hidden w-full max-w-full">
       {/* ========================================================================= */}
       {/* 1. HEADER NAVEGAÇÃO FLUTUANTE                                             */}
       {/* ========================================================================= */}
@@ -63,9 +63,10 @@ export const LandingPage: React.FC = () => {
           paddingTop: 'env(safe-area-inset-top, 0px)',
         }}
       >
-        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 min-h-[64px] sm:min-h-[80px] h-16 sm:h-20 flex items-center justify-between gap-2">
-          <Link to="/" className="flex items-center gap-2 group transition-transform hover:scale-105 shrink-0">
-            <LogoNuvemWash size="md" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 min-h-[56px] sm:min-h-[80px] h-14 sm:h-20 flex items-center justify-between gap-1.5 sm:gap-4 w-full">
+          <Link to="/" className="flex items-center gap-1.5 group transition-transform hover:scale-105 shrink-0 min-w-0">
+            <LogoNuvemWash size="sm" className="sm:hidden" />
+            <LogoNuvemWash size="md" className="hidden sm:block" />
           </Link>
 
           {/* Links Centrais (Desktop) */}
@@ -89,11 +90,11 @@ export const LandingPage: React.FC = () => {
           </nav>
 
           {/* Botões de Ação */}
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
             <Link to="/entrar">
               <Button
                 variant="ghost"
-                className="text-xs sm:text-sm font-medium text-vapor-200 hover:text-white hover:bg-graphite-800 min-h-[38px] sm:min-h-[40px] px-2.5 sm:px-4"
+                className="text-xs sm:text-sm font-medium text-vapor-200 hover:text-white hover:bg-graphite-800 min-h-[34px] sm:min-h-[40px] px-2 sm:px-4"
               >
                 Entrar
               </Button>
@@ -101,10 +102,11 @@ export const LandingPage: React.FC = () => {
             <Link to="/criar-conta">
               <Button
                 variant="primary"
-                className="text-xs sm:text-sm font-semibold min-h-[38px] sm:min-h-[42px] px-3 sm:px-5 shadow-lg shadow-amber-500/20 flex items-center gap-1.5 whitespace-nowrap"
+                className="text-xs sm:text-sm font-semibold min-h-[34px] sm:min-h-[42px] px-2.5 sm:px-5 shadow-lg shadow-amber-500/20 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
               >
-                <span>Criar Conta Grátis</span>
-                <ArrowRight size={14} className="shrink-0" />
+                <span className="sm:hidden">Criar Conta</span>
+                <span className="hidden sm:inline">Criar Conta Grátis</span>
+                <ArrowRight size={13} className="shrink-0" />
               </Button>
             </Link>
           </div>
@@ -637,13 +639,14 @@ export const LandingPage: React.FC = () => {
             Cadastre-se em menos de 1 minuto, crie sua primeira proposta em 3 níveis e veja a reação do seu cliente.
           </p>
 
-          <Link to="/criar-conta">
+          <Link to="/criar-conta" className="w-full sm:w-auto max-w-full flex justify-center">
             <Button
               variant="primary"
-              className="min-h-[52px] px-8 text-base font-bold shadow-xl shadow-amber-500/25 flex items-center gap-2 group"
+              className="w-full sm:w-auto min-h-[48px] sm:min-h-[52px] px-4 sm:px-8 text-sm sm:text-base font-bold shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2 group max-w-full"
             >
-              <span>Criar Minha Conta Grátis Agora</span>
-              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              <span className="sm:hidden">Criar Conta Grátis Agora</span>
+              <span className="hidden sm:inline">Criar Minha Conta Grátis Agora</span>
+              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform shrink-0" />
             </Button>
           </Link>
 

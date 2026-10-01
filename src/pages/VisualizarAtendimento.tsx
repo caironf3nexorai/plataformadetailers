@@ -37,7 +37,9 @@ import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
 import { ModalEmitirCertificado } from '../components/garantia/ModalEmitirCertificado';
 import { AdesivoParabrisaModal } from '../components/garantia/AdesivoParabrisaModal';
 import { ModalEmitirNFSe } from '../components/atendimento/ModalEmitirNFSe';
+import { ModalTermoRiscoAtendimento } from '../components/atendimento/ModalTermoRiscoAtendimento';
 import { montarLinkWhatsapp } from '../utils/whatsapp';
+import { gerarDanfsePDF } from '../utils/pdfNFSe';
 
 export const VisualizarAtendimento: React.FC = () => {
   const { id: paramId } = useParams<{ id: string }>();
@@ -82,6 +84,9 @@ export const VisualizarAtendimento: React.FC = () => {
   const [modalAdesivoOpen, setModalAdesivoOpen] = useState(false);
   const [notaFiscal, setNotaFiscal] = useState<any | null>(null);
   const [modalNFSeOpen, setModalNFSeOpen] = useState(false);
+  const [modalTermoRiscoOpen, setModalTermoRiscoOpen] = useState(false);
+  const [recebimentos, setRecebimentos] = useState<any[]>([]);
+  const [configFiscal, setConfigFiscal] = useState<any | null>(null);
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
     if (!agendamento || !tenant) return;
@@ -190,6 +195,11 @@ export const VisualizarAtendimento: React.FC = () => {
           assinaturaClienteNome: agendamento.cliente?.nome,
           termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
           termoGarantia: termoGarantia?.texto || null,
+          garantiaMeses: (agendamento as any).garantia_meses ?? 3,
+          incluirTermoRisco: (agendamento as any).incluir_termo_risco ?? false,
+          termoRiscoServico: (agendamento as any).termo_risco_servico || null,
+          termoRiscoObservacoes: (agendamento as any).termo_risco_observacoes || null,
+          termoRiscoTexto: (agendamento as any).termo_risco_texto || null,
         },
         undefined,
         acao
@@ -321,6 +331,16 @@ export const VisualizarAtendimento: React.FC = () => {
             if (nfeData) {
               setNotaFiscal(nfeData);
             }
+
+            // Busca dados da configuração fiscal da oficina (CNPJ, Inscrição Municipal, etc.)
+            const { data: cfgFiscal } = await supabase
+              .from('tenant_config_fiscal')
+              .select('*')
+              .maybeSingle();
+
+            if (cfgFiscal) {
+              setConfigFiscal(cfgFiscal);
+            }
           }
         }
         if (execData) {
@@ -451,6 +471,22 @@ export const VisualizarAtendimento: React.FC = () => {
 
         setFotos({ vistoria: fotosVistoria, durante: fotosDurante, saida: fotosSaida });
 
+        // 7. Buscar Recebimentos Financeiros da Execução / Agendamento
+        if (execId || agendId) {
+          const filterParts = [];
+          if (execId) filterParts.push(`execucao_id.eq.${execId}`);
+          if (agendId) filterParts.push(`agendamento_id.eq.${agendId}`);
+
+          const { data: recData, error: errRec } = await supabase
+            .from('recebimentos')
+            .select('*, forma:tenant_formas_pagamento(nome, tipo)')
+            .or(filterParts.join(','));
+
+          if (!errRec && recData && recData.length > 0) {
+            setRecebimentos(recData);
+          }
+        }
+
         // Buscar ordinal do cliente ("Xº atendimento deste cliente")
         const targetAgend = execData?.agendamentos || agendamento;
         if (targetAgend?.cliente_id && targetAgend?.numero_os) {
@@ -559,6 +595,181 @@ export const VisualizarAtendimento: React.FC = () => {
             CONCLUÍDO
           </span>
         );
+    }
+  };
+
+  const obterItensServicosFormatados = () => {
+    if (!agendamento) return [];
+    const rawItens = (agendamento.agendamento_itens || agendamento.itens || []);
+    return rawItens.map((it: any) => {
+      const valFinalObj = valores.find((v: any) => v.agendamento_item_id === it.id);
+      const precoItem = Number(
+        valFinalObj?.valor_final ??
+        it.preco_praticado ??
+        it.preco_estimado ??
+        it.preco ??
+        it.valor ??
+        it.servicos?.preco ??
+        0
+      );
+
+      return {
+        servico_nome: it.servicos?.nome || it.servico_nome || 'Serviço',
+        categoria_nome: it.categoria?.nome,
+        preco: precoItem,
+        quantidade: it.quantidade || 1,
+      };
+    });
+  };
+
+  const obterValorTotalCalculado = () => {
+    // 1. Tentar pegar o valor final da execução explicitamente faturado
+    if (execucao?.valor_total_final && Number(execucao.valor_total_final) > 0) {
+      return Number(execucao.valor_total_final);
+    }
+
+    // 2. Tentar somar os itens formatados (com valores finais de execucao_valores ou tabela de itens)
+    const itens = obterItensServicosFormatados();
+    const totalItens = itens.reduce((acc: number, it: any) => acc + (Number(it.preco || 0) * Number(it.quantidade || 1)), 0);
+    if (totalItens > 0) {
+      return totalItens;
+    }
+
+    // 3. Tentar os campos do agendamento
+    if (agendamento?.preco_total && Number(agendamento.preco_total) > 0) {
+      return Number(agendamento.preco_total);
+    }
+    if (agendamento?.preco_estimado_total && Number(agendamento.preco_estimado_total) > 0) {
+      return Number(agendamento.preco_estimado_total);
+    }
+    if (agendamento?.valor_total && Number(agendamento.valor_total) > 0) {
+      return Number(agendamento.valor_total);
+    }
+
+    // 4. Tentar somar os recebimentos registrados se existirem
+    if (recebimentos.length > 0) {
+      const totalRec = recebimentos.reduce((acc: number, r: any) => acc + Number(r.valor_bruto || 0), 0);
+      if (totalRec > 0) return totalRec;
+    }
+
+    return 0;
+  };
+
+  const obterTextoFormaPagamento = () => {
+    if (recebimentos && recebimentos.length > 0) {
+      const partes = recebimentos.map((r: any) => {
+        const nomeForma = r.forma?.nome || r.forma?.tipo || 'Pagamento';
+        const parcelas = r.total_parcelas > 1 ? ` (${r.numero_parcela}/${r.total_parcelas}x)` : '';
+        const status = r.status === 'recebido' ? 'Pago' : r.status === 'previsto' ? 'Previsto' : r.status;
+        return `${nomeForma}${parcelas} - ${formatarMoeda(r.valor_bruto)} [${status.toUpperCase()}]`;
+      });
+      return partes.join('; ');
+    }
+
+    if (agendamento?.forma_pagamento) {
+      return String(agendamento.forma_pagamento).toUpperCase();
+    }
+
+    return null;
+  };
+
+  const construirDiscriminacaoServicosPadrao = () => {
+    const itens = obterItensServicosFormatados();
+    const totalCalc = obterValorTotalCalculado();
+
+    const linhasItens = itens.map(
+      (it: any) => `• ${it.servico_nome}${it.quantidade > 1 ? ` (${it.quantidade}x)` : ''}: ${formatarMoeda(Number(it.preco || 0) * (it.quantidade || 1))}`
+    );
+
+    const veiculoInfo = agendamento?.veiculo
+      ? `Veículo: ${agendamento.veiculo.modelo || ''} (Placa: ${agendamento.veiculo.placa || 'Sem placa'}${agendamento.veiculo.cor ? ` · Cor: ${agendamento.veiculo.cor}` : ''})`
+      : '';
+
+    const osInfo = `Atendimento OS #${agendamento?.numero_os || agendamento?.id?.slice(0, 6) || ''}`;
+    const formaPgto = obterTextoFormaPagamento();
+    const pgtoInfo = formaPgto ? `Forma de Pagamento: ${formaPgto}` : '';
+
+    const partes = [
+      'SERVIÇOS DE ESTÉTICA E DETALHAMENTO AUTOMOTIVO:',
+      linhasItens.length > 0 ? linhasItens.join('\n') : `• Serviços de Estética Automotiva: ${formatarMoeda(totalCalc)}`,
+      [veiculoInfo, osInfo, pgtoInfo].filter(Boolean).join(' | '),
+    ];
+
+    return partes.filter(Boolean).join('\n\n');
+  };
+
+  const handleAbrirDanfe = async () => {
+    if (!notaFiscal) return;
+    if (notaFiscal.url_danfe && !notaFiscal.url_danfe.includes('/v2/nfse/')) {
+      window.open(notaFiscal.url_danfe, '_blank');
+      return;
+    }
+
+    const valorCalculado = (Number(notaFiscal.valor_total) > 0)
+      ? Number(notaFiscal.valor_total)
+      : obterValorTotalCalculado();
+
+    const formaPgto = obterTextoFormaPagamento();
+    const statusPgto = recebimentos.some((r: any) => r.status === 'recebido')
+      ? 'PAGO'
+      : (agendamento?.status === 'concluido' ? 'PAGO' : undefined);
+
+    // Se a nota no banco estiver gravada com valor 0, sincroniza no banco em background com o valor correto apurado da OS
+    if (Number(notaFiscal.valor_total || 0) <= 0 && valorCalculado > 0 && notaFiscal.id) {
+      supabase
+        .from('notas_fiscais')
+        .update({ valor_total: valorCalculado })
+        .eq('id', notaFiscal.id)
+        .then(() => {
+          setNotaFiscal((prev: any) => prev ? { ...prev, valor_total: valorCalculado } : prev);
+        });
+    }
+
+    let fiscal = configFiscal;
+    if (!fiscal) {
+      const { data: directCfg } = await supabase
+        .from('tenant_config_fiscal')
+        .select('*')
+        .maybeSingle();
+      if (directCfg) {
+        fiscal = directCfg;
+        setConfigFiscal(directCfg);
+      }
+    }
+
+    try {
+      await gerarDanfsePDF({
+        numero: notaFiscal.numero || '000001',
+        serie: notaFiscal.serie_rps || '1',
+        dataEmissao: notaFiscal.created_at || new Date(),
+        status: notaFiscal.status,
+        ambiente: fiscal?.ambiente || 'homologacao',
+        prestador: {
+          razaoSocial: fiscal?.razao_social || tenant?.razao_social || tenant?.nome || 'Oficina Detailer',
+          nomeFantasia: fiscal?.nome_fantasia || tenant?.nome,
+          cnpj: fiscal?.cnpj || tenant?.documento || '',
+          inscricaoMunicipal: fiscal?.inscricao_municipal || (tenant as any)?.inscricao_municipal || undefined,
+          telefone: tenant?.telefone || undefined,
+          cidade: fiscal?.municipio || tenant?.cidade || undefined,
+          uf: fiscal?.uf || tenant?.uf || undefined,
+        },
+        tomador: {
+          nome: notaFiscal.tomador_nome || agendamento?.cliente?.nome || 'Cliente',
+          cpfCnpj: notaFiscal.tomador_cpf_cnpj || agendamento?.cliente?.documento || undefined,
+          telefone: agendamento?.cliente?.telefone || undefined,
+          email: agendamento?.cliente?.email || undefined,
+        },
+        servico: {
+          discriminacao: notaFiscal.discriminacao || construirDiscriminacaoServicosPadrao(),
+          valorTotal: valorCalculado,
+          aliquotaIss: 2.0,
+        },
+        numeroOS: agendamento?.numero_os,
+        formaPagamento: formaPgto,
+        statusPagamento: statusPgto,
+      }, 'download');
+    } catch (err) {
+      console.error('[VisualizarAtendimento] Erro ao gerar DANFSe PDF:', err);
     }
   };
 
@@ -673,18 +884,51 @@ export const VisualizarAtendimento: React.FC = () => {
             </Button>
           )}
 
-          {/* Botão / Link de NFS-e */}
+          {/* Botão de Termo de Risco / Vício Oculto */}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setModalTermoRiscoOpen(true)}
+            className={`flex items-center gap-1.5 text-[12px] border shrink-0 font-semibold transition-all ${
+              (agendamento as any)?.termo_risco_assinado
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30'
+                : (agendamento as any)?.incluir_termo_risco
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30'
+                : 'bg-graphite-800 hover:bg-graphite-700 text-vapor-300 border-graphite-600'
+            }`}
+            title="Registrar risco técnico específico ou vício oculto pós pré-lavagem (CDC)"
+          >
+            {(agendamento as any)?.termo_risco_assinado ? (
+              <CheckCircle2 size={16} className="text-emerald-400" />
+            ) : (
+              <AlertTriangle
+                size={16}
+                className={(agendamento as any)?.incluir_termo_risco ? 'text-amber-400' : 'text-vapor-400'}
+              />
+            )}
+            <span className="hidden sm:inline">
+              {(agendamento as any)?.termo_risco_assinado
+                ? 'Termo Risco (Assinado)'
+                : (agendamento as any)?.incluir_termo_risco
+                ? 'Termo Risco (Pendente)'
+                : 'Termo de Risco CDC'}
+            </span>
+            <span className="sm:hidden">
+              {(agendamento as any)?.termo_risco_assinado ? 'Risco Assinado' : 'Risco CDC'}
+            </span>
+          </Button>
+
+          {/* Botão de Visualização / Impressão de NFS-e */}
           {notaFiscal ? (
-            <a
-              href={notaFiscal.url_danfe || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[12px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 px-3 py-1.5 rounded-lg shrink-0 font-bold transition"
-              title="Visualizar DANFE / PDF da Nota Fiscal Emitida"
+            <button
+              type="button"
+              onClick={handleAbrirDanfe}
+              className="flex items-center gap-1.5 text-[12px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/25 px-3 py-1.5 rounded-lg shrink-0 font-bold transition cursor-pointer"
+              title="Visualizar e Baixar DANFSe (PDF Oficial)"
             >
               <Receipt size={16} className="text-emerald-400" />
               <span>NFS-e #{notaFiscal.numero || 'Emitida'}</span>
-            </a>
+            </button>
           ) : podeVerCusto ? (
             <Button
               type="button"
@@ -1221,6 +1465,55 @@ export const VisualizarAtendimento: React.FC = () => {
             </div>
           )}
 
+          {/* Termo de Risco Específico / Vício Oculto (CDC) */}
+          {(agendamento as any)?.incluir_termo_risco ? (
+            <div className="p-3.5 bg-gradient-to-r from-amber-500/15 via-graphite-850 to-graphite-900 rounded-xl border border-amber-500/40 flex flex-col gap-2 shadow-md">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[12px] text-amber-400 font-sans font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <AlertTriangle size={15} />
+                  Termo de Ciência e Autorização com Risco Específico (Folha Separada CDC)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setModalTermoRiscoOpen(true)}
+                  className="px-2.5 py-1 text-[11px] font-sans font-bold rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition-colors"
+                >
+                  Gerenciar / Enviar WhatsApp
+                </button>
+              </div>
+
+              <div className="text-[12px] text-vapor-200">
+                <span className="text-vapor-400 font-medium">Serviço com Risco: </span>
+                <strong className="text-amber-300 font-semibold">{(agendamento as any).termo_risco_servico || 'Serviço com Risco'}</strong>
+              </div>
+
+              {(agendamento as any).termo_risco_observacoes && (
+                <div className="p-2.5 bg-graphite-950/80 rounded border border-amber-500/20 text-[11.5px] text-vapor-300 leading-relaxed font-sans">
+                  <strong className="text-amber-400/90 block mb-0.5">Riscos / Vício Informado:</strong>
+                  {(agendamento as any).termo_risco_observacoes}
+                </div>
+              )}
+
+              <span className="text-[11px] text-vapor-400 italic">
+                * Este termo é emitido em folha exclusiva com assinatura do cliente na impressão da Ordem de Serviço (OS).
+              </span>
+            </div>
+          ) : (
+            <div className="p-3 bg-graphite-800/40 rounded border border-dashed border-graphite-700 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-vapor-400 text-[12px]">
+                <AlertTriangle size={15} className="text-vapor-500" />
+                <span>Nenhum risco técnico ou vício oculto registrado para este atendimento.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalTermoRiscoOpen(true)}
+                className="text-[11px] text-amber-400 hover:text-amber-300 font-bold hover:underline"
+              >
+                + Registrar Risco (Pós Pré-Lavagem)
+              </button>
+            </div>
+          )}
+
           {/* Card Especial: Certificado Digital de Garantia com QR Code */}
           {certificadoExistente ? (
             <div className="p-4 bg-gradient-to-r from-amber-500/10 via-graphite-850 to-graphite-900 rounded-xl border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
@@ -1448,7 +1741,22 @@ export const VisualizarAtendimento: React.FC = () => {
             setNotaFiscal(novaNota);
           }}
           agendamento={agendamento}
-          valorTotal={Number(execucao?.valor_total_final ?? agendamento?.preco_estimado_total ?? agendamento?.preco_total ?? 0)}
+          valorTotal={obterValorTotalCalculado()}
+          itens={obterItensServicosFormatados()}
+          formaPagamento={obterTextoFormaPagamento()}
+        />
+      )}
+
+      {/* Modal Termo de Risco / Vício Oculto (CDC) */}
+      {modalTermoRiscoOpen && agendamento && (
+        <ModalTermoRiscoAtendimento
+          isOpen={modalTermoRiscoOpen}
+          onClose={() => setModalTermoRiscoOpen(false)}
+          agendamento={agendamento}
+          execucaoId={execucao?.id}
+          onSuccess={(dadosAtualizados) => {
+            setAgendamento((prev: any) => ({ ...prev, ...dadosAtualizados }));
+          }}
         />
       )}
     </div>

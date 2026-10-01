@@ -22,7 +22,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import {
   slugifyGrupo,
@@ -40,6 +41,7 @@ import {
 } from '../../utils/duracao';
 import { AlertaErro } from '../../components/ui/AlertaErro';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
+import { BIBLIOTECA_RISCOS_SERVICOS, contemPalavraChave } from '../../types/termos';
 
 const GRUPOS_SUGESTOES = [
   'Lavagem',
@@ -114,6 +116,30 @@ export const FormularioServico: React.FC = () => {
   const [garantiaIntervaloDias, setGarantiaIntervaloDias] = useState<number>(60);
   const [garantiaProdutoPadrao, setGarantiaProdutoPadrao] = useState('');
   const [garantiaCuidados, setGarantiaCuidados] = useState('');
+
+  // Estados de Termo de Ciência e Risco Específico
+  const [temRiscoEspecifico, setTemRiscoEspecifico] = useState(false);
+  const [riscosEspecificosPadrao, setRiscosEspecificosPadrao] = useState('');
+  const [categoriaRiscoFiltro, setCategoriaRiscoFiltro] = useState<string>('todos');
+
+  const handleDetectarRiscosPeloNome = () => {
+    const textoAnalise = `${nome} ${grupo}`.toLowerCase();
+    const detectados = BIBLIOTECA_RISCOS_SERVICOS.filter((item) =>
+      item.palavrasChave.some((kw) => contemPalavraChave(textoAnalise, kw))
+    );
+
+    if (detectados.length === 0) {
+      return;
+    }
+
+    const textos = detectados.map((d) => d.riscoPadraoCurto);
+    setTemRiscoEspecifico(true);
+    setRiscosEspecificosPadrao((prev) => {
+      if (!prev.trim()) return textos.join('\n');
+      const novos = textos.filter((t) => !prev.includes(t));
+      return novos.length > 0 ? `${prev.trim()}\n${novos.join('\n')}` : prev;
+    });
+  };
 
   // Matriz de preços local para o serviço específico
   const [servicosDoTenant, setServicosDoTenant] = useState<Array<{ id: string; nome: string; grupo: string; ativo?: boolean }>>([]);
@@ -219,6 +245,8 @@ export const FormularioServico: React.FC = () => {
           setGarantiaIntervaloDias(s.garantia_intervalo_dias || 60);
           setGarantiaProdutoPadrao(s.garantia_produto_padrao || '');
           setGarantiaCuidados(s.garantia_cuidados || '');
+          setTemRiscoEspecifico(s.tem_risco_especifico || false);
+          setRiscosEspecificosPadrao(s.riscos_especificos_padrao || '');
 
           if (s.unidade_duracao === 'dias' || s.unidade_duracao === 'horas' || s.unidade_duracao === 'min') {
             servicoUnidadeSalva = s.unidade_duracao;
@@ -462,6 +490,8 @@ export const FormularioServico: React.FC = () => {
         garantia_intervalo_dias: temGarantia ? (Number(garantiaIntervaloDias) || 60) : null,
         garantia_produto_padrao: temGarantia ? (garantiaProdutoPadrao.trim() || null) : null,
         garantia_cuidados: temGarantia ? (garantiaCuidados.trim() || null) : null,
+        tem_risco_especifico: temRiscoEspecifico,
+        riscos_especificos_padrao: temRiscoEspecifico ? (riscosEspecificosPadrao.trim() || null) : null,
       };
 
       // 1. Identifica se já existe serviço com este mesmo nome no tenant
@@ -1180,6 +1210,7 @@ export const FormularioServico: React.FC = () => {
                       onChange={(e) => setGarantiaMeses(Number(e.target.value))}
                       className="bg-graphite-900 border border-graphite-600 rounded p-2.5 font-sans text-[13px] text-vapor-100 outline-none focus:border-amber-500 transition-colors"
                     >
+                      <option value={1}>1 mês</option>
                       <option value={3}>3 meses (90 dias)</option>
                       <option value={6}>6 meses</option>
                       <option value={12}>12 meses (1 ano)</option>
@@ -1235,6 +1266,139 @@ export const FormularioServico: React.FC = () => {
                   />
                   <span className="font-sans text-[10.5px] text-vapor-500">
                     Esse texto será impresso no certificado e exibido quando o cliente escanear o QR Code.
+                  </span>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* Seção 5.1: Termo de Ciência & Risco Específico (CDC) */}
+          <Card className="p-5 bg-graphite-800 border-graphite-600 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-graphite-700 pb-2">
+              <div>
+                <h3 className="font-display text-[13px] text-vapor-300 uppercase tracking-widest flex items-center gap-1.5">
+                  <ShieldAlert size={16} className="text-amber-400" />
+                  <span>Termo de Ciência & Risco Específico (CDC)</span>
+                </h3>
+                <p className="font-sans text-[11px] text-vapor-400 mt-0.5">
+                  Gera automaticamente termo de ciência para o cliente assinar na contratação deste serviço.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={temRiscoEspecifico}
+                  onChange={(e) => setTemRiscoEspecifico(e.target.checked)}
+                  className="w-4 h-4 rounded bg-graphite-900 border-graphite-600 text-amber-500 focus:ring-0"
+                />
+                <span className="font-sans text-[12px] text-vapor-200 font-semibold">Exige Termo de Risco</span>
+              </label>
+            </div>
+
+            {temRiscoEspecifico && (
+              <div className="flex flex-col gap-3 pt-1">
+                <div className="flex flex-col gap-1">
+                  <label className="font-sans text-[12px] text-vapor-300 font-medium">
+                    Riscos Inerentes / Específicos deste Serviço (Preenchimento Automático)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Ex: Risco de infiltração em módulos elétricos ressecados, conectores sem vedação ou chicotes deteriorados preexistentes..."
+                    value={riscosEspecificosPadrao}
+                    onChange={(e) => setRiscosEspecificosPadrao(e.target.value)}
+                    className="w-full bg-graphite-900 border border-graphite-600 rounded p-2.5 font-sans text-[12px] text-vapor-100 outline-none focus:border-amber-500 transition-colors resize-none"
+                  />
+                  <div className="flex flex-col gap-2 mt-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-vapor-400 font-semibold uppercase tracking-wider">
+                          Biblioteca Técnica CDC (24 Riscos):
+                        </span>
+                        {nome.trim().length > 2 && (
+                          <button
+                            type="button"
+                            onClick={handleDetectarRiscosPeloNome}
+                            className="text-[10px] font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded transition-all flex items-center gap-1 shadow-sm"
+                            title="Cruza automaticamente o nome e grupo do serviço com as regras do CDC"
+                          >
+                            <Sparkles size={11} className="text-amber-400" />
+                            <span>Auto-detectar pelo Nome</span>
+                          </button>
+                        )}
+                      </div>
+                      {riscosEspecificosPadrao && (
+                        <button
+                          type="button"
+                          onClick={() => setRiscosEspecificosPadrao('')}
+                          className="text-[10px] text-red-400 hover:text-red-300 underline"
+                        >
+                          Limpar campo
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filtros de Categoria da Biblioteca */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
+                      {[
+                        { id: 'todos', label: 'Todos' },
+                        { id: 'lavagem', label: 'Lavagem' },
+                        { id: 'vidros', label: 'Vidros' },
+                        { id: 'polimento', label: 'Polimento' },
+                        { id: 'reparo', label: 'Reparos/PDR' },
+                        { id: 'protecao', label: 'Proteção/PPF' },
+                        { id: 'interior', label: 'Interior' },
+                        { id: 'especial', label: 'Especiais' },
+                      ].map((cat) => {
+                        const count = cat.id === 'todos' 
+                          ? BIBLIOTECA_RISCOS_SERVICOS.length 
+                          : BIBLIOTECA_RISCOS_SERVICOS.filter((i) => i.categoria === cat.id).length;
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setCategoriaRiscoFiltro(cat.id)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border transition-all whitespace-nowrap ${
+                              categoriaRiscoFiltro === cat.id
+                                ? 'bg-amber-500 text-graphite-950 font-bold border-amber-400'
+                                : 'bg-graphite-900 text-vapor-400 border-graphite-700 hover:text-vapor-200'
+                            }`}
+                          >
+                            {cat.label} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Chips de Inserção com 1 clique */}
+                    <div className="flex items-center gap-1.5 flex-wrap max-h-36 overflow-y-auto p-1 bg-graphite-950/40 rounded-lg border border-graphite-800">
+                      {BIBLIOTECA_RISCOS_SERVICOS.filter(
+                        (item) => categoriaRiscoFiltro === 'todos' || item.categoria === categoriaRiscoFiltro
+                      ).map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            if (!riscosEspecificosPadrao.trim()) {
+                              setRiscosEspecificosPadrao(item.riscoPadraoCurto);
+                            } else if (!riscosEspecificosPadrao.includes(item.riscoPadraoCurto)) {
+                              setRiscosEspecificosPadrao((prev) => `${prev.trim()}\n${item.riscoPadraoCurto}`);
+                            }
+                          }}
+                          title={`${item.titulo}: ${item.riscoPadraoCurto}`}
+                          className="text-[10.5px] bg-graphite-900 hover:bg-graphite-700 active:scale-95 text-vapor-300 hover:text-amber-400 px-2 py-0.5 rounded border border-graphite-700 hover:border-amber-500/40 transition-all flex items-center gap-1"
+                        >
+                          <span className="text-amber-400 font-bold">+</span>
+                          <span>{item.badgeLabel}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg flex items-start gap-2.5 text-xs text-amber-200">
+                  <ShieldAlert size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">
+                    <strong>Preenchimento Automático:</strong> Ao adicionar este serviço a um orçamento ou OS, o Termo de Ciência e Autorização do CDC será pré-preenchido com estes riscos e com os dados do cliente, veículo e sua oficina em folha separada.
                   </span>
                 </div>
               </div>

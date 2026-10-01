@@ -53,9 +53,13 @@ export const AdminPlanos: React.FC = () => {
   const RECURSOS_PADRAO = [
     { chave: 'clientes', nome: 'Clientes Cadastrados', grupo: 'Base de Dados' },
     { chave: 'agendamentos', nome: 'Agendamentos / Mês', grupo: 'Operacional' },
+    { chave: 'atendimentos_mes', nome: 'Atendimentos Realizados / Mês', grupo: 'Operacional' },
     { chave: 'execucoes', nome: 'Vistorias / Execuções por Mês', grupo: 'Operacional' },
+    { chave: 'orcamentos_mes', nome: 'Orçamentos Criados / Mês', grupo: 'Comercial' },
     { chave: 'membros', nome: 'Membros / Operadores da Equipe', grupo: 'Gestão' },
-    { chave: 'servicos', nome: 'Serviços / Produtos no Catálogo', grupo: 'Catálogo' },
+    { chave: 'usuarios', nome: 'Usuários com Acesso ao Sistema', grupo: 'Gestão' },
+    { chave: 'servicos', nome: 'Serviços Ativos no Catálogo', grupo: 'Catálogo' },
+    { chave: 'produtos', nome: 'Produtos no Estoque', grupo: 'Estoque' },
     { chave: 'retencao_fotos_execucao_dias', nome: 'Retenção de Fotos (Dias)', grupo: 'Armazenamento' },
     { chave: 'atendimentos_preservados_limite', nome: 'Atendimentos Preservados (Cota Fotos)', grupo: 'Armazenamento' },
     { chave: 'notas_fiscais_mes', nome: 'Notas Fiscais Emitidas / Mês (Focus NFS-e)', grupo: 'Fiscal & Financeiro' },
@@ -131,11 +135,23 @@ export const AdminPlanos: React.FC = () => {
   const [bloqueioAtivo, setBloqueioAtivo] = useState(false);
   const [alterandoBloqueio, setAlterandoBloqueio] = useState(false);
 
+  const [trialCadastroAtivo, setTrialCadastroAtivo] = useState(true);
+  const [trialDiasPadrao, setTrialDiasPadrao] = useState(15);
+  const [alterandoTrial, setAlterandoTrial] = useState(false);
+
   const fetchConfigPlataforma = async () => {
     try {
       const { data } = await supabase.rpc('obter_config_plataforma');
-      if (data && typeof data.bloqueio_planos_ativo === 'boolean') {
-        setBloqueioAtivo(data.bloqueio_planos_ativo);
+      if (data) {
+        if (typeof data.bloqueio_planos_ativo === 'boolean') {
+          setBloqueioAtivo(data.bloqueio_planos_ativo);
+        }
+        if (typeof data.trial_cadastro_ativo === 'boolean') {
+          setTrialCadastroAtivo(data.trial_cadastro_ativo);
+        }
+        if (typeof data.trial_dias_padrao === 'number') {
+          setTrialDiasPadrao(data.trial_dias_padrao);
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar configuracao da plataforma:', err);
@@ -159,6 +175,29 @@ export const AdminPlanos: React.FC = () => {
       setMsg({ type: 'error', text: 'Erro ao alterar chave de bloqueio: ' + err.message });
     } finally {
       setAlterandoBloqueio(false);
+    }
+  };
+
+  const handleToggleTrialCadastro = async (novoValor: boolean) => {
+    if (isReadOnly) return;
+    setAlterandoTrial(true);
+    try {
+      const { error } = await supabase.rpc('admin_alterar_trial_cadastro', {
+        p_ativo: novoValor,
+        p_dias: trialDiasPadrao
+      });
+      if (error) throw error;
+      setTrialCadastroAtivo(novoValor);
+      setMsg({
+        type: 'success',
+        text: novoValor
+          ? `Degustação gratuita no cadastro (Trial de ${trialDiasPadrao} dias Pro) ATIVADA para novos usuários!`
+          : 'Degustação gratuita no cadastro DESATIVADA. Novos usuários entrarão diretamente no Plano Free sem dias grátis de Pro.'
+      });
+    } catch (err: any) {
+      setMsg({ type: 'error', text: 'Erro ao alterar configuração de trial de cadastro: ' + err.message });
+    } finally {
+      setAlterandoTrial(false);
     }
   };
 
@@ -309,6 +348,45 @@ export const AdminPlanos: React.FC = () => {
           </label>
           <span className="text-xs font-bold text-slate-200">
             {bloqueioAtivo ? 'Bloqueio Ligado' : 'Chave Desligada'}
+          </span>
+        </div>
+      </div>
+
+      {/* Banner da Chave do Trial de Cadastro (15 Dias Grátis) */}
+      <div className={`p-5 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
+        trialCadastroAtivo
+          ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
+          : 'bg-slate-900 border-slate-800 shadow-lg'
+      }`}>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-mono uppercase tracking-wider ${
+              trialCadastroAtivo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-300'
+            }`}>
+              {trialCadastroAtivo ? `Degustação Ativa (${trialDiasPadrao} Dias Pro)` : 'Degustação Desativada (Inicia Free)'}
+            </span>
+            <span className="text-xs text-slate-400 font-mono">Primeiro Acesso de Novos Usuários</span>
+          </div>
+          <p className="text-xs text-slate-300 font-sans max-w-3xl">
+            {trialCadastroAtivo
+              ? `Novos usuários que criam conta ganham automaticamente ${trialDiasPadrao} dias de degustação gratuita no Plano Pro. Após os ${trialDiasPadrao} dias, o sistema solicita a assinatura.`
+              : 'Degustação desligada. Novos usuários entram diretamente no Plano Free sem dias grátis de Pro (exigindo contratação imediata para recursos Pro/Studio).'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={trialCadastroAtivo}
+              disabled={isReadOnly || alterandoTrial}
+              onChange={(e) => handleToggleTrialCadastro(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+          <span className="text-xs font-bold text-slate-200">
+            {trialCadastroAtivo ? '15 Dias Ativo' : 'Desligado'}
           </span>
         </div>
       </div>

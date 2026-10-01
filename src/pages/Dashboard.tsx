@@ -100,6 +100,7 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { tenant, profile, user } = useAuth();
   const { isOperador } = usePermissao();
+  const isTenantFree = !tenant?.plano || tenant.plano === 'free';
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1041,43 +1042,37 @@ export const Dashboard: React.FC = () => {
             </p>
           </Card>
 
-          {/* Alerta 4: Contas Vencidas */}
-          <Card
-            onClick={() => {
-              if ((acao?.contas_vencidas_count || 0) > 0) {
-                setModalAcao({
-                  titulo: 'Contas a Receber Vencidas',
-                  tipo: 'contas',
-                  itens: acao?.contas_vencidas_lista || []
-                });
-              } else {
-                navigate('/financeiro/contas-a-receber');
-              }
-            }}
-            className={`p-4 bg-graphite-800 border-graphite-600 hover:border-amber-500/60 transition-all cursor-pointer flex flex-col justify-between gap-3 group ${
-              (acao?.contas_vencidas_count || 0) > 0 ? 'border-amber-500/80 bg-amber-500/5' : ''
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertCircle
-                  size={18}
-                  className={(acao?.contas_vencidas_count || 0) > 0 ? 'text-amber-500' : 'text-vapor-400'}
-                />
-                <span className="font-sans text-xs font-semibold text-vapor-200">Contas Vencidas</span>
+          {/* Alerta 4: Contas Vencidas & Fiados (Radar Financeiro - Exclusivo para planos com módulo financeiro) */}
+          {!isTenantFree && (
+            <Card
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('abrir_radar_financeiro'));
+              }}
+              className={`p-4 bg-graphite-800 border-graphite-600 hover:border-amber-500/60 transition-all cursor-pointer flex flex-col justify-between gap-3 group ${
+                (acao?.contas_vencidas_count || 0) > 0 ? 'border-amber-500/80 bg-amber-500/5' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle
+                    size={18}
+                    className={(acao?.contas_vencidas_count || 0) > 0 ? 'text-amber-500' : 'text-vapor-400'}
+                  />
+                  <span className="font-sans text-xs font-semibold text-vapor-200">Radar & Fiados Vencidos</span>
+                </div>
+                <span
+                  className={`font-mono text-lg font-bold ${
+                    (acao?.contas_vencidas_count || 0) > 0 ? 'text-amber-500' : 'text-vapor-400'
+                  }`}
+                >
+                  {acao?.contas_vencidas_count || 0}
+                </span>
               </div>
-              <span
-                className={`font-mono text-lg font-bold ${
-                  (acao?.contas_vencidas_count || 0) > 0 ? 'text-amber-500' : 'text-vapor-400'
-                }`}
-              >
-                {acao?.contas_vencidas_count || 0}
-              </span>
-            </div>
-            <p className="font-sans text-xs text-vapor-400">
-              Títulos a receber pendentes com data de vencimento ultrapassada.
-            </p>
-          </Card>
+              <p className="font-sans text-xs text-vapor-400">
+                Vencimentos e fiados do dia. Clique para cobrar no WhatsApp ou dar baixa.
+              </p>
+            </Card>
+          )}
 
           {/* Alerta 5: Agendamentos Sem Confirmação */}
           <Card

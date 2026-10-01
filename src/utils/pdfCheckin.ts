@@ -42,6 +42,14 @@ interface PDFCheckinData {
   pdfOcultarMarcaDagua?: boolean | null;
   termoResponsabilidade?: string | null;
   termoGarantia?: string | null;
+  garantiaMeses?: number | null;
+  incluirTermoRisco?: boolean | null;
+  termoRiscoServico?: string | null;
+  termoRiscoObservacoes?: string | null;
+  termoRiscoTexto?: string | null;
+  assinaturaClienteNome?: string | null;
+  assinaturaTecnicoNome?: string | null;
+  responsavel_nome?: string | null;
 }
 
 /**
@@ -445,60 +453,91 @@ export async function gerarPDFCheckin(
       externo: 'Exterior',
     };
     if (map[key]) return map[key];
-    return key.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+    const s = key.replace(/_/g, ' ');
+    return s.charAt(0).toUpperCase() + s.slice(1);
   };
 
-  const formatarValorEstado = (val: string): string => {
-    if (val === 'ok') return 'OK';
-    if (val === 'queimado') return 'QUEIMADO';
-    if (val === 'baixo') return 'BAIXO';
-    if (val === 'medio') return 'MÉDIO';
-    if (val === 'alto') return 'ALTO';
-    if (val === 'ruim') return 'RUIM';
-    if (val === 'limpo') return 'LIMPO';
-    if (val === 'sujo') return 'SUJO';
-    if (val === 'extremo') return 'EXTREMO';
-    if (val === 'avariado') return 'AVARIADO';
-    return val.toUpperCase();
+  const formatarValorEstado = (val: string): { texto: string; cor: [number, number, number] } => {
+    const v = (val || '').toLowerCase().trim();
+    switch (v) {
+      case 'queimado':
+      case 'ruim':
+      case 'baixo':
+      case 'avariado':
+      case 'ausente':
+      case 'nao':
+      case 'não':
+        return { texto: v === 'nao' || v === 'não' ? 'NÃO' : v.toUpperCase(), cor: [248, 113, 113] }; // Vermelho Coral
+      case 'sujo':
+      case 'extremo':
+      case 'alto':
+        return { texto: v.toUpperCase(), cor: [251, 191, 36] }; // Âmbar Atenção
+      case 'ok':
+      case 'limpo':
+      case 'bom':
+      case 'presente':
+      case 'sim':
+        return { texto: v === 'sim' ? 'SIM' : v.toUpperCase(), cor: [52, 211, 153] }; // Verde Esmeralda
+      case 'medio':
+      case 'médio':
+        return { texto: 'MÉDIO', cor: [228, 228, 231] }; // Branco Neutro
+      default:
+        return { texto: v.replace(/_/g, ' ').toUpperCase(), cor: [228, 228, 231] };
+    }
   };
 
   // Preparar listas omitindo "nao_testado" / "nao_verificado"
   const ilumEntries = Object.entries(checkin.iluminacao || {})
     .filter(([_, v]) => v !== 'nao_testado')
-    .map(([k, v]) => ({ label: formatarLabelItem(k), val: formatarValorEstado(v), raw: v }));
+    .map(([k, v]) => {
+      const est = formatarValorEstado(v);
+      return { label: formatarLabelItem(k), val: est.texto, cor: est.cor, raw: v };
+    });
 
   const fluidoEntries = Object.entries(checkin.fluidos || {})
     .filter(([_, v]) => v !== 'nao_verificado')
-    .map(([k, v]) => ({ label: formatarLabelItem(k), val: formatarValorEstado(v), raw: v }));
+    .map(([k, v]) => {
+      const est = formatarValorEstado(v);
+      return { label: formatarLabelItem(k), val: est.texto, cor: est.cor, raw: v };
+    });
 
   const sujEntries = Object.entries(checkin.sujidade || {})
-    .map(([k, v]) => ({ label: formatarLabelItem(k), val: formatarValorEstado(v), raw: v }));
+    .map(([k, v]) => {
+      const est = formatarValorEstado(v);
+      return { label: formatarLabelItem(k), val: est.texto, cor: est.cor, raw: v };
+    });
 
-  const estepeTxt = checkin.estepe === true ? 'Sim' : checkin.estepe === false ? 'Não' : 'Não verificado';
+  const estepeStatus = checkin.estepe === true
+    ? { val: 'PRESENTE', cor: [52, 211, 153] as [number, number, number] }
+    : checkin.estepe === false
+    ? { val: 'AUSENTE', cor: [248, 113, 113] as [number, number, number] }
+    : { val: 'NÃO VERIFICADO', cor: [161, 161, 170] as [number, number, number] };
 
   // Largura útil de cada coluna no bloco de inspeção
   const colW = (usableWidth - 6) / 2; // 87mm por coluna
   const col1X = pageMargin + 4;
   const col2X = pageMargin + usableWidth / 2 + 3;
 
-  // Formatação humanizada das Luzes do Painel
+  // Formatação padronizada em CAPSLOCK das Luzes do Painel
   const mapLuzesPainel: Record<string, string> = {
-    injecao: 'Injeção eletrônica',
-    bateria: 'Bateria / Alternador',
-    oleo: 'Pressão do óleo',
+    injecao: 'INJEÇÃO ELETRÔNICA',
+    bateria: 'BATERIA / ALTERNADOR',
+    oleo: 'PRESSÃO DO ÓLEO',
     abs: 'ABS',
-    airbag: 'Airbag',
-    temperatura: 'Temperatura motor',
-    freio: 'Freio / Fluido',
-    tpms: 'Pressão pneus (TPMS)',
-    motor: 'Check engine',
+    airbag: 'AIRBAG',
+    temperatura: 'TEMPERATURA DO MOTOR',
+    freio: 'FREIO / FLUIDO',
+    tpms: 'PRESSÃO PNEUS (TPMS)',
+    motor: 'CHECK ENGINE',
+    combustivel: 'COMBUSTÍVEL RESERVA',
   };
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
-  const luzesTextoCompleto = checkin.luzes_painel && checkin.luzes_painel.length > 0
-    ? checkin.luzes_painel.map((l) => mapLuzesPainel[l] || l.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())).join(', ')
-    : 'Nenhuma luz de advertência acesa';
+  const temLuzes = Boolean(checkin.luzes_painel && checkin.luzes_painel.length > 0);
+  const luzesTextoCompleto = temLuzes
+    ? checkin.luzes_painel.map((l) => mapLuzesPainel[l] || l.replace(/_/g, ' ').toUpperCase()).join(', ')
+    : 'NENHUMA LUZ DE ADVERTÊNCIA ACESA';
   const luzesLines: string[] = doc.splitTextToSize(luzesTextoCompleto, colW - 4);
 
   const obsLines: string[] = checkin.observacoes
@@ -509,8 +548,7 @@ export async function gerarPDFCheckin(
   const countLeft = 2 + Math.max(ilumEntries.length, 1) + Math.max(fluidoEntries.length, 1);
   const countRight = 2 + Math.max(sujEntries.length, 1) + 2 + luzesLines.length + obsLines.length;
   const maxLines = Math.max(countLeft, countRight);
-  // Adiciona 10mm de folga segura (+ 4mm de padding inferior) para garantir que fluidos não fiquem cortados
-  const boxHeight = Math.max(maxLines * 4.5 + 10, 40);
+  const boxHeight = Math.max(maxLines * 4.5 + 10, 42);
 
   // Desenhar bloco de fundo com altura calculada
   doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
@@ -523,10 +561,10 @@ export async function gerarPDFCheckin(
 
   // --- COLUNA 1: ILUMINAÇÃO E FLUIDOS ---
   doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
   doc.text('ILUMINAÇÃO', col1X, curY1);
-  curY1 += 4;
+  curY1 += 4.5;
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
@@ -539,8 +577,7 @@ export async function gerarPDFCheckin(
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
       doc.text(`${it.label}: `, col1X, curY1);
       const lWidth = doc.getTextWidth(`${it.label}: `);
-      if (it.raw === 'queimado') doc.setTextColor(248, 113, 113);
-      else doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.setTextColor(it.cor[0], it.cor[1], it.cor[2]);
       doc.setFont('helvetica', 'bold');
       doc.text(it.val, col1X + lWidth, curY1);
       doc.setFont('helvetica', 'normal');
@@ -550,10 +587,10 @@ export async function gerarPDFCheckin(
 
   curY1 += 2;
   doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
   doc.text('FLUIDOS E NÍVEIS', col1X, curY1);
-  curY1 += 4;
+  curY1 += 4.5;
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
@@ -566,8 +603,7 @@ export async function gerarPDFCheckin(
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
       doc.text(`${it.label}: `, col1X, curY1);
       const lWidth = doc.getTextWidth(`${it.label}: `);
-      if (it.raw === 'baixo' || it.raw === 'ruim') doc.setTextColor(248, 113, 113);
-      else doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.setTextColor(it.cor[0], it.cor[1], it.cor[2]);
       doc.setFont('helvetica', 'bold');
       doc.text(it.val, col1X + lWidth, curY1);
       doc.setFont('helvetica', 'normal');
@@ -577,10 +613,10 @@ export async function gerarPDFCheckin(
 
   // --- COLUNA 2: SUJIDADE & PAINEL/ESTEPE ---
   doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
   doc.text('NÍVEIS DE SUJIDADE', col2X, curY2);
-  curY2 += 4;
+  curY2 += 4.5;
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
@@ -593,8 +629,7 @@ export async function gerarPDFCheckin(
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
       doc.text(`${it.label}: `, col2X, curY2);
       const lWidth = doc.getTextWidth(`${it.label}: `);
-      if (it.raw === 'sujo' || it.raw === 'extremo') doc.setTextColor(251, 191, 36);
-      else doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+      doc.setTextColor(it.cor[0], it.cor[1], it.cor[2]);
       doc.setFont('helvetica', 'bold');
       doc.text(it.val, col2X + lWidth, curY2);
       doc.setFont('helvetica', 'normal');
@@ -604,18 +639,18 @@ export async function gerarPDFCheckin(
 
   curY2 += 2;
   doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
   doc.text('PAINEL & ESTEPE', col2X, curY2);
-  curY2 += 4;
+  curY2 += 4.5;
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   doc.text('Estepe: ', col2X, curY2);
-  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+  doc.setTextColor(estepeStatus.cor[0], estepeStatus.cor[1], estepeStatus.cor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.text(estepeTxt, col2X + doc.getTextWidth('Estepe: '), curY2);
+  doc.text(estepeStatus.val, col2X + doc.getTextWidth('Estepe: '), curY2);
   doc.setFont('helvetica', 'normal');
   curY2 += 4;
 
@@ -625,10 +660,10 @@ export async function gerarPDFCheckin(
   curY2 += 4;
 
   doc.setFont('helvetica', 'bold');
-  if (checkin.luzes_painel && checkin.luzes_painel.length > 0) {
-    doc.setTextColor(248, 113, 113); // Vermelho/flare
+  if (temLuzes) {
+    doc.setTextColor(248, 113, 113); // Vermelho em CAPSLOCK
   } else {
-    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]); // Neutro
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   }
 
   luzesLines.forEach((line) => {
@@ -637,7 +672,7 @@ export async function gerarPDFCheckin(
   });
 
   if (obsLines.length > 0) {
-    curY2 += 1;
+    curY2 += 1.5;
     doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
     doc.setFont('helvetica', 'italic');
     obsLines.forEach((line) => {
@@ -837,104 +872,461 @@ export async function gerarPDFCheckin(
     y = photoY + (fotos.length % photosPerRow !== 0 ? boxHeight + 10 : 2);
   }
 
-  // 7. Rodapé com Assinatura e Termo Legal
-  if (y + 35 > 275) {
-    doc.addPage();
-    y = 15;
-  }
-
+  // 7. Termos Legais & Responsabilidade (Bloco 1 dedicado com altura dinâmica)
   const termoRespCustom = (data as any).termoResponsabilidade || (checkin as any).termo_responsabilidade_texto;
   const termoGarCustom = (data as any).termoGarantia || (checkin as any).termo_garantia_texto;
-  
-  let termoTxt = termoRespCustom 
-    ? `Declaração de Responsabilidade & Vistoria: ${termoRespCustom}`
-    : '"Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega, isentando a oficina de danos preexistentes ou falhas ocultas."';
 
-  if (termoGarCustom) {
-    termoTxt += `\n[Garantia do Atendimento: ${termoGarCustom}]`;
+  const textoPrincipalTermo = termoRespCustom && termoRespCustom.trim()
+    ? termoRespCustom.trim()
+    : 'Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega, isentando a oficina de danos preexistentes, verniz fragilizado ou falhas ocultas não relacionadas na vistoria.';
+
+  doc.setFontSize(6.8);
+  doc.setFont('helvetica', 'normal');
+  const linhasTermo: string[] = doc.splitTextToSize(textoPrincipalTermo, usableWidth - 8);
+
+  let linhasGarantia: string[] = [];
+  if (termoGarCustom && termoGarCustom.trim()) {
+    linhasGarantia = doc.splitTextToSize(termoGarCustom.trim(), usableWidth - 8);
   }
 
-  const termoLines = doc.splitTextToSize(termoTxt, usableWidth - 68);
-  const sigBoxHeight = Math.max(34, 10 + termoLines.length * 3.1);
+  // Altura dinâmica do card de termos:
+  const altTermosTexto = linhasTermo.length * 3.2;
+  const altGarantiaTexto = linhasGarantia.length > 0 ? 6.5 + (linhasGarantia.length * 3.2) : 0;
+  const termoCardHeight = 11 + altTermosTexto + altGarantiaTexto;
 
-  if (y + sigBoxHeight > 275) {
+  // Se o card de termos não couber na página atual, quebra página
+  if (y + termoCardHeight > 275) {
     doc.addPage();
     y = 15;
   }
 
-  doc.setFillColor(39, 39, 42); // graphite-800
-  doc.roundedRect(pageMargin, y, usableWidth, sigBoxHeight, 2, 2, 'F');
+  // Desenhar Card de Termos
+  doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(pageMargin, y, usableWidth, termoCardHeight, 2, 2, 'FD');
 
-  doc.setTextColor(200, 200, 200);
+  let curTermoY = y + 5;
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TERMOS DE RESPONSABILIDADE & CONDIÇÕES GERAIS', pageMargin + 4, curTermoY);
+  curTermoY += 4.2;
+
+  const corTextoTermo = isTextoEscuro ? [71, 85, 105] : [212, 212, 216];
+  doc.setTextColor(corTextoTermo[0], corTextoTermo[1], corTextoTermo[2]);
   doc.setFontSize(6.8);
-  doc.setFont('helvetica', 'italic');
-  termoLines.forEach((line: string, idx: number) => {
-    doc.text(line, pageMargin + 4, y + 5 + idx * 3.1);
+  doc.setFont('helvetica', 'normal');
+  linhasTermo.forEach((line) => {
+    doc.text(line, pageMargin + 4, curTermoY);
+    curTermoY += 3.2;
   });
 
+  if (linhasGarantia.length > 0) {
+    curTermoY += 2;
+    doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('GARANTIA DO ATENDIMENTO:', pageMargin + 4, curTermoY);
+    curTermoY += 3.5;
+
+    doc.setTextColor(corTextoTermo[0], corTextoTermo[1], corTextoTermo[2]);
+    doc.setFontSize(6.8);
+    doc.setFont('helvetica', 'normal');
+    linhasGarantia.forEach((line) => {
+      doc.text(line, pageMargin + 4, curTermoY);
+      curTermoY += 3.2;
+    });
+  }
+
+  y += termoCardHeight + 5;
+
+  // 8. Registro de Assinatura & Validação Jurídica (Bloco 2 dedicado)
+  const sigCardHeight = 36;
+  if (y + sigCardHeight > 275) {
+    doc.addPage();
+    y = 15;
+  }
+
+  doc.setFillColor(corFundoSecoesRgb[0], corFundoSecoesRgb[1], corFundoSecoesRgb[2]);
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(pageMargin, y, usableWidth, sigCardHeight, 2, 2, 'FD');
+
+  const divSigX = rightMarginX - 70; // Divisão entre dados do signatário e assinatura
+  doc.setDrawColor(corBordaCard[0], corBordaCard[1], corBordaCard[2]);
+  doc.setLineWidth(0.2);
+  doc.line(divSigX, y + 4, divSigX, y + sigCardHeight - 4);
+
+  // Coluna Esquerda: Dados do Signatário e Auditoria
+  let curSigY = y + 5.5;
+  doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VALIDAÇÃO & CIÊNCIA DO CLIENTE', pageMargin + 4, curSigY);
+  curSigY += 4.5;
+
+  const nomeSignatario = (checkin.assinatura_nome || clienteNome || 'Cliente').trim().toUpperCase();
+  doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`SIGNATÁRIO: ${nomeSignatario}`, pageMargin + 4, curSigY);
+  curSigY += 4.5;
+
+  if (checkin.assinado_em) {
+    doc.setTextColor(52, 211, 153); // Emerald
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('STATUS: ASSINADO DIGITALMENTE', pageMargin + 4, curSigY);
+    curSigY += 4;
+
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Data / Hora: ${formatarData(checkin.assinado_em)} às ${formatarHora(checkin.assinado_em)}`, pageMargin + 4, curSigY);
+    curSigY += 3.8;
+
+    doc.setTextColor(161, 161, 170);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'italic');
+    doc.text('Validação criptográfica registrada com carimbo temporal imutável.', pageMargin + 4, curSigY);
+  } else {
+    doc.setTextColor(251, 191, 36); // Amber
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('STATUS: VIA IMPRESSA (ASSINATURA MANUAL)', pageMargin + 4, curSigY);
+    curSigY += 4;
+
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Via para conferência e coleta presencial de firma.', pageMargin + 4, curSigY);
+    curSigY += 3.8;
+
+    doc.setTextColor(161, 161, 170);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'italic');
+    doc.text('Declaração válida mediante aposição de assinatura física ao lado.', pageMargin + 4, curSigY);
+  }
+
+  if (fotos.length > 0) {
+    curSigY += 3.6;
+    doc.setTextColor(161, 161, 170);
+    doc.setFontSize(6.2);
+    doc.setFont('helvetica', 'italic');
+    doc.text('Carimbos das fotos auditados pelo sistema no momento do upload.', pageMargin + 4, curSigY);
+  }
+
+  // Coluna Direita: Box de Assinatura
   const sigPathOrData = checkin.assinatura_path || (checkin as any).assinatura_url || (checkin as any).assinatura_base64;
+  const areaSigW = usableWidth - (divSigX - pageMargin);
+  const sigBoxW = 58;
+  const sigBoxX = divSigX + (areaSigW - sigBoxW) / 2;
 
   if (sigPathOrData) {
     onProgress?.('Carregando assinatura digital do cliente...');
     try {
       const assBase64 = await obterAssinaturaBase64(sigPathOrData);
       if (assBase64) {
-        const sigBoxW = 48;
-        const sigBoxH = 18;
-        const sigBoxX = rightMarginX - 52;
-        const sigBoxY = y + 2;
+        const sigBoxH = 20;
+        const sigBoxY = y + 4.5;
 
-        // Desenha retângulo de fundo branco para PNGs de assinatura transparentes
+        // Moldura branca para contraste límpido
         doc.setFillColor(255, 255, 255);
-        doc.roundedRect(sigBoxX, sigBoxY, sigBoxW, sigBoxH, 1, 1, 'F');
+        doc.roundedRect(sigBoxX, sigBoxY, sigBoxW, sigBoxH, 1.5, 1.5, 'F');
 
-        // Desenho proporcional da assinatura
         await drawProportionalImage(doc, assBase64, 'PNG', sigBoxX, sigBoxY, sigBoxW, sigBoxH);
+
+        doc.setFontSize(6.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+        doc.text('ASSINATURA DIGITAL AUDITADA', sigBoxX + sigBoxW / 2, y + 29, { align: 'center' });
       }
     } catch (e) {
       console.error('Erro ao carregar assinatura no PDF:', e);
     }
   } else {
-    // Bloco para Assinatura Manual / Física no papel
-    const sigBoxW = 60;
-    const sigBoxX = rightMarginX - 64;
-    const sigBoxY = y + 3;
-
+    // Linha para Assinatura Manual
+    const lineY = y + 21;
     doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.35);
+    doc.line(sigBoxX, lineY, sigBoxX + sigBoxW, lineY);
+
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
+    doc.text('ASSINATURA DO CLIENTE', sigBoxX + sigBoxW / 2, lineY + 4.5, { align: 'center' });
+
+    doc.setFontSize(6.2);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
+    doc.text('(Concordância integral com os termos)', sigBoxX + sigBoxW / 2, lineY + 8, { align: 'center' });
+  }
+
+  // ==========================================
+  // FOLHA SEPARADA: TERMO DE CIÊNCIA E AUTORIZAÇÃO DE SERVIÇO COM RISCO ESPECÍFICO (CDC)
+  // ==========================================
+  if (data.incluirTermoRisco) {
+    onProgress?.('Gerando folha de Termo de Risco Específico (CDC)...');
+    doc.addPage();
+    let yRisco = 14;
+
+    // Cores específicas para Documento Legal Impresso (Garantia de 100% de Contraste e Legibilidade no Papel)
+    const corDocTextoDark: [number, number, number] = [15, 23, 42]; // Slate-900: texto principal escuro e nítido
+    const corDocTextoMuted: [number, number, number] = [71, 85, 105]; // Slate-600: texto secundário
+    const corDocBorda: [number, number, number] = [203, 213, 225]; // Slate-300: bordas elegantes
+    const corDocFundoCard: [number, number, number] = [248, 250, 252]; // Slate-50: fundo sutil
+    const corDocAccent: [number, number, number] = [180, 83, 9]; // Amber-700: destaque formal
+
+    // 1. Cabeçalho Oficial da Empresa / Oficina
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
     doc.setLineWidth(0.3);
-    doc.line(sigBoxX, sigBoxY + 12, sigBoxX + sigBoxW, sigBoxY + 12);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(180, 180, 180);
-    doc.text('Assinatura Manual do Cliente', sigBoxX + sigBoxW / 2, sigBoxY + 16, { align: 'center' });
-  }
+    doc.roundedRect(pageMargin, yRisco, usableWidth, 20, 1.5, 1.5, 'FD');
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8.5);
-  doc.setFont('helvetica', 'bold');
-  const nomeSignatario = checkin.assinatura_nome || clienteNome || 'Cliente';
-  doc.text(`Signatário: ${nomeSignatario}`, pageMargin + 4, y + 22);
+    // Nome / Razão Social
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    const nomeOficinaCabecalho = data.oficinaRazaoSocial || data.oficinaNome || 'OFICINA ESPECIALIZADA';
+    doc.text(nomeOficinaCabecalho, pageMargin + 5, yRisco + 6.5);
 
-  if (checkin.assinado_em) {
+    // Dados da Oficina (CNPJ, Telefone, Cidade)
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
-    doc.text(`Assinado em: ${formatarData(checkin.assinado_em)} ${formatarHora(checkin.assinado_em)}`, pageMargin + 4, y + 27);
-  } else {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(251, 191, 36);
-    doc.text('Via impressa para coleta de assinatura física / manual', pageMargin + 4, y + 27);
-  }
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    const docOfi = data.oficinaDocumento ? `CNPJ/CPF: ${data.oficinaDocumento}` : '';
+    const telOfi = data.oficinaTelefone ? `Tel: ${data.oficinaTelefone}` : '';
+    const cidOfi = data.oficinaCidadeUF ? `${data.oficinaCidadeUF}` : '';
+    const infoOficinaLinha = [docOfi, telOfi, cidOfi].filter(Boolean).join(' • ');
+    if (infoOficinaLinha) {
+      doc.text(infoOficinaLinha, pageMargin + 5, yRisco + 11.5);
+    }
 
-  // Nota legal de carimbos de fotos no rodapé
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'italic');
-  doc.setTextColor(161, 161, 170); // zinc-400
-  doc.text(
-    'Datas registradas pelo sistema no momento do envio das imagens.',
-    pageMargin + 4,
-    y + 36
-  );
+    // Linha de Conformidade CDC
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text(`ANEXO CONTRATUAL À VISTORIA #${checkin.id.substring(0, 6)} — INSTRUMENTO DE CONFORMIDADE COM A LEI Nº 8.078/1990 (CDC)`, pageMargin + 5, yRisco + 16.5);
+
+    yRisco += 25;
+
+    // 2. Título Central Destacado
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('TERMO DE CIÊNCIA E AUTORIZAÇÃO DE SERVIÇO COM RISCO TÉCNICO', pageMargin + usableWidth / 2, yRisco, { align: 'center' });
+    yRisco += 4;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    doc.text('Declaração de Esclarecimento Prévio, Vícios Preexistentes e Autorização Expressa de Execução (Arts. 6º, 8º, 14, 40 e 54 do CDC)', pageMargin + usableWidth / 2, yRisco, { align: 'center' });
+    yRisco += 3;
+
+    doc.setDrawColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.setLineWidth(0.4);
+    doc.line(pageMargin + 10, yRisco, rightMarginX - 10, yRisco);
+    yRisco += 6;
+
+    // 3. Quadro de Qualificação das Partes e do Veículo (Dossiê)
+    const boxDossieH = 35;
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, boxDossieH, 1.5, 1.5, 'FD');
+
+    // Título da Seção do Quadro
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('1. DADOS DE IDENTIFICAÇÃO E QUALIFICAÇÃO DAS PARTES', pageMargin + 5, yRisco + 5);
+
+    const col1X = pageMargin + 5;
+    const col2X = pageMargin + (usableWidth / 2) + 2;
+    const linY1 = yRisco + 10;
+    const linY2 = yRisco + 15;
+    const linY3 = yRisco + 20;
+    const linY4 = yRisco + 25;
+    const linY5 = yRisco + 30;
+
+    // Divisória vertical no meio do quadro
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.15);
+    doc.line(col2X - 4, yRisco + 7, col2X - 4, yRisco + boxDossieH - 2);
+
+    // COLUNA 1: CONTRATANTE (CLIENTE)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text('CONTRATANTE (CLIENTE):', col1X, linY1);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    // Nome
+    doc.text(`Nome: ${data.clienteNome || '________________________________________'}`, col1X, linY2);
+    // CPF / CNPJ (se tiver, mostra; se não, linha para caneta)
+    const cliDoc = (checkin as any)?.cliente?.documento || (checkin as any)?.cliente?.cpf_cnpj;
+    const cpfTxt = cliDoc ? `CPF/CNPJ: ${cliDoc}` : 'CPF/CNPJ: ____________________________________';
+    doc.text(cpfTxt, col1X, linY3);
+    // Telefone
+    const cliTel = (checkin as any)?.cliente?.telefone;
+    const telTxt = cliTel ? `Telefone/WhatsApp: ${cliTel}` : 'Telefone/WhatsApp: ____________________________';
+    doc.text(telTxt, col1X, linY4);
+    // Endereço ou Cidade
+    doc.text('Endereço: ____________________________________', col1X, linY5);
+
+    // COLUNA 2: VEÍCULO & CONTRATADA
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text('VEÍCULO OBJETO DO ATENDIMENTO:', col2X, linY1);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    // Modelo e Marca
+    const veicMarca = (data as any)?.veiculoMarca || (checkin as any)?.veiculo?.marca;
+    const modeloMarca = `${veicMarca ? veicMarca + ' ' : ''}${veiculoModelo || 'Não informado'}`;
+    doc.text(`Veículo: ${modeloMarca}`, col2X, linY2);
+    // Placa e Cor
+    const placaTxt = veiculoPlaca ? veiculoPlaca.toUpperCase() : '_________';
+    const corTxt = veiculoCor || '________';
+    doc.text(`Placa: ${placaTxt}   |   Cor: ${corTxt}`, col2X, linY3);
+    // Ano e KM
+    const veicAno = (data as any)?.veiculoAno || (checkin as any)?.veiculo?.ano;
+    const anoTxt = veicAno ? String(veicAno) : '________';
+    const kmTxt = checkin.km !== null && checkin.km !== undefined ? `${checkin.km} km` : '___________ km';
+    doc.text(`Ano/Modelo: ${anoTxt}   |   KM: ${kmTxt}`, col2X, linY4);
+    // Data de Emissão / Vistoria
+    const dataDoc = checkin.created_at ? formatarData(checkin.created_at) : new Date().toLocaleDateString('pt-BR');
+    doc.text(`Data da Vistoria: ${dataDoc}`, col2X, linY5);
+
+    yRisco += boxDossieH + 5;
+
+    // 4. Procedimento(s) com Risco Técnico
+    const servicoTitulo = data.termoRiscoServico || 'Procedimentos Especializados com Risco Técnico';
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocBorda[0], corDocBorda[1], corDocBorda[2]);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, 9, 1.2, 1.2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text(`2. PROCEDIMENTO TÉCNICO ENVOLVIDO: ${servicoTitulo}`, pageMargin + 5, yRisco + 5.8);
+    yRisco += 13;
+
+    // 5. Fundamentação Legal e Declaração de Ciência (CDC Arts. 6º, 8º, 14, 40, 46 e 54)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('3. DECLARAÇÃO DE ESCLARECIMENTO PRÉVIO E LIMITES DE RESPONSABILIDADE (CDC)', pageMargin, yRisco);
+    yRisco += 4;
+
+    const p1 = 'I. DO DEVER DE INFORMAÇÃO E RISCOS INERENTES (Arts. 6º, III e 8º do CDC): O contratante declara ter sido prévia e adequadamente esclarecido pela equipe técnica acerca da metodologia de execução dos serviços contratados, seus limites técnicos e os riscos inerentes à intervenção, especialmente em razão do estado de conservação, histórico e condições preexistentes do veículo.';
+    const p2 = `II. DOS VÍCIOS OCULTOS E CONDICIONANTES PRÉVIAS (Art. 14, §3º, I e II do CDC): O contratante autoriza a execução dos serviços ciente de que a ${nomeOficinaCabecalho} não poderá ser responsabilizada por danos, quebras, falhas mecânicas, elétricas ou estéticas decorrentes exclusivamente de vícios preexistentes, desgastes naturais do tempo e uso, repinturas anteriores inadequadas, verniz fino/ressecado, conectores, borrachas ou chicotes fragilizados e componentes danificados não identificáveis em inspeção visual preliminar.`;
+    const p3 = 'III. DO PADRÃO TÉCNICO E BOA-FÉ: A empresa compromete-se a executar os procedimentos com técnica adequada, ferramentas profissionais e cautela, permanecendo responsável pelos danos que forem comprovadamente decorrentes de defeito culposo direto na prestação dos serviços.';
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+
+    const renderP = (txt: string) => {
+      const split = doc.splitTextToSize(txt, usableWidth);
+      split.forEach((linha: string) => {
+        doc.text(linha, pageMargin, yRisco);
+        yRisco += 3.6;
+      });
+      yRisco += 1.8;
+    };
+
+    renderP(p1);
+    renderP(p2);
+    renderP(p3);
+
+    // 6. Bloco de Riscos Específicos Informados (Art. 54, §4º do CDC)
+    let textoRiscosExibir = data.termoRiscoObservacoes?.trim() || '';
+    if (!textoRiscosExibir && data.termoResponsabilidade && data.termoResponsabilidade.trim()) {
+      textoRiscosExibir = data.termoResponsabilidade.trim();
+    }
+    if (!textoRiscosExibir) {
+      textoRiscosExibir = '• Vistoria preliminar realizada com o cliente. Riscos inerentes ao estado de conservação, pintura, componentes e agregados esclarecidos e aceitos.\n• Cuidados posteriores de cura, lavagem e preservação informados pelo técnico responsável.';
+    }
+
+    const splitRiscos = doc.splitTextToSize(textoRiscosExibir, usableWidth - 10);
+    const boxRiscosH = Math.max(16, 8 + splitRiscos.length * 3.5);
+
+    // Se não couber na folha atual com assinaturas, cria nova página
+    if (yRisco + boxRiscosH + 45 > 280) {
+      doc.addPage();
+      yRisco = 15;
+    }
+
+    doc.setFillColor(corDocFundoCard[0], corDocFundoCard[1], corDocFundoCard[2]);
+    doc.setDrawColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.setLineWidth(0.35);
+    doc.roundedRect(pageMargin, yRisco, usableWidth, boxRiscosH, 1.5, 1.5, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.6);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('4. RISCOS ESPECÍFICOS & CONDIÇÕES IDENTIFICADAS (ART. 54, §4º DO CDC):', pageMargin + 5, yRisco + 5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    splitRiscos.forEach((l: string, idx: number) => {
+      doc.text(l, pageMargin + 5, yRisco + 9.5 + idx * 3.5);
+    });
+
+    yRisco += boxRiscosH + 6;
+
+    // 7. Declaração expressa de consentimento
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.8);
+    doc.setTextColor(corDocAccent[0], corDocAccent[1], corDocAccent[2]);
+    doc.text('Declaro que li, compreendi os riscos informados e autorizo expressamente a execução dos serviços.', pageMargin + usableWidth / 2, yRisco, { align: 'center' });
+    yRisco += 7;
+
+    // Local e Data formal
+    const cidadeOficina = data.oficinaCidadeUF ? data.oficinaCidadeUF.split('/')[0].trim() : '';
+    const localDataStr = `${cidadeOficina ? cidadeOficina + ' - ' : ''}${dataDoc}`;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.2);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    doc.text(`Local e Data: ${localDataStr}`, pageMargin + 5, yRisco);
+    yRisco += 5;
+
+    // Colunas de Assinatura
+    const sigBoxW = (usableWidth - 16) / 2;
+    const colCliX = pageMargin + 5;
+    const colOfiX = rightMarginX - 5 - sigBoxW;
+
+    // Linha Cliente
+    doc.setDrawColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.setLineWidth(0.35);
+    doc.line(colCliX, yRisco + 12, colCliX + sigBoxW, yRisco + 12);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text(data.assinaturaClienteNome || data.clienteNome || 'Cliente / Contratante', colCliX + sigBoxW / 2, yRisco + 16, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    const docAssinatura = cliDoc ? `CPF/CNPJ: ${cliDoc}` : 'Assinatura / Aceite do Cliente';
+    doc.text(docAssinatura, colCliX + sigBoxW / 2, yRisco + 19.5, { align: 'center' });
+
+    // Linha Oficina
+    doc.line(colOfiX, yRisco + 12, colOfiX + sigBoxW, yRisco + 12);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
+    doc.text(data.assinaturaTecnicoNome || data.responsavel_nome || data.oficinaRazaoSocial || data.oficinaNome, colOfiX + sigBoxW / 2, yRisco + 16, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.8);
+    doc.setTextColor(corDocTextoMuted[0], corDocTextoMuted[1], corDocTextoMuted[2]);
+    doc.text('Responsável Técnico / Oficina', colOfiX + sigBoxW / 2, yRisco + 19.5, { align: 'center' });
+  }
 
   // Rodapé padrão em todas as páginas
   const totalPaginas = doc.getNumberOfPages();

@@ -19,6 +19,7 @@ import { formatarData, formatarHora } from '../utils/datas';
 import { formatarNomeVista, formatarNomeAvaria } from '../utils/checkin';
 import type { VistaDiagrama, TipoAvaria } from '../types/checkin';
 import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
+import { getEvidenciaSignedUrl } from '../utils/evidencias';
 
 interface VistoriaPublicaData {
   oficina: {
@@ -109,7 +110,7 @@ export const VistoriaPublica: React.FC = () => {
 
       const vistoriaData = resData as VistoriaPublicaData;
 
-      // Buscar Signed URLs seguras das evidências via Edge Function (sem expor bucket nem paths)
+      // Buscar Signed URLs seguras das evidências via Edge Function (se disponível)
       try {
         const { data: evidenciasRes, error: _fnErr } = await supabase.functions.invoke('evidencias-aceite', {
           body: { token_aceite: tokenLimpo },
@@ -122,7 +123,7 @@ export const VistoriaPublica: React.FC = () => {
           }
         }
 
-        if (evidenciasRes?.fotos && Array.isArray(evidenciasRes.fotos)) {
+        if (evidenciasRes?.fotos && Array.isArray(evidenciasRes.fotos) && evidenciasRes.fotos.length > 0) {
           vistoriaData.fotos = evidenciasRes.fotos;
         }
 
@@ -136,7 +137,32 @@ export const VistoriaPublica: React.FC = () => {
           }
         }
       } catch (edgeErr) {
-        console.warn('[VistoriaPublica]: Chamada da Edge Function evidencias-aceite ignorada ou falhou.', edgeErr);
+        console.warn('[VistoriaPublica]: Edge function evidencias-aceite indisponível, usando resolução direta de evidências.', edgeErr);
+      }
+
+      // Resolução resiliente de URLs de fotos (caso venha path relativo da RPC)
+      if (vistoriaData.fotos && Array.isArray(vistoriaData.fotos)) {
+        vistoriaData.fotos = await Promise.all(
+          vistoriaData.fotos.map(async (f) => {
+            const pathOuUrl = f.foto_url;
+            if (!pathOuUrl || pathOuUrl.startsWith('data:') || pathOuUrl.startsWith('http://') || pathOuUrl.startsWith('https://')) {
+              return f;
+            }
+            const resolvedUrl = await getEvidenciaSignedUrl(pathOuUrl);
+            return {
+              ...f,
+              foto_url: resolvedUrl || pathOuUrl,
+            };
+          })
+        );
+      }
+
+      // Resolução resiliente da URL da assinatura
+      if (vistoriaData.assinatura_url && !vistoriaData.assinatura_url.startsWith('http') && !vistoriaData.assinatura_url.startsWith('data:')) {
+        const assSigned = await getEvidenciaSignedUrl(vistoriaData.assinatura_url);
+        if (assSigned) {
+          vistoriaData.assinatura_url = assSigned;
+        }
       }
 
       setData(vistoriaData);

@@ -143,7 +143,7 @@ export const FormularioCheckin: React.FC = () => {
       const modelo = agendamento.veiculo?.modelo || 'veículo';
       const placa = agendamento.veiculo?.placa ? `(${agendamento.veiculo.placa})` : '';
 
-      const msg = `Olá ${nomeCliente}! Registramos a vistoria de entrada do seu ${modelo} ${placa}. Confira e assine pelo link: ${urlAceite}`;
+      const msg = `Olá, *${nomeCliente}*!\n\nRegistramos a vistoria de entrada do seu *${modelo}* ${placa}.\n\nPara conferir as fotos, observações e assinar digitalmente, acesse o link:\n\n${urlAceite}`;
 
       const linkWa = montarLinkWhatsapp(agendamento.cliente?.telefone, msg);
 
@@ -628,6 +628,12 @@ export const FormularioCheckin: React.FC = () => {
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
           termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
           termoGarantia: termoGarantia?.texto || null,
+          garantiaMeses: (agendamento as any)?.garantia_meses ?? 3,
+          incluirTermoRisco: (agendamento as any)?.incluir_termo_risco ?? false,
+          termoRiscoServico: (agendamento as any)?.termo_risco_servico || null,
+          termoRiscoObservacoes: (agendamento as any)?.termo_risco_observacoes || null,
+          termoRiscoTexto: (agendamento as any)?.termo_risco_texto || null,
+          assinaturaClienteNome: nomeSignatario || agendamento.cliente?.nome,
         },
         (msg) => setPdfProgressManual(msg)
       );
@@ -1185,6 +1191,19 @@ export const FormularioCheckin: React.FC = () => {
                 </div>
               )}
 
+              {/* Termo de Ciência e Risco Específico CDC (se houver) */}
+              {(agendamento as any)?.incluir_termo_risco && (
+                <div className="p-3.5 bg-graphite-900 border border-amber-500/40 rounded-xl flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold font-sans text-[12px] uppercase">
+                    <AlertTriangle size={16} />
+                    <span>Termo de Risco CDC ({(agendamento as any).termo_risco_servico || 'Serviço com Risco'})</span>
+                  </div>
+                  <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-28 overflow-y-auto pr-1">
+                    {(agendamento as any).termo_risco_observacoes || 'Riscos técnicos informados ao cliente.'}
+                  </p>
+                </div>
+              )}
+
               <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-lg text-amber-300 font-sans text-[12px] leading-relaxed italic">
                 "Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega e aceito os termos estipulados."
               </div>
@@ -1239,6 +1258,14 @@ export const FormularioCheckin: React.FC = () => {
                     <div className="flex items-start gap-1.5">
                       <Sparkles size={14} className="text-emerald-400 shrink-0 mt-0.5" />
                       <span><strong>Garantia do Serviço:</strong> {termoGarantia.titulo || 'Garantia personalizada'}</span>
+                    </div>
+                  )}
+                  {(agendamento as any)?.incluir_termo_risco && (
+                    <div className="flex items-start gap-1.5">
+                      <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>Termo de Ciência e Risco Específico (CDC):</strong> Folha separada inclusa ({(agendamento as any).termo_risco_servico || 'Serviço com Risco'})
+                      </span>
                     </div>
                   )}
                 </div>
