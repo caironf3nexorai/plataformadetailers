@@ -1,9 +1,11 @@
-# 🏎️ NUVEMWASH — BÍBLIA MESTRE DE PRODUTO, DESIGN SYSTEM & ARQUITETURA VISUAL
+# 🏎️ NUVEMWASH — BÍBLIA MESTRE DE PRODUTO, DESIGN SYSTEM & GUIA OPERACIONAL DEFINITIVO
 
-> **Documento Oficial de Especificação de Engenharia, Identidade de Marca e Feedstock para Inteligência Artificial**  
-> **Destinatários:** Sócios-Fundadores, Equipe de Produto, Designers de UI/UX, Diretores de Arte e **Motores de IA Generativa de Design (Midjourney v6, Flux, Stable Diffusion, Claude 3.7 Sonnet, ChatGPT/GPT-4o, Figma AI, Galileo AI, v0)**  
-> **Versão:** 4.0 Definitiva Master  
-> **Objetivo:** Fornecer um panorama 100% completo, cirúrgico e detalhado da plataforma NuvemWash, servindo de prompt mestre e base de conhecimento para que qualquer IA gere designs, mockups, telas, peças publicitárias e interfaces com fidelidade técnica e estética absoluta.
+> **Documento Oficial de Engenharia, Identidade de Marca, Manual de Operação e Feedstock para Inteligência Artificial**  
+> **Destinatários:** Sócios-Fundadores, Equipe de Produto, Treinadores, Designers de UI/UX e **Motores de IA Generativa (Midjourney v6, Flux, Stable Diffusion, Claude 3.7 Sonnet, ChatGPT/GPT-4o, Figma AI, Galileo AI, v0)**  
+> **Versão:** 5.0 Definitiva Master  
+> **Finalidade Dupla:**  
+> 1. Servir de **Guia Operacional Completo** para que os sócios dominem cada clique, saibam como operar a plataforma do zero, como configurar a oficina e como treinar os clientes.  
+> 2. Servir de **Prompt Mestre de Design & Arquitetura** para alimentar IAs com tokens, regras visuais, vocabulário do nicho e fluxos de telas sem deixar nenhuma ponta solta.
 
 ---
 
@@ -25,10 +27,22 @@
    - 4.10. Motor Fiscal Integrado & Emissão de NFS-e Focus NFe (`/financeiro/fiscal`)
    - 4.11. "Minha Oficina": Configurações, Matriz de Preços 2D & Equipe (`/configuracoes`)
    - 4.12. Cockpit Master Admin SaaS (`/admin`)
-5. [Matriz Oficial de Planos, Limites e Gatilhos de Monetização](#5-matriz-oficial-de-planos-limites-e-gatilhos-de-monetização)
-6. [Biblioteca de Prompts Prontos para Motores de IA Generativa](#6-biblioteca-de-prompts-prontos-para-motores-de-ia-generativa)
-7. [Diretrizes Rigorosas de Ergonomia Mobile vs Desktop](#7-diretrizes-rigorosas-de-ergonomia-mobile-vs-desktop)
-8. [Anti-Patterns & Negative Prompts (O Que a IA NUNCA Deve Fazer)](#8-anti-patterns--negative-prompts-o-que-a-ia-nunca-deve-fazer)
+5. [Guia Operacional Passo a Passo: Como Fazer Cada Ação na Prática (Clique a Clique)](#5-guia-operacional-passo-a-passo-como-fazer-cada-ação-na-prática-clique-a-clique)
+   - 5.1. Primeiro Acesso: Setup da Oficina, Logo e Horários (`/configuracoes`)
+   - 5.2. Como Cadastrar a Matriz de Preços 2D por Porte de Veículo
+   - 5.3. Como Cadastrar a Equipe e Bloquear Acesso ao Financeiro
+   - 5.4. Como Fazer uma Vistoria & Check-in 360º na Chegada do Carro (`/checkin`)
+   - 5.5. Como Criar e Disparar Orçamentos em 3 Níveis com a Minuta do CDC (`/orcamento/novo`)
+   - 5.6. A Experiência do Cliente Final: Como ele Aprova, Assina e Paga o Sinal
+   - 5.7. Como Operar o Chão de Oficina: Cronômetro e Calculadora de Diluição
+   - 5.8. Como Finalizar a OS, Emitir a NFS-e e Visualizar o DRE Real
+   - 5.9. Como Usar o Radar de Cobrança WhatsApp para Eliminar Fiados
+   - 5.10. Como os Sócios Operam o Painel Master Admin SaaS (`/admin`)
+6. [Matriz Oficial de Planos, Limites e Gatilhos de Monetização](#6-matriz-oficial-de-planos-limites-e-gatilhos-de-monetização)
+7. [Biblioteca de Prompts Prontos para Motores de IA Generativa](#7-biblioteca-de-prompts-prontos-para-motores-de-ia-generativa)
+8. [Diretrizes Rigorosas de Ergonomia Mobile vs Desktop](#8-diretrizes-rigorosas-de-ergonomia-mobile-vs-desktop)
+9. [Anti-Patterns & Negative Prompts (O Que a IA NUNCA Deve Fazer)](#9-anti-patterns--negative-prompts-o-que-a-ia-nunca-deve-fazer)
+10. [Conclusão & Como Alimentar a IA com Este Documento](#10-conclusão--como-alimentar-a-ia-com-este-documento)
 
 ---
 
@@ -135,249 +149,263 @@ O sistema utiliza três famílias tipográficas com propósitos estritamente sep
 
 ## 4. ANATOMIA DETALHADA DE CADA TELA DA PLATAFORMA (ESPECIFICAÇÃO UI/UX)
 
----
-
 ### 4.1. Landing Page Institucional & Hero de Alta Conversão (`/`)
-
 * **Objetivo:** Capturar o detailer em 5 segundos, comunicar autoridade absoluta e fazê-lo clicar em `COMEÇAR 15 DIAS GRÁTIS SEM CARTÃO`.
-* **Estrutura Visual:**
-  * **Header Flutuante Glassmorphism:** Logotipo NuvemWash (ícone de nuvem com linhas de velocidade e tipografia Archivo), links de navegação (`Funcionalidades`, `Blindagem Jurídica`, `Orçamentos 3 Níveis`, `Planos`, `Depoimentos`), botão `Entrar` e botão de destaque `Criar Conta Grátis` com glow âmbar.
-  * **Hero Section Impactante:**
-    * Badge de topo: `⚡ O SISTEMA OPERACIONAL DA ESTÉTICA AUTOMOTIVA DE ELITE`.
-    * Título Display Archivo Gigante: `TRANSFORME SEU ESTÚDIO EM UMA MÁQUINA DE LUCRO E BLINDAGEM JURÍDICA`.
-    * Subtítulo explicativo: *"Abandone o papel, pare de tomar prejuízo por riscos que não fez e venda orçamentos até 40% mais caros com propostas interativas no WhatsApp."*
-    * Dupla de CTAs: Botão primário `EXPERIMENTAR 15 DIAS GRÁTIS` + Botão secundário `VER DEMONSTRAÇÃO EM VÍDEO (2 min)`.
-    * Prova Social Imediata: `+450 Estúdios Ativos no Brasil` • `+12.000 Vistorias Realizadas` • `Nota 4.9/5 ⭐`.
-  * **Mockup 3D Flutuante:** Render de um laptop e smartphone exibindo o Check-in 360º e o Orçamento em 3 Níveis com reflexos neon no fundo escuro.
-  * **Grid de 4 Pilares de Poder:**
-    1. *Blindagem Jurídica CDC:* Vistoria 360º com fotos com data/hora e minuta aprovada por advogados.
-    2. *Orçamento 3 Níveis:* Apresentação visual que induz o cliente a escolher o pacote intermediário mais lucrativo.
-    3. *Chão de Oficina & Diluição:* Cronômetro por etapa e calculadora que impede desperdício de produtos caros.
-    4. *Radar de Cobrança:* 1 clique no WhatsApp para receber valores pendentes sem constrangimento.
-  * **Tabela de Preços & Planos (Free vs Pro vs Studio):** Cards detalhados com switch Anual (com desconto) / Mensal.
-  * **Footer Técnico:** Links institucionais, selo de segurança SSL, menção a servidores de alta performance e conformidade com a LGPD e CDC.
-
----
+* **Componentes:** Header Flutuante Glassmorphism, Hero com headline em Archivo, subheadline sobre blindagem jurídica e multiplicação de ticket, dupla de CTAs, carrossel de provas sociais, mockups 3D com iluminação hexagonal e tabela comparativa dos 3 planos.
 
 ### 4.2. Fluxo de Autenticação, Onboarding & Degustação (`/login`, `/cadastro`)
-
 * **Objetivo:** Entrada sem fricção em menos de 60 segundos.
-* **Componentes:**
-  * **Tela Dividida (Split Screen):**
-    * *Lado Esquerdo (Desktop):* Painel cinematográfico escuro com imagem de um supercarro sendo inspecionado sob luzes hexagonais e depoimento de um detailer renomado.
-    * *Lado Direito:* Formulário limpo com fundo `graphite-900`.
-  * **Formulário de Cadastro:**
-    * Nome Completo, E-mail profissional, Senha com medidor de força.
-    * Nome Fantasia da Oficina e WhatsApp com máscara automática `(99) 99999-9999`.
-    * Seletor de Tipo de Estúdio: `Estética Automotiva Geral`, `Especialista em PPF/Envelopamento`, `Vitrificação & Polimento`, `Martelinho de Ouro / Pintura Express`.
-    * Badge de Boas-Vindas: `🎁 15 DIAS DE ACESSO PRO LIBERADOS SEM NECESSIDADE DE CARTÃO`.
-  * **Wizard de Boas-Vindas (Passo a Passo Pós-Cadastro):**
-    * Passo 1: Upload do logotipo da oficina (PNG com fundo transparente).
-    * Passo 2: Configuração de 3 serviços principais e seus preços médios.
-    * Passo 3: Horário de funcionamento e quantidade de boxes de trabalho.
-    * Conclusão: Redirecionamento instantâneo para o Cockpit Dashboard com confetes digitais discretos.
-
----
+* **Componentes:** Tela dividida (foto cinematográfica à esquerda e formulário à direita), campos com máscara automática de telefone/CNPJ, badge destacando os 15 dias de degustação PRO sem cartão e assistente de boas-vindas para upload da logo e horários.
 
 ### 4.3. Dashboard Principal Cockpit (`/`)
-
-* **Objetivo:** O painel de comando diário do proprietário. Visão holística da saúde financeira e da esteira de produção.
-* **Estrutura Visual:**
-  * **Faixa Superior de Boas-Vindas:**
-    * Saudação personalizada: *"Bom dia, [Nome do Dono] • [Nome da Oficina]"*.
-    * Data do dia e indicador do clima/tempo local (útil para detailers, pois dias chuvosos afetam lavagens rápidas).
-    * Badge do Plano: `PLANO PRO ATIVO` com barra de progresso de uso (`42 / 150 Atendimentos no Mês`).
-  * **Grid de 4 Cards KPIs Mestres (Números em IBM Plex Mono):**
-    1. **Faturamento no Mês:** `R$ 38.450,00` (Bruto) | `R$ 29.810,00` (Líquido Real) com tag verde `+18.4% vs mês anterior`.
-    2. **Carros no Pátio Hoje:** `8 Veículos` (3 em lavagem, 3 em polimento, 2 aguardando liberação).
-    3. **Ticket Médio:** `R$ 640,00` por veículo.
-    4. **Taxa de Conversão de Propostas:** `72%` de orçamentos aprovados na semana.
-  * **Seção "Carros no Pátio Agora" (Kanban / Tabela Viva):**
-    * Linhas escuras com foto do carro, placa Mercosul em badge retangular, modelo do veículo, serviço em andamento, operador responsável e barra de progresso de tempo.
-    * Botões de ação rápida por carro: `Abrir OS`, `Ver Vistoria`, `Notificar Cliente WhatsApp`.
-  * **Painel Lateral de Ações Rápidas (Botões de Alta Visibilidade):**
-    * `+ Iniciar Check-in 360º` (Botão grande âmbar com ícone de scanner).
-    * `+ Criar Orçamento de 3 Níveis` (Botão grafite com borda dourada).
-    * `+ Novo Agendamento` (Botão com ícone de calendário).
-    * `🧪 Calculadora de Diluição de Químicos` (Acesso rápido de chão de oficina).
-
----
+* **Objetivo:** Visão panorâmica imediata da saúde da empresa.
+* **Componentes:** 4 KPIs mestres (Faturamento Bruto vs Líquido Real, Carros no Pátio, Ticket Médio, Conversão de Propostas), painel de Carros no Pátio Agora e atalhos rápidos âmbar para Novo Check-in, Novo Orçamento e Calculadora de Diluição.
 
 ### 4.4. Agenda Inteligente & Gestão de Pátio "Hoje" (`/agenda`, `/hoje`)
-
-* **Objetivo:** Organizar os horários dos boxes, impedir sobrecarga de trabalho e gerenciar serviços que duram vários dias.
-* **Componentes:**
-  * **Seletor de Visualização:** `Hoje (Pátio)`, `Semana (Boxes)`, `Mês (Geral)`, `Lista de Espera`.
-  * **Visão Diária por Boxes de Trabalho:**
-    * Colunas dedicadas aos boxes: *Box 1 (Lavação/Descontaminação)*, *Box 2 (Polimento Técnico)*, *Box 3 (Cabine de PPF/Vitrificação)*.
-    * Cada agendamento é um card escuro com:
-      * Horário de início e término previsto.
-      * Placa Mercosul com bandeira do Brasil.
-      * Modelo do carro (ex: `BMW M3 Competition - Preto Safira`).
-      * Nome do cliente com ícone verde para chamar no WhatsApp com 1 toque.
-      * Badge de Status: `Confirmado`, `Aguardando Chegada`, `No Pátio`, `Pronto para Entrega`.
-      * **Badge de Pernoite / Continuidade:** Para serviços de 2 a 4 dias (como vitrificação e PPF), o sistema exibe `🌙 SERVIÇO EM CONTINUIDADE (DIA 2/3)`.
-  * **Mecanismo Anti-Furo (Lembrete Automático):**
-    * Botão `Enviar Lembrete de Agendamento`: dispara no WhatsApp do cliente a confirmação com endereço via Google Maps e aviso para retirar pertences pessoais de valor do interior do veículo.
-
----
+* **Objetivo:** Controle de boxes, fluxos de trabalho e serviços que duram vários dias.
+* **Componentes:** Seletor de visualizações (Hoje, Semana, Mês), colunas dedicadas por Box de trabalho, placa Mercosul com bandeira do Brasil, botão de WhatsApp com 1 toque e badge ciano para serviços com pernoite.
 
 ### 4.5. Check-in 360º com Vistoria Vetorial e Assinatura Touch (`/checkin`)
-
-* **Objetivo:** A ferramenta mais poderosa de **blindagem jurídica** da oficina, eliminando litígios e processos com clientes.
-* **Estrutura Visual:**
-  * **Passo 1: Identificação do Veículo e Entrada:**
-    * Campo de Placa Mercosul com busca automática de modelo e cor (via API ou preenchimento rápido).
-    * Hodômetro (quilometragem digitada em fonte mono).
-    * Marcador Visual de Combustível: Seletor gráfico de tanque (`Reserva`, `1/4`, `1/2`, `3/4`, `Cheio`).
-    * Pertences no Interior: Checkboxes para itens declarados (*Óculos de sol, dinheiro, ferramentas, cadeirinha infantil*).
-  * **Passo 2: O Diagrama Blueprint Interativo (Silhouette 360º):**
-    * Ilustração técnica vetorial em aramado (estilo CAD automotivo) com 4 ângulos: *Vista Superior (Teto e Capô)*, *Vista Frontal*, *Vista Traseira*, *Laterais Direita e Esquerda*.
-    * **Mecânica de Toque na Tela:** O operador toca exatamente na peça do carro onde encontrou um problema (ex: para-lama dianteiro esquerdo).
-    * Pop-up instantâneo:
-      * Tipo de Avaria: *Risco Profundo*, *Risco Superficial*, *Amassado/Ondulação*, *Repintura Mal Feita*, *Roda Ralada*, *Picado de Pedra*, *Trinca de Vidro*, *Borracha Ressecada*.
-      * Severidade: *Leve (Amarelo)* ou *Crítica (Vermelho)*.
-      * Foto do Detalhe: Botão para abrir a câmera do celular e fotografar a avaria no mesmo instante.
-    * Um pin luminoso pulsante fica fixado na coordenada exata da silhueta do carro.
-  * **Passo 3: Galeria de Fotos com Marca D'Água Imutável (Timestamp):**
-    * Grid com slots padronizados: *Frente, Traseira, Lateral Motorista, Lateral Passageiro, Teto, Rodas, Painel de Instrumentos, Bancos, Motor*.
-    * Cada foto tirada recebe automaticamente uma tarja inferior preta translúcida gravando: `PLACA: BRA2E19 | DATA: 01/10/2026 14:32:05 | LAT/LONG REGISTRADA`. Prova jurídica incontestável.
-  * **Passo 4: Termo de Responsabilidade Técnica & Alertas CDC:**
-    * Caixas de ciência prévia:
-      * `[x] Cliente ciente de que pintura repintada previamente pode soltar verniz.`
-      * `[x] Cliente ciente de que verniz aferido com micrômetro está abaixo de 80 micras em áreas específicas.`
-      * `[x] Lavagem de motor solicitada sob responsabilidade do cliente quanto a chicotes ressecados.`
-  * **Passo 5: Canvas de Assinatura Digital Touch:**
-    * Retângulo escuro com superfície suave onde o cliente assina diretamente com o próprio dedo na tela do celular do atendente.
-    * Botões: `Limpar` e `Confirmar Assinatura`.
-  * **Despacho Automático:**
-    * Ao clicar em `Finalizar Check-in`, o NuvemWash gera um PDF completo com a vistoria, os pins e as fotos, e já abre o WhatsApp com a mensagem pronta para enviar o comprovante ao cliente.
-
----
+* **Objetivo:** O escudo protetor contra processos e prejuízos injustos.
+* **Componentes:** Placa Mercosul com busca rápida, hodômetro, marcador gráfico de tanque de combustível, diagrama interativo de silhueta 360º com pins de avarias por toque, fotos com carimbo d'água automático de data/hora imutável, termos de risco do CDC e canvas escuro para assinatura digital do cliente com o dedo.
 
 ### 4.6. Motor de Orçamentos de Elite em 3 Níveis & Minuta Jurídica (`/orcamento/novo`)
-
-* **Objetivo:** Apresentar propostas comerciais irresistíveis que aumentam o ticket médio em até 40% através do efeito psicológico de ancoragem.
-* **Componentes:**
-  * **Alternador de Estrutura:** `Orçamento em 3 Níveis (Recomendado)` vs `Orçamento Simples (Nível Único)`.
-  * **Os 3 Níveis de Apresentação:**
-    1. **Nível 1 — "Essencial" (A Âncora Básica):**
-       * Moldura grafite limpa com borda discreta.
-       * Serviços básicos solicitados pelo cliente (ex: Lavagem Detalhada + Descontaminação + Cera de Carnaúba).
-       * Valor total e tempo estimado (ex: R$ 350,00 | 4 horas).
-    2. **Nível 2 — "Recomendado" (O Campeão de Vendas / Mais Escolhido):**
-       * Moldura de destaque com **borda dupla âmbar dourada e glow suave**.
-       * Badge no topo em Archivo caixa alta: `⭐ MAIS ESCOLHIDO / MELHOR CUSTO-BENEFÍCIO`.
-       * Agrega os serviços fundamentais + proteção intermediária (ex: Lavagem Técnica + Polimento Comercial + Vitrificação de Plásticos e Faróis + Higienização de Couro).
-       * Valor de destaque e parcelamento sugerido (ex: R$ 890,00 ou 3x de R$ 315,00).
-    3. **Nível 3 — "Premium / Master Detail" (A Experiência Máxima):**
-       * Moldura sofisticada índigo/platina com badge `👑 PROTEÇÃO SUPREMA 9H`.
-       * O pacote completo com garantia estendida (ex: Correção de Pintura em 3 Etapas + Coating Cerâmico 9H com 3 anos de garantia + Vitrificação de Vidros e Rodas + PPF Frontal).
-       * Valor de alto ticket (ex: R$ 2.450,00 ou 6x de R$ 440,00).
-  * **Modal de Minuta Oficial do Advogado (CDC):**
-    * Botão de grande visibilidade: **`⚖️ Aplicar Minuta Oficial do Advogado (CDC)`**.
-    * Ao clicar, insere instantaneamente o texto jurídico homologado por assessoria jurídica especializada em direito do consumidor, respaldado nos **Arts. 6º, III; 8º; 14, §3º; 40; 46 e 54 do CDC**.
-    * Abrange: condições do verniz prévio, autorização para testes de rodagem técnica pelo estúdio, prazo de garantia formal, tolerâncias de repintura e responsabilidades de guarda.
-    * Checkbox opcional: `Imprimir Minuta Jurídica em Folha Separada no PDF do Contrato`.
-
----
+* **Objetivo:** Ferramenta comercial que eleva o ticket médio em até 40% usando ancoragem psicológica.
+* **Componentes:** Visualização dos 3 Níveis (Essencial, Recomendado com borda dourada e badge "Mais Escolhido", e Premium com proteção 9H), botão de aplicação da Minuta Oficial do Advogado (CDC) e opção de gerar folha anexa exclusiva para assinatura no PDF.
 
 ### 4.7. Portal Público de Aprovação do Cliente (`/orcamento/:token`)
-
-* **Objetivo:** O link web elegante que o cliente final abre no celular dele pelo WhatsApp. Não requer senha nem download de app.
-* **Experiência do Consumidor Final:**
-  * Design ultra-refinado e limpo, adaptado para telas mobile de qualquer tamanho.
-  * Cabeçalho com o logotipo da oficina, nome do cliente e dados do veículo (com foto do modelo).
-  * **Carrossel de Comparação dos 3 Níveis:** O cliente desliza os cards e compara facilmente a diferença de benefícios entre o *Essencial*, o *Recomendado* e o *Premium*.
-  * **Gatilho de Conversão:**
-    * Ao tocar em `APROVAR ESTA OPÇÃO` no pacote desejado, abre um modal interativo:
-      * Confirmação dos dados (Nome e CPF para nota/garantia).
-      * **Assinatura do Cliente com o Dedo na Tela**.
-      * Aceite dos termos de garantia e minuta do CDC.
-  * **Agendamento da Data:** O portal permite ao cliente escolher o dia de entrada do veículo na oficina conforme a disponibilidade da agenda.
-  * **Cobrança de Sinal Automática (Pix):**
-    * Se a oficina configurou sinal (ex: 20% para reserva de vaga), o portal gera imediatamente o **Pix Copia e Cola** e o **QR Code Dinâmico**.
-    * A oficina recebe notificação imediata: *"Orçamento Aprovado por [Cliente] com Sinal Pago!"*.
-
----
+* **Objetivo:** O link web elegante que o cliente abre no WhatsApp para aprovar a proposta.
+* **Componentes:** Comparador deslizante dos 3 pacotes, modal de aprovação com assinatura touch pelo próprio cliente, seletor de agendamento de data e geração imediata de Pix Copia e Cola / QR Code para pagamento de sinal.
 
 ### 4.8. Chão de Oficina: Cronômetro de Telemetria & Diluição (`/ordem-servico/:id`)
-
-* **Objetivo:** A tela utilizada pelos operadores e detailers dentro do box durante a execução do serviço.
-* **Componentes:**
-  * **Cronômetro Digital de Telemetria:**
-    * Mostrador gigante em fonte `IBM Plex Mono` com dígitos em ciano elétrico (`#5EC8FF`).
-    * Botões rápidos: `Iniciar Etapa`, `Pausar (Almoço/Intervalo)`, `Concluir Etapa`.
-    * Mede o tempo gasto em cada fase (Corte, Refino, Vitrificação) para calcular o custo da hora técnica real da oficina.
-  * **Módulo "Antes e Depois" com Foto Comparativa:**
-    * Divisor visual com foto do estado inicial (verniz opaco com riscos) e foto do estado final (verniz espelhado).
-    * Ferramenta de marketing automático: gera card com layout pronto para postar nos Stories do Instagram com a logo da oficina.
-  * **Calculadora de Diluição de Químicos (Gráfico de Proveta Graduada):**
-    * Seletor de Recipientes: *Frasco Borrifador 500ml*, *Frasco 1 Litro*, *Pulverizador Manual 1.5L*, *Canhão Snow Foam 1L*, *Galão 5 Litros*.
-    * Seletor de Proporção Técnica: `1:1`, `1:5`, `1:10`, `1:20`, `1:30`, `1:50`, `1:100`.
-    * Ilustração de proveta de laboratório preenchida com líquido: mostra com precisão milimétrica a quantidade de produto concentrado em ml e a quantidade de água limpa a adicionar. Evita desperdício de produtos caros (como desengraxantes, vitrificadores e shampoos de pH ácido/básico).
-
----
+* **Objetivo:** A interface usada na execução diária pelos detailers dentro do box.
+* **Componentes:** Cronômetro ciano de telemetria por etapa, comparador Antes vs Depois para Stories do Instagram e calculadora interativa de diluição química com gráfico de proveta graduada (1:1 a 1:100).
 
 ### 4.9. Painel Financeiro: DRE em Tempo Real & Radar de Cobrança (`/financeiro`)
-
-* **Objetivo:** Entregar a clareza de um CFO para o dono da oficina em 1 único olhar.
-* **Componentes:**
-  * **Demonstrativo de Resultado (DRE Sintético Visual):**
-    * `(+) Faturamento Bruto` (Total cobrado dos clientes).
-    * `(-) Taxas de Meios de Pagamento` (Desconto automático de taxas Asaas / maquininhas Stone/Cielo).
-    * `(-) Comissões da Equipe` (Percentuais configurados por operador por serviço).
-    * `(-) Custo de Insumos & Produtos` (Estimativa por carro).
-    * `(=) LUCRO OPERACIONAL LÍQUIDO REAL` (Destaque em verde esmeralda `mint-400` com percentual de margem real).
-  * **Gráfico de Formas de Pagamento:**
-    * Distribuição percentual em pizza/rosca: Pix, Cartão de Crédito (1x a 12x), Cartão de Débito, Dinheiro, Boleto.
-  * **O Radar Financeiro do Dia (Cobrança Ativa no WhatsApp):**
-    * Pop-up ou seção de destaque que abre automaticamente todos os dias às 09:00:
-    * Lista de clientes com parcelas vencendo hoje ou já em atraso.
-    * Dados: Nome do Cliente, Carro, Valor Pendente, Dias de Atraso.
-    * **Botão Verde WhatsApp (1 Toque):** Abre a conversa no WhatsApp do cliente com uma mensagem educada, elegante e personalizada já digitada, contendo o resumo do débito, a chave Pix da oficina e o link do comprovante. Transforma uma tarefa desconfortável em um processo amigável e pontual.
-
----
+* **Objetivo:** Entregar clareza financeira absoluta sem complicação contábil.
+* **Componentes:** DRE Sintético (Bruto ➔ (-) Taxas de Cartão ➔ (-) Comissões ➔ (-) Custo de Insumos ➔ (=) Lucro Líquido Real) + Radar Financeiro com lista de vencimentos do dia e botão de cobrança educada com chave Pix em 1 toque no WhatsApp.
 
 ### 4.10. Motor Fiscal Integrado & Emissão de NFS-e (`/financeiro/fiscal`)
-
-* **Objetivo:** Emitir Notas Fiscais de Serviços Eletrônicas (NFS-e) para prefeituras brasileiras via Focus NFe sem burocracia.
-* **Componentes:**
-  * Status da Empresa: Indicador de Certificado Digital A1 ativo (com aviso de vencimento), CNPJ, Regime Tributário (MEI ou Simples Nacional) e Alíquota de ISS configurada.
-  * Emissão em 1 Clique: Na entrega do veículo, botão `⚡ Emitir Nota Fiscal Agora`. O sistema puxa os dados do cliente, os serviços realizados e comunica diretamente com a prefeitura em segundo plano.
-  * Tabela Fiscal com Badges: `Autorizada` (verde), `Processando` (amarelo), `Rejeitada` (vermelho com motivo claro da prefeitura).
-  * Ações: `Baixar DANFSe (PDF)` e `Baixar XML`.
-
----
+* **Objetivo:** Emissão automatizada de Notas Fiscais de Serviços sem abrir o site da prefeitura.
+* **Componentes:** Indicador de Certificado Digital A1, emissão em 1 clique na entrega do carro, download instantâneo de DANFSe (PDF) e arquivo XML.
 
 ### 4.11. "Minha Oficina": Configurações, Matriz 2D & Equipe (`/configuracoes`)
-
-* **Objetivo:** Personalização completa da operação do estúdio.
-* **Componentes (Abas Superiores Deslizantes com Navegação Rápida):**
-  * **Aba 1 — Dados da Oficina:** Razão social, nome fantasia, CNPJ, upload de logotipo oficial, endereço físico, WhatsApp de contato e link do perfil no Instagram.
-  * **Aba 2 — Horários & Capacidade de Pátio:** Dias de atendimento, horários de abertura e fechamento, intervalo de almoço e teto de vagas simultâneas por box de serviço.
-  * **Aba 3 — Equipe & Permissões:** Cadastro de detailers, polidores e recepcionistas. Controle de quem pode ver o financeiro e quem só tem acesso ao chão de oficina e check-in.
-  * **Aba 4 — Matriz de Preços 2D por Porte de Veículo:**
-    * Tabela bidimensional onde as colunas são as categorias de veículos: *Pequeno (Hatch)*, *Médio (Sedan)*, *Grande (SUV/SW)*, *Extra Grande (Picape/Blindado)*.
-    * As linhas são os serviços (ex: Polimento Técnico, Vitrificação 9H, Higienização).
-    * Cada célula permite definir o preço em reais e o tempo estimado em minutos separadamente por porte.
-  * **Aba 5 — Termos de Garantia & Minuta Jurídica:** Gestor de modelos contratuais, permitindo ao dono customizar cláusulas de acordo com os produtos que ele utiliza (Gyeon, CarPro, Vonixx, Nasiol, Ceramic Pro).
-
----
+* **Objetivo:** Centro nevrálgico de personalização do estúdio.
+* **Componentes:** Abas deslizantes com Logo, Horários e Boxes, Gestão de Equipe com travas de acesso, Matriz de Preços 2D por porte de veículo (Pequeno, Médio, Grande, SUV/Picape) e editor de termos de garantia.
 
 ### 4.12. Cockpit Master Admin SaaS (`/admin`)
-
-* **Objetivo:** O painel exclusivo dos fundadores do NuvemWash para controlar o negócio SaaS.
-* **Módulos:**
-  * `/admin/oficinas`: Visão multi-tenant com todas as estéticas cadastradas no país, plano ativo, status de pagamento da assinatura no Asaas, data de cadastro e atalho para suporte via WhatsApp.
-  * `/admin/planos`: Editor em tempo real dos limites dos planos (teto de atendimentos finalizados, número de clientes, usuários da equipe e preços mensais).
-  * `/admin/campanhas`: **Interruptor mestre de degustação (15 Dias Grátis no Cadastro)**, permitindo aos fundadores ativar ou desativar campanhas com 1 clique sem alterar código.
-  * `/admin/storage`: Gráfico de consumo de armazenamento de imagens e vistorias no Supabase Storage para controle de margem de lucro operacional da infraestrutura em nuvem.
-  * `/admin/modelos-termos`: Biblioteca central de minutas jurídicas elaboradas pelo advogado para distribuição imediata para a base de usuários.
+* **Objetivo:** O painel de bordo exclusivo dos sócios-fundadores para gerenciar todo o ecossistema.
+* **Componentes:** Gestão de Oficinas (`/admin/oficinas`), Matriz de Planos (`/admin/planos`), Switch mestre de 15 dias de degustação grátis no cadastro (`/admin/campanhas`) e monitor de consumo do Supabase Storage (`/admin/storage`).
 
 ---
 
-## 5. MATRIZ OFICIAL DE PLANOS, LIMITES E GATILHOS DE MONETIZAÇÃO
+## 5. GUIA OPERACIONAL PASSO A PASSO: COMO FAZER CADA AÇÃO NA PRÁTICA (CLIQUE A CLIQUE)
+
+> **Instrução aos Sócios e Instrutores:** Esta seção ensina exatamente como mexer na plataforma, onde clicar, qual é o caminho na interface e qual o fluxo ideal para deixar a oficina 100% pronta e operando com excelência.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                               FLUXO OPERACIONAL COMPLETO DA OFICINA                                   │
+│                                                                                                        │
+│   [1. SETUP INICIAL] ──► [2. RECEPÇÃO & CHECK-IN] ──► [3. ORÇAMENTO 3 NÍVEIS & MINUTA DO ADVOGADO]    │
+│   (/configuracoes)        (/checkin - Vistoria 360)    (/orcamento/novo - Link WhatsApp do Cliente)    │
+│                                                                      │                                 │
+│                                                                      ▼                                 │
+│   [6. DRE & RADAR ZAP] ◄── [5. CONCLUSÃO & NFS-e] ◄── [4. CHÃO DE OFICINA, CRONÔMETRO & DILUIÇÃO]      │
+│   (/financeiro - Lucro)    (/ordem-servico - Baixa)    (/ordem-servico - Telemetria & Químicos)        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 5.1. Primeiro Acesso: Setup da Oficina, Logo e Horários (`/configuracoes`)
+* **Onde ir:** No menu lateral esquerdo (ou menu inferior no mobile), clique em **`Minha Oficina`** (ou acesse a URL `/configuracoes`).
+* **Passo a Passo de Configuração:**
+  1. **Aba "Oficina":**
+     * Preencha a *Razão Social*, o *Nome Fantasia* e o *CNPJ / CPF*.
+     * Digite o *WhatsApp de Atendimento* com DDD (ex: `11999998888`). Este número será usado em todas as mensagens automáticas e comprovantes.
+     * Insira o *Endereço Completo* (ele sairá no rodapé dos orçamentos e do agendamento online).
+     * Faça o upload da **Logomarca da Oficina**: prefira imagem em formato PNG com fundo transparente e resolução mínima de 500x500px. Essa logo aparecerá no cabeçalho das propostas do cliente e nos laudos periciais em PDF.
+     * Clique no botão **`Salvar Informações da Oficina`** no canto inferior direito.
+  2. **Aba "Horários & Pátio":**
+     * Defina o horário de abertura (ex: `08:00`) e de fechamento (ex: `18:30`).
+     * Configure o intervalo de almoço para que a agenda inteligente não marque entregas nesse período.
+     * Defina o **Número Máximo de Veículos Simultâneos**: se a oficina tem 3 boxes físicos, coloque `3`. Isso impede que o agendamento online crie fila desordenada no pátio.
+     * Clique em **`Salvar Horários`**.
+
+---
+
+### 5.2. Como Cadastrar a Matriz de Preços 2D por Porte de Veículo
+* **Onde ir:** Em `/configuracoes`, clique na aba **`Serviços & Matriz de Preços`**.
+* **Como funciona a Matriz 2D:** Detailers não cobram o mesmo valor para polir um Fiat 500 (Hatch Pequeno) e uma Toyota Hilux ou Porsche Cayenne (SUV Grande). A Matriz 2D resolve isso:
+* **Passo a Passo:**
+  1. Clique no botão **`+ Adicionar Novo Serviço`**.
+  2. Digite o nome do serviço (ex: `Polimento Técnico Comercial`).
+  3. Preencha a tabela que se abre com as 4 colunas de portes:
+     * *Porte Pequeno (Hatch):* Preço: `R$ 600,00` | Tempo estimado: `240 min` (4h).
+     * *Porte Médio (Sedan):* Preço: `R$ 750,00` | Tempo estimado: `300 min` (5h).
+     * *Porte Grande (SUV/SW):* Preço: `R$ 950,00` | Tempo estimado: `360 min` (6h).
+     * *Porte Extra Grande (Picape/Blindado):* Preço: `R$ 1.200,00` | Tempo estimado: `420 min` (7h).
+  4. Marque a comissão padrão da equipe para esse serviço (ex: `30%`).
+  5. Clique em **`Salvar Serviço na Matriz`**.
+  *Repita o processo para os principais serviços da oficina: Lavagem Técnica Detalhada, Vitrificação Cerâmica 9H, Higienização Interna e Aplicação de PPF.*
+
+---
+
+### 5.3. Como Cadastrar a Equipe e Bloquear Acesso ao Financeiro
+* **Onde ir:** Em `/configuracoes`, clique na aba **`Equipe & Permissões`**.
+* **Passo a Passo:**
+  1. Clique em **`+ Adicionar Colaborador`**.
+  2. Preencha o Nome Completo, WhatsApp e E-mail do funcionário.
+  3. Selecione a **Função Operacional**:
+     * *Operador / Polidor:* Tem acesso apenas ao Check-in, Agenda do Pátio e Chão de Oficina (cronômetro e diluição). **Não tem permissão para visualizar o DRE, faturamento, despesas ou extrato bancário.**
+     * *Gerente / Recepcionista:* Pode criar orçamentos, agendar e atender clientes, com permissão financeira restrita.
+     * *Administrador / Sócio:* Acesso irrestrito a todos os módulos, relatórios fiscais e configurações da oficina.
+  4. Defina o percentual de comissão individual do colaborador.
+  5. Clique em **`Salvar Membro da Equipe`**.
+
+---
+
+### 5.4. Como Fazer uma Vistoria & Check-in 360º na Chegada do Carro (`/checkin`)
+* **Onde ir:** No Dashboard, clique no botão âmbar de destaque **`+ Iniciar Check-in 360º`** ou acesse `/checkin`.
+* **Passo a Passo da Vistoria Blindada (Recepção do Cliente):**
+  1. **Identificação do Carro:**
+     * Digite a **Placa do Veículo** (padrão Mercosul `BRA2E19` ou antigo `ABC1234`).
+     * O sistema busca o veículo se já cadastrado, ou você insere o Modelo (ex: `BMW M3 2023`), a Cor e o Nome do Cliente com WhatsApp.
+     * Digite a **Quilometragem (KM)** que consta no painel.
+     * Clique no botão do **Nível de Combustível** (ex: `1/2 Tanque`).
+     * Marque os checkboxes de *Pertences Pessoais Deixados no Veículo* (ex: óculos, ferramentas, moedas).
+  2. **Mapeamento de Avarias na Silhueta 360º (A Chave da Blindagem Jurídica):**
+     * Na tela, aparece o desenho técnico blueprint do carro (frente, laterais, teto, traseira).
+     * Dê a volta física no carro junto com o cliente.
+     * Encontrou um risco ou ralado na porta do passageiro? **Toque exatamente com o dedo na porta do desenho na tela**.
+     * Abre-se o pop-up:
+       * Selecione a classificação: `Risco Profundo`, `Amassado`, `Repintura Grosseira` ou `Roda Ralada`.
+       * Selecione a severidade: `Leve (Amarelo)` ou `Crítica (Vermelho)`.
+       * Clique no botão de câmera e **tire a foto do defeito em close-up** pelo celular.
+     * O sistema finca um pin luminoso pulsante naquele ponto exato do desenho.
+  3. **Fotos Obrigatórias de Ângulos Gerais:**
+     * O sistema exibe os 6 slots principais: Frente, Traseira, Lateral Esquerda, Lateral Direita, Interior e Motor.
+     * Toque em cada slot e bata a foto. O NuvemWash estampa na hora a tarja preta inferior com placa, data e horário oficial.
+  4. **Termo de Responsabilidade Técnica (CDC):**
+     * Se o carro tiver peça repintada ou verniz com espessura crítica abaixo de 80 micras, marque a caixa: `[x] Cliente declara ciência de repintura prévia com risco de desplacamento`.
+  5. **Coleta da Assinatura Digital Touch:**
+     * Role até o final da tela. O cliente assina diretamente na caixa preta com o próprio dedo.
+  6. **Finalização:**
+     * Clique em **`Finalizar Check-in e Enviar Laudo`**.
+     * O sistema gera o PDF pericial blindado e abre o WhatsApp com a mensagem pronta: *"Olá [Cliente], seu veículo deu entrada na [Oficina]. Segue o Laudo Pericial de Entrada com fotos e vistoria 360: [Link do Laudo]"*.
+
+---
+
+### 5.5. Como Criar e Disparar Orçamentos em 3 Níveis com a Minuta do CDC (`/orcamento/novo`)
+* **Onde ir:** No Dashboard, clique em **`+ Criar Orçamento`** (ou vá em `/orcamentos` ➔ `Novo`).
+* **Passo a Passo de Venda de Alto Ticket:**
+  1. Selecione o Cliente e o Veículo previamente cadastrados.
+  2. No topo, selecione a chave seletora **`Orçamento em 3 Níveis (Estratégia Recomendada)`**.
+  3. **Montando os 3 Pacotes:**
+     * **Nível 1 (Essencial):** Selecione os serviços básicos solicitados pelo cliente (ex: *Lavagem Técnica Detalhada + Descontaminação Ferrosa*). Total: `R$ 380,00`.
+     * **Nível 2 (Recomendado — O Campeão de Vendas):** O sistema aplica automaticamente uma borda dourada com badge `⭐ MAIS ESCOLHIDO`. Adicione: *Lavagem Técnica + Polimento Técnico Comercial + Vitrificação de Plásticos e Faróis + Higienização dos Bancos*. Total: `R$ 980,00`.
+     * **Nível 3 (Premium / Master Detail):** Pacote com proteção máxima. Adicione: *Correção Total de Pintura (3 Etapas) + Coating Cerâmico 9H (Garantia de 3 Anos) + Vitrificação de Vidros + Proteção de Couro*. Total: `R$ 2.450,00`.
+  4. **Blindagem Jurídica com a Minuta do Advogado:**
+     * Clique no botão dourado **`⚖️ Aplicar Minuta Oficial do Advogado (CDC)`**.
+     * O sistema preenche instantaneamente o campo de termos contratuais com o texto oficial aprovado por juristas citando os artigos 6º, 8º, 14, 40 e 54 do CDC.
+     * Se desejar imprimir para assinatura em papel, marque: `[x] Imprimir Minuta Jurídica em Folha Separada no PDF`.
+  5. **Disparo da Proposta:**
+     * Clique em **`Salvar e Gerar Link do WhatsApp`**.
+     * O sistema copia o link exclusivo da proposta (`/orcamento/:token`) e abre o WhatsApp do cliente com uma mensagem convidativa: *"Olá [Cliente], preparamos 3 opções personalizadas de cuidados para seu [Modelo do Carro]. Toque no link abaixo para comparar os pacotes e aprovar online: [Link]"*.
+
+---
+
+### 5.6. A Experiência do Cliente Final: Como ele Aprova, Assina e Paga o Sinal
+* **O que acontece quando o cliente clica no link do WhatsApp:**
+  1. O cliente abre no próprio smartphone uma página limpa, bonita e com a marca da sua oficina.
+  2. Ele desliza o dedo horizontalmente entre os 3 cards. Vê o que está incluído em cada um, os benefícios de proteção e o valor parcelado.
+  3. O cliente decide pelo pacote **Recomendado** e clica no botão verde **`APROVAR ESTE PACOTE`**.
+  4. Abre-se o modal de assinatura:
+     * O cliente confere os dados e digita o CPF.
+     * **Ele assina com o dedo na tela do próprio celular**, validando o contrato e as cláusulas do CDC.
+  5. **Escolha da Data de Entrada:** O cliente escolhe na agenda o melhor dia e horário para levar o carro.
+  6. **Pagamento do Sinal via Pix:** O portal exibe o botão `Copiar Código Pix` e o QR Code com o valor da entrada (ex: 20% do orçamento).
+  7. **O que muda na oficina:** O dono da oficina recebe um alerta no Dashboard e o orçamento é transformado automaticamente em uma **Ordem de Serviço (OS) Aprovada** na Agenda!
+
+---
+
+### 5.7. Como Operar o Chão de Oficina: Cronômetro e Calculadora de Diluição
+* **Onde ir:** Na tela **`Hoje`** (`/hoje`) ou dentro da Ordem de Serviço em andamento (`/ordem-servico/:id`).
+* **Como usar o Cronômetro de Telemetria:**
+  * O operador que vai iniciar o polimento clica no botão **`Iniciar Etapa: Polimento Técnico`**.
+  * O display ciano em `IBM Plex Mono` começa a contar o tempo de trabalho em segundos e minutos.
+  * Se o operador for almoçar ou interromper o serviço, clica em **`Pausar`**. Ao retornar, clica em **`Retomar`**.
+  * Ao concluir, clica em **`Concluir Etapa`**. O sistema armazena a duração exata para calcular o custo real da hora de mão de obra.
+* **Como usar a Calculadora de Diluição de Químicos:**
+  * No box de lavagem, o operador clica no botão **`🧪 Calculadora de Diluição`**.
+  * Passo 1: Selecione o frasco que está na mão (ex: *Pulverizador Manual 1 Litro*).
+  * Passo 2: Selecione a proporção recomendada no rótulo do produto (ex: `1:10` para desengraxante pesado ou `1:50` para shampoo neutro).
+  * Passo 3: O desenho de uma proveta de laboratório mostra graficamente na tela:
+    * *"Coloque 90ml de Produto Concentrado"*.
+    * *"Complete com 910ml de Água Limpa"*.
+  * O estúdio economiza milhares de reais por ano evitando que operadores coloquem produto "no olho".
+* **Como registrar o Antes e Depois:**
+  * Na aba de fotos da OS, tire a foto do capô com a fita crepe dividindo a metade com microrriscos e a metade espelhada.
+  * O sistema gera automaticamente um card pronto para compartilhar nos Stories do Instagram com a logomarca da oficina.
+
+---
+
+### 5.8. Como Finalizar a OS, Emitir a NFS-e e Visualizar o DRE Real
+* **Onde ir:** Na Ordem de Serviço concluída (`/ordem-servico/:id`) e no menu **`Financeiro`** (`/financeiro`).
+* **Passo a Passo de Encerramento e Entrega:**
+  1. Com o carro pronto e polido, clique no botão **`Finalizar e Entregar Veículo`**.
+     * *(Importante: É neste exato clique que o sistema consome 1 atendimento da cota mensal do seu plano).*
+  2. Selecione a forma de pagamento utilizada pelo cliente (ex: *Pix*, *Cartão de Crédito 3x*, *Dinheiro*).
+  3. **Emissão Instantânea da Nota Fiscal (NFS-e):**
+     * Clique no botão **`⚡ Emitir Nota Fiscal Agora`**.
+     * O sistema dispara a requisição para a prefeitura via Focus NFe.
+     * Em segundos, o status muda para `Autorizada` e aparecem os botões `Baixar DANFSe (PDF)` e `Baixar XML`.
+  4. **Conferência do DRE Real no Financeiro:**
+     * Acesse `/financeiro`.
+     * No bloco do **DRE Sintético**, veja a separação matemática:
+       * `(+) Faturamento Bruto:` R$ 980,00
+       * `(-) Taxa da Maquininha/Gateway (3.2%):` - R$ 31,36
+       * `(-) Comissão do Polidor (30% sobre mão de obra):` - R$ 250,00
+       * `(-) Custo Estimado de Químicos e Boina:` - R$ 45,00
+       * `(=) LUCRO OPERACIONAL LÍQUIDO REAL:` **R$ 653,64 (66.7% de Margem)**.
+
+---
+
+### 5.9. Como Usar o Radar de Cobrança WhatsApp para Eliminar Fiados
+* **Onde ir:** Acesse o menu **`Financeiro`** ➔ seção **`Radar de Cobrança`**.
+* **Passo a Passo para Receber Clientes em Atraso:**
+  1. Todos os dias, o Radar de Cobrança compila automaticamente a lista de clientes que têm parcelas vencendo no dia ou que estão atrasadas.
+  2. Na linha de cada cliente devedor, o sistema mostra o nome, modelo do veículo, valor pendente e dias de atraso em um badge vermelho.
+  3. Ao lado do valor, há um **botão verde com o ícone do WhatsApp**.
+  4. **Dê 1 clique no botão verde:**
+     * O sistema abre o WhatsApp Web ou aplicativo de celular com a conversa daquele cliente e uma mensagem pronta, educada e elegante já digitada:
+       *"Olá [Nome do Cliente], tudo bem? Esperamos que esteja aproveitando o brilho do seu [Modelo do Carro]! Passando apenas para lembrar que a parcela do seu serviço no valor de R$ [Valor] venceu em [Data]. Segue a nossa Chave Pix para facilidade de pagamento: [Chave Pix da Oficina]. Caso já tenha realizado o pagamento, por favor desconsidere!"*
+  5. Você não precisa redigir nada nem passar vergonha cobrando; basta apertar o botão de enviar no WhatsApp.
+
+---
+
+### 5.10. Como os Sócios Operam o Painel Master Admin SaaS (`/admin`)
+* **Onde ir:** Faça login com uma conta de sócio/administrador da NuvemWash e acesse a URL `/admin`.
+* **Os 5 Comandos Principais dos Sócios:**
+  1. **Monitorar Estúdios Cadastrados (`/admin/oficinas`):**
+     * Veja a lista de todas as oficinas clientes no Brasil.
+     * Filtre por plano (Free, Pro, Studio) e veja quem está em dia com a assinatura no Asaas.
+     * Há um botão direto para abrir o WhatsApp do dono da oficina caso ele precise de suporte ou consultoria.
+  2. **Controlar a Campanha de Degustação (`/admin/campanhas`):**
+     * Na tela de campanhas, há o interruptor mestre: **`Degustação de 15 Dias Grátis no Cadastro`**.
+     * Quer fazer uma campanha agressiva de captação de clientes? **Deixe o switch LIGADO**. Todo novo estúdio que se cadastrar ganha 15 dias de degustação PRO automática sem precisar de cartão.
+     * Quer fechar a torneira e exigir pagamento imediato? **Desligue o switch**. O cadastro passa a exigir assinatura imediata ou libera apenas o plano Free limitado.
+  3. **Editar Limites e Valores dos Planos (`/admin/planos`):**
+     * Você pode reajustar o preço da mensalidade (ex: de R$ 79 para R$ 97) ou alterar as cotas de atendimentos mensais diretamente pela interface, sem precisar chamar um programador para alterar código.
+  4. **Controlar os Custos de Servidor (`/admin/storage`):**
+     * Monitore o gráfico de megabytes e gigabytes consumidos pelas fotos dos laudos no Supabase Storage para garantir que a margem de lucro do SaaS continue acima de 80%.
+  5. **Atualizar a Minuta Jurídica Central (`/admin/modelos-termos`):**
+     * Se o advogado do NuvemWash atualizar alguma cláusula do Código de Defesa do Consumidor, os fundadores colam o novo texto aqui e ele é propagado instantaneamente para todas as oficinas da plataforma.
+
+---
+
+## 6. MATRIZ OFICIAL DE PLANOS, LIMITES E GATILHOS DE MONETIZAÇÃO
 
 > **Regra de Engenharia Sagrada:** A cota de atendimentos do plano só é consumida quando um veículo tem seu status alterado para **"Finalizado" / "Entregue"**. Orçamentos em negociação e agendamentos futuros não descontam da cota do cliente.
 
@@ -404,7 +432,7 @@ O sistema utiliza três famílias tipográficas com propósitos estritamente sep
 
 ---
 
-## 6. BIBLIOTECA DE PROMPTS PRONTOS PARA MOTORES DE IA GENERATIVA
+## 7. BIBLIOTECA DE PROMPTS PRONTOS PARA MOTORES DE IA GENERATIVA
 
 > **Instrução para os Sócios & Designers:** Os prompts abaixo foram meticulosamente lapidados em inglês para Midjourney v6, Flux Schnell/Dev, Ideogram e geradores de UI como Figma AI e v0. Copie o bloco correspondente e cole na ferramenta desejada.
 
@@ -459,7 +487,7 @@ Close-up product UI screenshot of a dark-mode financial dashboard modal titled "
 
 ---
 
-## 7. DIRETRIZES RIGOROSAS DE ERGONOMIA MOBILE VS DESKTOP
+## 8. DIRETRIZES RIGOROSAS DE ERGONOMIA MOBILE VS DESKTOP
 
 Para garantir que qualquer mockup ou código desenhado pela IA mantenha perfeição prática de uso:
 
@@ -480,7 +508,7 @@ Para garantir que qualquer mockup ou código desenhado pela IA mantenha perfeiç
 
 ---
 
-## 8. ANTI-PATTERNS & NEGATIVE PROMPTS (O QUE A IA NUNCA DEVE FAZER)
+## 9. ANTI-PATTERNS & NEGATIVE PROMPTS (O QUE A IA NUNCA DEVE FAZER)
 
 > **Instrução Rígida para IAs de Geração Visual:** Inclua os termos abaixo como **Negative Prompts** para evitar que a IA produza designs desastrosos que descaracterizem a marca NuvemWash.
 
@@ -493,10 +521,10 @@ Para garantir que qualquer mockup ou código desenhado pela IA mantenha perfeiç
 
 ---
 
-## 9. CONCLUSÃO & COMO ALIMENTAR A IA COM ESTE DOCUMENTO
+## 10. CONCLUSÃO & COMO ALIMENTAR A IA COM ESTE DOCUMENTO
 
 Ao orientar qualquer inteligência artificial (Midjourney, ChatGPT, Claude, Figma AI ou desenvolvedores) para criar peças da NuvemWash, instrua da seguinte forma:
 
 > *"Atue como o Head de Design de Produto da NuvemWash. Utilize as diretrizes oficiais de cores (#0F1216, #FF8A3D, #5EC8FF, #3ED598), as fontes (Archivo, IBM Plex Sans, IBM Plex Mono) e o arquétipo de Cockpit Tecnológico de Pista especificados na Bíblia Mestre de Produto para gerar a tela / mockup / criativo solicitado, respeitando a blindagem jurídica e a linguagem profissional de estética automotiva."*
 
-Este documento representa o ativo central de engenharia, vendas e produto da NuvemWash. Qualquer material gerado com base nele terá coerência visual e comercial imbatível.
+Este documento representa o ativo central de engenharia, vendas, operação e produto da NuvemWash. Ele atende tanto ao operador e sócio que precisam entender o clique a clique quanto ao designer de inteligência artificial que gerará a identidade visual do software.
