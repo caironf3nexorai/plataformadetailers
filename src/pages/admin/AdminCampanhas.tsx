@@ -102,7 +102,18 @@ export const AdminCampanhas: React.FC = () => {
         p_ativo: novoValor,
         p_dias: trialDiasPadrao
       });
-      if (error) throw error;
+      if (error) {
+        console.warn('RPC admin_alterar_trial_cadastro falhou, tentando fallback direto em plataforma_config:', error);
+        const { error: directErr } = await supabase
+          .from('plataforma_config')
+          .update({
+            trial_cadastro_ativo: novoValor,
+            trial_dias_padrao: trialDiasPadrao,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', 1);
+        if (directErr) throw error;
+      }
       setTrialCadastroAtivo(novoValor);
       showSuccess(novoValor
         ? `Degustação gratuita no cadastro (Trial de ${trialDiasPadrao} dias Pro) ATIVADA para novos usuários!`

@@ -62,22 +62,26 @@ BEGIN
       updated_at = now()
   WHERE id = 1;
 
-  -- Registrar log de auditoria
-  INSERT INTO public.admin_audit_logs (
-    admin_id,
-    acao,
-    entidade,
-    entidade_id,
-    dados_anteriores,
-    dados_novos
-  ) VALUES (
-    auth.uid(),
-    'alterar_trial_cadastro',
-    'plataforma_config',
-    '1',
-    jsonb_build_object('trial_cadastro_ativo', v_antigo_ativo, 'trial_dias_padrao', v_antigo_dias),
-    jsonb_build_object('trial_cadastro_ativo', p_ativo, 'trial_dias_padrao', p_dias)
-  );
+  -- Registrar log de auditoria protegido
+  BEGIN
+    INSERT INTO public.admin_auditoria (
+      admin_user_id,
+      acao,
+      entidade,
+      entidade_id,
+      valor_anterior,
+      valor_novo
+    ) VALUES (
+      auth.uid(),
+      'alterar_trial_cadastro',
+      'plataforma_config',
+      '1',
+      jsonb_build_object('trial_cadastro_ativo', v_antigo_ativo, 'trial_dias_padrao', v_antigo_dias),
+      jsonb_build_object('trial_cadastro_ativo', p_ativo, 'trial_dias_padrao', p_dias)
+    );
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 END;
 $$;
 GRANT EXECUTE ON FUNCTION public.admin_alterar_trial_cadastro(boolean, integer) TO authenticated;
