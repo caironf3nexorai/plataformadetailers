@@ -25,6 +25,7 @@ interface PlanCompleto {
   codigo: string;
   nome: string;
   preco_centavos: number;
+  preco_anual_centavos?: number | null;
   ativo: boolean;
   features: Record<string, boolean>;
   limites: Record<string, number | null>;
@@ -44,6 +45,7 @@ export const AdminPlanos: React.FC = () => {
   const [editState, setEditState] = useState<Record<string, {
     nome: string;
     preco_reais: string;
+    preco_anual_reais: string;
     ativo: boolean;
     features: Record<string, boolean>;
     limites: Record<string, { valor: string; ilimitado: boolean }>;
@@ -115,9 +117,11 @@ export const AdminPlanos: React.FC = () => {
           };
         });
 
+        const anualCentavos = p.preco_anual_centavos ?? (p.preco_centavos * 10);
         initialEdits[p.codigo] = {
           nome: p.nome,
           preco_reais: (p.preco_centavos / 100).toFixed(2).replace('.', ','),
+          preco_anual_reais: (anualCentavos / 100).toFixed(2).replace('.', ','),
           ativo: p.ativo,
           features: featMap,
           limites: limMap
@@ -231,6 +235,9 @@ export const AdminPlanos: React.FC = () => {
       const cleanPrice = item.preco_reais.replace(/\./g, '').replace(',', '.');
       const precoCentavos = Math.round(parseFloat(cleanPrice || '0') * 100);
 
+      const cleanAnnual = (item.preco_anual_reais || '').replace(/\./g, '').replace(',', '.');
+      const precoAnualCentavos = Math.round(parseFloat(cleanAnnual || '0') * 100);
+
       // Formatar limites para a RPC
       const payloadLimites: Record<string, number | null> = {};
       Object.entries(item.limites).forEach(([rec, conf]) => {
@@ -247,7 +254,8 @@ export const AdminPlanos: React.FC = () => {
         p_preco_centavos: precoCentavos,
         p_ativo: item.ativo,
         p_features: item.features,
-        p_limites: payloadLimites
+        p_limites: payloadLimites,
+        p_preco_anual_centavos: precoAnualCentavos > 0 ? precoAnualCentavos : null,
       });
 
       if (error) throw error;
@@ -473,8 +481,8 @@ export const AdminPlanos: React.FC = () => {
                     </label>
                   </div>
 
-                  {/* Nome Comercial e Preço */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Nome Comercial e Preços */}
+                  <div className="space-y-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nome Comercial</label>
                       <input
@@ -489,23 +497,136 @@ export const AdminPlanos: React.FC = () => {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Preço Mensal (R$)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500">R$</span>
-                        <input
-                          type="text"
-                          value={item.preco_reais}
-                          disabled={isReadOnly}
-                          onChange={(e) => setEditState({
+                    {(() => {
+                      const m = parseFloat(item.preco_reais.replace(/\./g, '').replace(',', '.')) || 0;
+                      const a = parseFloat((item.preco_anual_reais || '').replace(/\./g, '').replace(',', '.')) || 0;
+                      const totalSemDesconto = m * 12;
+                      const descontoPerc = totalSemDesconto > 0 && a > 0 ? Math.round((1 - (a / totalSemDesconto)) * 100) : 0;
+                      const economiaReais = totalSemDesconto > a ? (totalSemDesconto - a) : 0;
+
+                      const aplicarDescontoAnual = (codigo: string, perc: number) => {
+                        if (m <= 0) return;
+                        const anualCalculado = (m * 12) * (1 - (perc / 100));
+                        setEditState({
+                          ...editState,
+                          [codigo]: {
+                            ...item,
+                            preco_anual_reais: anualCalculado.toFixed(2).replace('.', ',')
+                          }
+                        });
+                      };
+
+                      const handleMudarDesconto = (codigo: string, valorStr: string) => {
+                        const perc = parseFloat(valorStr) || 0;
+                        if (m > 0) {
+                          const anualCalculado = (m * 12) * (1 - (perc / 100));
+                          setEditState({
                             ...editState,
-                            [plano.codigo]: { ...item, preco_reais: e.target.value }
-                          })}
-                          placeholder="0,00"
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                    </div>
+                            [codigo]: {
+                              ...item,
+                              preco_anual_reais: anualCalculado.toFixed(2).replace('.', ',')
+                            }
+                          });
+                        }
+                      };
+
+                      return (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {/* Preço Mensal */}
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Preço Mensal (R$)</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500">R$</span>
+                              <input
+                                type="text"
+                                value={item.preco_reais}
+                                disabled={isReadOnly}
+                                onChange={(e) => setEditState({
+                                  ...editState,
+                                  [plano.codigo]: { ...item, preco_reais: e.target.value }
+                                })}
+                                placeholder="0,00"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono block mt-1">Cobrança a cada 30 dias</span>
+                          </div>
+
+                          {/* Quantidade de Desconto (%) */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-semibold text-slate-400 uppercase">Desconto Anual (%)</label>
+                              <span className="text-[10px] font-bold text-emerald-400">
+                                {plano.codigo === 'free' ? '0%' : `${descontoPerc > 0 ? descontoPerc : 0}% OFF`}
+                              </span>
+                            </div>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                max="90"
+                                value={plano.codigo === 'free' ? 0 : (descontoPerc > 0 ? descontoPerc : '')}
+                                disabled={isReadOnly || plano.codigo === 'free'}
+                                onChange={(e) => handleMudarDesconto(plano.codigo, e.target.value)}
+                                placeholder="Ex: 15"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-3 pr-8 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500">%</span>
+                            </div>
+                            {plano.codigo !== 'free' && (
+                              <div className="flex items-center gap-1.5 mt-1.5">
+                                {[10, 15, 20].map((perc) => (
+                                  <button
+                                    key={perc}
+                                    type="button"
+                                    disabled={isReadOnly}
+                                    onClick={() => aplicarDescontoAnual(plano.codigo, perc)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono transition cursor-pointer ${
+                                      descontoPerc === perc
+                                        ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                                    }`}
+                                  >
+                                    {perc}% OFF
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Preço Anual Final */}
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Preço Anual (R$)</label>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-500">R$</span>
+                              <input
+                                type="text"
+                                value={item.preco_anual_reais}
+                                disabled={isReadOnly || plano.codigo === 'free'}
+                                onChange={(e) => setEditState({
+                                  ...editState,
+                                  [plano.codigo]: { ...item, preco_anual_reais: e.target.value }
+                                })}
+                                placeholder="0,00"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-sm font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                              />
+                            </div>
+                            {plano.codigo !== 'free' && m > 0 && a > 0 && (
+                              <div className="mt-1 flex flex-col text-[10px] font-mono leading-tight">
+                                <span className="text-slate-300">
+                                  Equiv. R$ {(a / 12).toFixed(2).replace('.', ',')}/mês
+                                </span>
+                                {economiaReais > 0 && (
+                                  <span className="text-emerald-400 font-semibold">
+                                    Economia de R$ {economiaReais.toFixed(2).replace('.', ',')}/ano
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* 2. RECURSOS NUMÉRICOS PADRÃO (CLIENTES, AGENDAMENTOS, ETC) */}

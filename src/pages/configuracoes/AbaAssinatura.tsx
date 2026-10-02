@@ -22,8 +22,13 @@ export const AbaAssinatura: React.FC = () => {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 100, // R$ 1,00 conforme configurado no Admin
+    pro: 6700,
     studio: 14700,
+  });
+  const [precosAnuaisCentavos, setPrecosAnuaisCentavos] = useState<Record<string, number>>({
+    free: 0,
+    pro: 68400,
+    studio: 149900,
   });
 
   const formatarPrecoMensal = (centavos: number) => {
@@ -35,10 +40,14 @@ export const AbaAssinatura: React.FC = () => {
     codigo: 'pro' | 'studio';
     nome: string;
     preco: string;
+    precoAnual?: string;
+    cicloInicial?: 'mensal' | 'anual';
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: 'R$ 1,00',
+    preco: 'R$ 67,00',
+    precoAnual: 'R$ 684,00 / ano',
+    cicloInicial: 'anual',
   });
 
   const carregarAssinatura = async () => {
@@ -67,31 +76,55 @@ export const AbaAssinatura: React.FC = () => {
         }
 
         if (!rpcErr && planosList.length > 0) {
-          const mapa: Record<string, number> = {};
+          const mapaM: Record<string, number> = {};
+          const mapaA: Record<string, number> = {};
           planosList.forEach((p: any) => {
+            const cod = String(p.codigo).toLowerCase();
             if (p.codigo && typeof p.preco_centavos === 'number') {
-              mapa[String(p.codigo).toLowerCase()] = p.preco_centavos;
+              mapaM[cod] = p.preco_centavos;
+            }
+            if (typeof p.preco_anual_centavos === 'number' && p.preco_anual_centavos > 0) {
+              mapaA[cod] = p.preco_anual_centavos;
+            } else if (typeof p.preco_centavos === 'number') {
+              mapaA[cod] = p.preco_centavos * 10;
             }
           });
-          setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
-          if (mapa['pro'] !== undefined) {
-            setSelectedPlano((prev) => ({ ...prev, preco: formatarPrecoMensal(mapa['pro']) }));
+          setPrecosCentavos((prev) => ({ ...prev, ...mapaM }));
+          setPrecosAnuaisCentavos((prev) => ({ ...prev, ...mapaA }));
+          if (mapaM['pro'] !== undefined) {
+            setSelectedPlano((prev) => ({
+              ...prev,
+              preco: formatarPrecoMensal(mapaM['pro']),
+              precoAnual: `${formatarPrecoMensal(mapaA['pro'] ?? 68400)} / ano`,
+            }));
           }
         } else {
           // Fallback tabela plans
           const { data: plansData } = await supabase
             .from('plans')
-            .select('codigo, preco_centavos');
+            .select('codigo, preco_centavos, preco_anual_centavos');
           if (plansData && plansData.length > 0) {
-            const mapa: Record<string, number> = {};
+            const mapaM: Record<string, number> = {};
+            const mapaA: Record<string, number> = {};
             plansData.forEach((p) => {
+              const cod = p.codigo.toLowerCase();
               if (p.codigo && typeof p.preco_centavos === 'number') {
-                mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+                mapaM[cod] = p.preco_centavos;
+              }
+              if (typeof p.preco_anual_centavos === 'number' && p.preco_anual_centavos > 0) {
+                mapaA[cod] = p.preco_anual_centavos;
+              } else if (typeof p.preco_centavos === 'number') {
+                mapaA[cod] = p.preco_centavos * 10;
               }
             });
-            setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
-            if (mapa['pro'] !== undefined) {
-              setSelectedPlano((prev) => ({ ...prev, preco: formatarPrecoMensal(mapa['pro']) }));
+            setPrecosCentavos((prev) => ({ ...prev, ...mapaM }));
+            setPrecosAnuaisCentavos((prev) => ({ ...prev, ...mapaA }));
+            if (mapaM['pro'] !== undefined) {
+              setSelectedPlano((prev) => ({
+                ...prev,
+                preco: formatarPrecoMensal(mapaM['pro']),
+                precoAnual: `${formatarPrecoMensal(mapaA['pro'] ?? 68400)} / ano`,
+              }));
             }
           }
         }
@@ -163,9 +196,11 @@ export const AbaAssinatura: React.FC = () => {
   }
 
   const planoSigla = (assinatura?.plano || 'free').toUpperCase();
+  const cicloAssinatura = assinatura?.ciclo || 'mensal';
 
   const isEmTrial = assinatura?.status === 'trial' || tenant?.status === 'trial' || (!assinatura?.status && tenant?.plano === 'pro');
   const statusAssin = isEmTrial ? 'trial' : (assinatura?.status || 'trial');
+  const jaCancelada = !!assinatura?.cancelada_em;
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
@@ -180,18 +215,23 @@ export const AbaAssinatura: React.FC = () => {
                 Assinatura & Cobrança Asaas
               </h3>
               <p className="text-xs text-vapor-400">
-                Gerenciamento de plano, forma de pagamento e renovação.
+                Gerenciamento de plano, periodicidade e renovação automática.
               </p>
             </div>
           </div>
 
-          <Badge tone={statusToneMap[statusAssin] || 'amber'}>
-            {statusLabelMap[statusAssin] || 'EM DEGUSTAÇÃO (TRIAL)'}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {jaCancelada && (
+              <Badge tone="flare">NÃO RENOVA</Badge>
+            )}
+            <Badge tone={statusToneMap[statusAssin] || 'amber'}>
+              {statusLabelMap[statusAssin] || 'EM DEGUSTAÇÃO (TRIAL)'}
+            </Badge>
+          </div>
         </div>
 
         {/* Detalhes do Plano */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-graphite-900/60 border border-graphite-700 flex flex-col gap-1">
             <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">
               {isEmTrial ? 'Plano em Degustação' : 'Plano Contratado'}
@@ -207,7 +247,29 @@ export const AbaAssinatura: React.FC = () => {
             <span className="text-xs text-vapor-400">
               {planoSigla === 'FREE'
                 ? 'R$ 0,00 / mês'
-                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? (planoSigla === 'PRO' ? 100 : 14700))} / mês`}
+                : cicloAssinatura === 'anual'
+                ? `${formatarPrecoMensal(precosAnuaisCentavos[planoSigla.toLowerCase()] ?? 68400)} / ano`
+                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? 6700)} / mês`}
+            </span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-graphite-900/60 border border-graphite-700 flex flex-col gap-1">
+            <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">Ciclo de Cobrança</span>
+            <span className="text-base font-bold text-vapor-100 flex items-center gap-2">
+              {cicloAssinatura === 'anual' ? (
+                <>
+                  <Sparkles size={16} className="text-amber-400" />
+                  <span>Anual (12 Meses)</span>
+                </>
+              ) : (
+                <>
+                  <Calendar size={16} className="text-vapor-300" />
+                  <span>Mensal (30 Dias)</span>
+                </>
+              )}
+            </span>
+            <span className="text-xs text-vapor-400">
+              {cicloAssinatura === 'anual' ? 'Desconto de até 15% aplicado' : 'Sem fidelidade contratual'}
             </span>
           </div>
 
@@ -215,18 +277,31 @@ export const AbaAssinatura: React.FC = () => {
             <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">Forma de Pagamento</span>
             <span className="text-base font-bold text-vapor-100 flex items-center gap-2">
               <CreditCard size={16} className="text-amber-500" />
-              {assinatura?.forma_pagamento === 'cartao' ? 'Cartão de Crédito' : assinatura?.forma_pagamento === 'pix' ? 'PIX Recorrente' : 'Gratuito / Não cadastrado'}
+              {assinatura?.forma_pagamento === 'cartao' ? 'Cartão de Crédito' : assinatura?.forma_pagamento === 'pix' ? 'PIX' : 'Gratuito / Não cadastrado'}
             </span>
             {assinatura?.proximo_vencimento && (
               <span className="text-xs text-vapor-400 flex items-center gap-1 mt-1">
-                <Calendar size={12} /> Renovação em: {new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')}
+                <Calendar size={12} /> {jaCancelada ? 'Acesso válido até:' : 'Renovação em:'} {new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')}
               </span>
             )}
           </div>
         </div>
 
-        {/* Banner / Card de Upgrade para contas Free */}
-        {planoSigla === 'FREE' && (
+        {/* Aviso de Assinatura com Renovação Cancelada mantendo vigência */}
+        {jaCancelada && assinatura?.proximo_vencimento && (
+          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-amber-200">
+              <p className="font-bold uppercase tracking-wide">Renovação Automática Desativada</p>
+              <p className="text-vapor-300 mt-1">
+                Sua assinatura não será renovada automaticamente. Conforme as diretrizes contratadas, todo o seu acesso e benefícios permanecem <strong>100% liberados até {new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')}</strong> sem qualquer corte ou cobrança adicional.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Banner / Card de Upgrade para Plano Anual (quando está no Mensal ou Free) */}
+        {!jaCancelada && (planoSigla === 'FREE' || cicloAssinatura === 'mensal') && (
           <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-graphite-900/60 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
@@ -235,31 +310,37 @@ export const AbaAssinatura: React.FC = () => {
               <div className="flex flex-col">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-vapor-100 uppercase tracking-wide">
-                    Fazer Upgrade para o Plano PRO
+                    {planoSigla === 'FREE' ? 'Fazer Upgrade para o Plano PRO' : 'Economize até 15% com o Plano Anual'}
                   </span>
-                  <Badge tone="amber">RECOMENDADO</Badge>
+                  <Badge tone="amber">2 MESES GRÁTIS</Badge>
                 </div>
                 <span className="text-xs text-vapor-400 mt-0.5">
-                  Desbloqueie capacidade ampliada, agendamento online e financeiro completo por apenas{' '}
+                  Assine 12 meses por apenas{' '}
                   <strong className="text-amber-400 font-bold font-mono">
-                    {formatarPrecoMensal(precosCentavos['pro'] ?? 100)} / mês
-                  </strong>
-                  .
+                    {formatarPrecoMensal(precosAnuaisCentavos['pro'] ?? 68400)} / ano
+                  </strong>{' '}
+                  (em até 12x no cartão de crédito ou à vista no PIX).
                 </span>
               </div>
             </div>
 
             <Button
               onClick={() => {
-                const centavosPro = precosCentavos['pro'] ?? 100;
-                const precoFormatado = formatarPrecoMensal(centavosPro);
-                setSelectedPlano({ codigo: 'pro', nome: 'Pro', preco: precoFormatado });
+                const centavosProM = precosCentavos['pro'] ?? 6700;
+                const centavosProA = precosAnuaisCentavos['pro'] ?? 68400;
+                setSelectedPlano({
+                  codigo: 'pro',
+                  nome: 'Pro',
+                  preco: formatarPrecoMensal(centavosProM),
+                  precoAnual: `${formatarPrecoMensal(centavosProA)} / ano`,
+                  cicloInicial: 'anual',
+                });
                 setCheckoutModalOpen(true);
               }}
               variant="primary"
               className="text-xs font-bold shrink-0 shadow-lg shadow-amber-500/10"
             >
-              Assinar Pro ({formatarPrecoMensal(precosCentavos['pro'] ?? 100)}/mês)
+              {planoSigla === 'FREE' ? 'Assinar Anual (12x no Cartão ou PIX)' : 'Migrar para Plano Anual'}
             </Button>
           </div>
         )}
@@ -286,15 +367,22 @@ export const AbaAssinatura: React.FC = () => {
 
             <Button
               onClick={() => {
-                const precoPro = formatarPrecoMensal(precosCentavos['pro'] ?? 100);
-                setSelectedPlano({ codigo: 'pro', nome: 'Pro', preco: precoPro });
+                const centavosProM = precosCentavos['pro'] ?? 6700;
+                const centavosProA = precosAnuaisCentavos['pro'] ?? 68400;
+                setSelectedPlano({
+                  codigo: 'pro',
+                  nome: 'Pro',
+                  preco: formatarPrecoMensal(centavosProM),
+                  precoAnual: `${formatarPrecoMensal(centavosProA)} / ano`,
+                  cicloInicial: 'anual',
+                });
                 setCheckoutModalOpen(true);
               }}
               variant="primary"
               className="text-xs font-bold shrink-0 shadow-md shadow-amber-500/20"
             >
               <CreditCard size={14} className="mr-1.5" />
-              Assinar Agora ({formatarPrecoMensal(precosCentavos['pro'] ?? 100)}/mês)
+              Assinar Agora (Anual ou Mensal)
             </Button>
           </div>
         )}
@@ -354,13 +442,13 @@ export const AbaAssinatura: React.FC = () => {
             )}
           </div>
 
-          {/* AJUSTE 1: Botão de Cancelamento que aciona a Edge Function */}
-          {assinatura?.status !== 'cancelada' && (
+          {/* Botão de Cancelamento que aciona a Edge Function */}
+          {assinatura?.status !== 'cancelada' && !jaCancelada && (
             <button
               type="button"
               onClick={handleCancelarAssinatura}
               disabled={cancelando}
-              className="px-3.5 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <XCircle size={14} />
               {cancelando ? 'Cancelando...' : 'Cancelar Assinatura'}
@@ -375,6 +463,8 @@ export const AbaAssinatura: React.FC = () => {
         planoCodigo={selectedPlano.codigo}
         planoNome={selectedPlano.nome}
         precoMensal={selectedPlano.preco}
+        precoAnual={selectedPlano.precoAnual}
+        cicloInicial={selectedPlano.cicloInicial}
         onSuccess={async () => {
           setCheckoutModalOpen(false);
           await carregarAssinatura();
@@ -387,13 +477,26 @@ export const AbaAssinatura: React.FC = () => {
         isOpen={showConfirmCancelar}
         onClose={() => setShowConfirmCancelar(false)}
         onConfirm={executeCancelarAssinatura}
-        titulo="Confirmar Cancelamento da Assinatura"
-        mensagem="Tem certeza que deseja cancelar sua assinatura? O plano atual permanecerá ativo até o fim do período já pago e depois passará para o plano gratuito."
-        textoConfirmar="Cancelar Assinatura"
-        textoCancelar="Manter Plano"
+        titulo={cicloAssinatura === 'anual' ? 'Confirmar Cancelamento do Plano Anual' : 'Confirmar Cancelamento da Assinatura'}
+        mensagem={
+          cicloAssinatura === 'anual'
+            ? `Tem certeza que deseja cancelar sua assinatura anual? A renovação automática dos próximos anos será desativada. Conforme nossa política de assinatura anual (com até 15% de desconto promocional), seu plano e todos os seus recursos permanecerão 100% liberados até o término dos 12 meses já pagos (${
+                assinatura?.proximo_vencimento
+                  ? new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')
+                  : 'período contratado'
+              }). Não haverá novas cobranças.`
+            : `Tem certeza que deseja cancelar sua assinatura mensal? A renovação automática será cancelada e seu acesso permanecerá ativo até o fim do período já pago (${
+                assinatura?.proximo_vencimento
+                  ? new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')
+                  : 'término do ciclo'
+              }).`
+        }
+        textoConfirmar={cicloAssinatura === 'anual' ? 'Cancelar Renovação Automática' : 'Cancelar Assinatura'}
+        textoCancelar="Manter Assinatura"
         variant="danger"
         loading={cancelando}
       />
     </div>
   );
 };
+

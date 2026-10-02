@@ -13,10 +13,16 @@ export const PaginaPlanos: React.FC = () => {
   const { planoAtual: planoHook, statusAssinatura, isTrial } = usePlano();
 
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [ciclo, setCiclo] = useState<'mensal' | 'anual'>('anual');
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 100, // R$ 1,00 conforme configurado no Admin
+    pro: 6700,
     studio: 14700,
+  });
+  const [precosAnuaisCentavos, setPrecosAnuaisCentavos] = useState<Record<string, number>>({
+    free: 0,
+    pro: 68400,
+    studio: 149900,
   });
 
   const formatarPrecoCard = (centavos: number) => {
@@ -48,31 +54,47 @@ export const PaginaPlanos: React.FC = () => {
         }
 
         if (!rpcErr && planosList.length > 0) {
-          const mapa: Record<string, number> = {};
+          const mapaM: Record<string, number> = {};
+          const mapaA: Record<string, number> = {};
           planosList.forEach((p: any) => {
-            if (p.codigo && typeof p.preco_centavos === 'number') {
-              mapa[String(p.codigo).toLowerCase()] = p.preco_centavos;
+            const cod = String(p.codigo).toLowerCase();
+            if (typeof p.preco_centavos === 'number') {
+              mapaM[cod] = p.preco_centavos;
+            }
+            if (typeof p.preco_anual_centavos === 'number' && p.preco_anual_centavos > 0) {
+              mapaA[cod] = p.preco_anual_centavos;
+            } else if (typeof p.preco_centavos === 'number') {
+              mapaA[cod] = p.preco_centavos * 10;
             }
           });
-          console.log('[PaginaPlanos] Preços carregados via RPC:', mapa);
-          setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+          console.log('[PaginaPlanos] Preços carregados via RPC:', { mapaM, mapaA });
+          setPrecosCentavos((prev) => ({ ...prev, ...mapaM }));
+          setPrecosAnuaisCentavos((prev) => ({ ...prev, ...mapaA }));
           return;
         }
 
         // 2. Fallback: select direto na tabela plans
         const { data: plansData, error: plansErr } = await supabase
           .from('plans')
-          .select('codigo, preco_centavos, ativo');
+          .select('codigo, preco_centavos, preco_anual_centavos, ativo');
 
         if (!plansErr && plansData && plansData.length > 0) {
-          const mapa: Record<string, number> = {};
-          plansData.forEach((p) => {
-            if (p.codigo && typeof p.preco_centavos === 'number') {
-              mapa[p.codigo.toLowerCase()] = p.preco_centavos;
+          const mapaM: Record<string, number> = {};
+          const mapaA: Record<string, number> = {};
+          plansData.forEach((p: any) => {
+            const cod = p.codigo.toLowerCase();
+            if (typeof p.preco_centavos === 'number') {
+              mapaM[cod] = p.preco_centavos;
+            }
+            if (typeof p.preco_anual_centavos === 'number' && p.preco_anual_centavos > 0) {
+              mapaA[cod] = p.preco_anual_centavos;
+            } else if (typeof p.preco_centavos === 'number') {
+              mapaA[cod] = p.preco_centavos * 10;
             }
           });
-          console.log('[PaginaPlanos] Preços carregados via plans table:', mapa);
-          setPrecosCentavos((prev) => ({ ...prev, ...mapa }));
+          console.log('[PaginaPlanos] Preços carregados via plans table:', { mapaM, mapaA });
+          setPrecosCentavos((prev) => ({ ...prev, ...mapaM }));
+          setPrecosAnuaisCentavos((prev) => ({ ...prev, ...mapaA }));
         }
       } catch (err) {
         console.warn('[PaginaPlanos] Erro ao carregar preços dinâmicos:', err);
@@ -86,10 +108,14 @@ export const PaginaPlanos: React.FC = () => {
     codigo: 'pro' | 'studio';
     nome: string;
     preco: string;
+    precoAnual?: string;
+    ciclo: 'mensal' | 'anual';
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: formatarPrecoMensal(precosCentavos['pro'] ?? 100),
+    preco: formatarPrecoMensal(precosCentavos['pro'] ?? 6700),
+    precoAnual: `${formatarPrecoMensal(precosAnuaisCentavos['pro'] ?? 68400)} / ano`,
+    ciclo: 'anual',
   });
 
   // Restrição estrita: Operadores não têm acesso à página de planos
@@ -194,10 +220,15 @@ export const PaginaPlanos: React.FC = () => {
 
   const handleAbrirCheckout = (p: typeof planos[0]) => {
     if (p.codigo === 'free') return;
+    const anualCentavos = precosAnuaisCentavos[p.codigo] ?? (precosCentavos[p.codigo] * 10);
+    const precoAnualFormatado = `${formatarPrecoMensal(anualCentavos)} / ano`;
+
     setSelectedPlano({
       codigo: p.codigo as 'pro' | 'studio',
       nome: p.nome,
       preco: p.precoMensal,
+      precoAnual: precoAnualFormatado,
+      ciclo: ciclo,
     });
     setCheckoutModalOpen(true);
   };
@@ -235,7 +266,7 @@ export const PaginaPlanos: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-vapor-300 mt-1 leading-relaxed">
-                Você <strong>não precisa esperar os 14 dias terminarem</strong> para assinar! Você pode efetivar sua assinatura definitiva agora mesmo via PIX ou Cartão para garantir sua conta sem interrupções e validar todas as comissões e integrações em tempo real.
+                Você <strong>não precisa esperar os 14 dias terminarem</strong> para assinar! Você pode efetivar sua assinatura definitiva agora mesmo via PIX ou Cartão (com desconto anual de até 15%) para garantir sua conta sem interrupções e validar todas as comissões e integrações em tempo real.
               </p>
             </div>
           </div>
@@ -253,8 +284,45 @@ export const PaginaPlanos: React.FC = () => {
         </div>
       )}
 
+      {/* Seletor de Ciclo (Mensal vs Anual com Desconto) */}
+      <div className="flex flex-col items-center justify-center gap-2 pt-2">
+        <div className="inline-flex p-1.5 rounded-2xl bg-graphite-900 border border-graphite-700 shadow-inner">
+          <button
+            type="button"
+            onClick={() => setCiclo('mensal')}
+            className={`px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              ciclo === 'mensal'
+                ? 'bg-graphite-700 text-vapor-100 shadow'
+                : 'text-vapor-400 hover:text-vapor-200'
+            }`}
+          >
+            Cobrança Mensal
+          </button>
+          <button
+            type="button"
+            onClick={() => setCiclo('anual')}
+            className={`px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              ciclo === 'anual'
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md shadow-amber-500/20 font-extrabold'
+                : 'text-amber-400 hover:text-amber-300'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Anual (Até 12x no Cartão ou PIX)</span>
+            <span className="bg-graphite-950/20 px-2 py-0.5 rounded-full text-[10px] tracking-normal font-black uppercase">
+              Economize até 15%
+            </span>
+          </button>
+        </div>
+        <p className="text-xs text-vapor-400 text-center">
+          {ciclo === 'anual'
+            ? '✨ Economize o equivalente a quase 2 meses no plano anual. Pague em até 12x no cartão de crédito ou à vista via PIX.'
+            : 'Cobrança mensal renovada a cada 30 dias sem fidelidade.'}
+        </p>
+      </div>
+
       {/* Cards Comparativos */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch pt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch pt-2">
         {planos.map((p) => {
           const isCurrent = planoAtual === p.id;
           const isCurrentPaid = isCurrent && !emTrial && statusAssinatura === 'ativa';
@@ -293,9 +361,39 @@ export const PaginaPlanos: React.FC = () => {
                   <p className="text-xs text-vapor-400 mt-1 min-h-[36px]">{p.descricao}</p>
                 </div>
 
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold text-vapor-100 font-mono">{p.preco}</span>
-                  <span className="text-xs text-vapor-400">{p.periodo}</span>
+                {/* Exibição de Preço Dinâmico (Mensal ou Anual) */}
+                <div className="space-y-1">
+                  {p.codigo === 'free' ? (
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-extrabold text-vapor-100 font-mono">R$ 0</span>
+                      <span className="text-xs text-vapor-400">/mês</span>
+                    </div>
+                  ) : ciclo === 'anual' ? (
+                    <div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-extrabold text-amber-400 font-mono">
+                          {formatarPrecoMensal(Math.round((precosAnuaisCentavos[p.codigo] || (precosCentavos[p.codigo] * 10)) / 12))}
+                        </span>
+                        <span className="text-xs text-vapor-400 font-medium">/mês</span>
+                      </div>
+                      <div className="mt-1 flex flex-col gap-0.5">
+                        <span className="text-xs text-vapor-300 font-mono">
+                          Total de {formatarPrecoMensal(precosAnuaisCentavos[p.codigo] || (precosCentavos[p.codigo] * 10))} / ano (até 12x)
+                        </span>
+                        <span className="text-[11px] text-emerald-400 font-semibold">
+                          Economize {formatarPrecoCard((precosCentavos[p.codigo] * 12) - (precosAnuaisCentavos[p.codigo] || (precosCentavos[p.codigo] * 10)))} ao ano
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-extrabold text-vapor-100 font-mono">{p.preco}</span>
+                        <span className="text-xs text-vapor-400">{p.periodo}</span>
+                      </div>
+                      <span className="text-[11px] text-vapor-400 block mt-1">Cobrado mês a mês sem fidelidade</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Limites principais */}
@@ -347,7 +445,7 @@ export const PaginaPlanos: React.FC = () => {
                     className="w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
                   >
                     <CreditCard className="w-4 h-4" />
-                    Ativar Plano {p.nome} Definitivo ({p.precoMensal}/mês)
+                    Ativar {p.nome} {ciclo === 'anual' ? '(Plano Anual)' : `(${p.precoMensal}/mês)`}
                   </button>
                 ) : p.codigo === 'free' ? (
                   <button
@@ -367,7 +465,7 @@ export const PaginaPlanos: React.FC = () => {
                     }`}
                   >
                     <CreditCard className="w-4 h-4" />
-                    Assinar {p.nome} ({p.precoMensal}/mês)
+                    Assinar {p.nome} {ciclo === 'anual' ? '(Anual)' : `(${p.precoMensal}/mês)`}
                   </button>
                 )}
               </div>
@@ -376,13 +474,14 @@ export const PaginaPlanos: React.FC = () => {
         })}
       </div>
 
-      {/* Modal de Checkout */}
       <CheckoutModal
         isOpen={checkoutModalOpen}
         onClose={() => setCheckoutModalOpen(false)}
         planoCodigo={selectedPlano.codigo}
         planoNome={selectedPlano.nome}
         precoMensal={selectedPlano.preco}
+        precoAnual={selectedPlano.precoAnual}
+        cicloInicial={selectedPlano.ciclo}
         onSuccess={async () => {
           setCheckoutModalOpen(false);
           await refetchTenantData();
@@ -391,3 +490,4 @@ export const PaginaPlanos: React.FC = () => {
     </div>
   );
 };
+

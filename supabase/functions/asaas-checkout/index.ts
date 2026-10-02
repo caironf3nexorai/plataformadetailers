@@ -82,7 +82,10 @@ serve(async (req) => {
       });
     }
 
-    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj, cupom: reqCupom } = body;
+    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj, cupom: reqCupom, ciclo: reqCiclo } = body;
+
+    const ciclo = reqCiclo === 'anual' ? 'anual' : 'mensal';
+    const isAnual = ciclo === 'anual';
 
     if (!['pro', 'studio'].includes(plano)) {
       return new Response(JSON.stringify({ error: 'Plano inválido para checkout' }), {
@@ -123,11 +126,17 @@ serve(async (req) => {
     // Buscar valor real configurado na tabela public.plans
     const { data: planRow } = await supabase
       .from('plans')
-      .select('preco_centavos, nome')
+      .select('preco_centavos, preco_anual_centavos, nome')
       .eq('codigo', plano)
       .maybeSingle();
 
-    const precoCentavos = planRow?.preco_centavos ?? (plano === 'pro' ? 6700 : 14700);
+    let precoCentavos: number;
+    if (isAnual) {
+      precoCentavos = planRow?.preco_anual_centavos ?? (planRow?.preco_centavos ? planRow.preco_centavos * 10 : (plano === 'pro' ? 68400 : 149900));
+    } else {
+      precoCentavos = planRow?.preco_centavos ?? (plano === 'pro' ? 6700 : 14700);
+    }
+
     let valorReais = Number((precoCentavos / 100).toFixed(2));
     let valorCentavos = precoCentavos;
     let cupomAplicado: any = null;
@@ -138,13 +147,14 @@ serve(async (req) => {
         const { data: cupomRes, error: cupomErr } = await supabase.rpc('validar_cupom', {
           p_codigo: String(reqCupom).trim(),
           p_plano: plano,
+          p_ciclo: ciclo,
         });
 
         if (!cupomErr && cupomRes?.valido) {
           cupomAplicado = cupomRes;
           valorReais = Number(cupomRes.valor_final);
           valorCentavos = Math.round(valorReais * 100);
-          console.log(`[Checkout Asaas] Cupom ${cupomRes.codigo} aplicado. De R$ ${cupomRes.valor_original} por R$ ${valorReais}`);
+          console.log(`[Checkout Asaas] Cupom ${cupomRes.codigo} aplicado (${ciclo}). De R$ ${cupomRes.valor_original} por R$ ${valorReais}`);
         } else if (cupomRes?.mensagem) {
           console.warn('[Checkout Asaas] Cupom não aplicado:', cupomRes.mensagem);
         }
@@ -335,14 +345,18 @@ serve(async (req) => {
     // 2. Criar ou Atualizar Assinatura no Asaas (AJUSTE 2: Alterar existente sem duplicar)
     let subscriptionData;
     const billingType = forma_pagamento === 'cartao' ? 'CREDIT_CARD' : 'PIX';
+    const asaasCycle = isAnual ? 'YEARLY' : 'MONTHLY';
+    const planDesc = isAnual 
+      ? `Plataforma Detailers - Plano ${plano.toUpperCase()} ANUAL (${tenant?.nome || ''})`
+      : `Plataforma Detailers - Plano ${plano.toUpperCase()} (${tenant?.nome || ''})`;
 
     if (assExistente?.asaas_subscription_id) {
       // Atualizar assinatura existente no Asaas
       const updatePayload = {
         value: valorReais,
         billingType,
-        description: `Plataforma Detailers - Plano ${plano.toUpperCase()} (${tenant?.nome || ''})`,
-        cycle: 'MONTHLY',
+        description: planDesc,
+        cycle: asaasCycle,
         updatePendingPayments: true,
       };
 
@@ -365,8 +379,8 @@ serve(async (req) => {
             billingType,
             value: valorReais,
             nextDueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-            cycle: 'MONTHLY',
-            description: `Plataforma Detailers - Plano ${plano.toUpperCase()} (${tenant?.nome || ''})`,
+            cycle: asaasCycle,
+            description: planDesc,
             externalReference: tenantId,
           };
 
@@ -401,8 +415,8 @@ serve(async (req) => {
         billingType,
         value: valorReais,
         nextDueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Amanhã ou hoje
-        cycle: 'MONTHLY',
-        description: `Plataforma Detailers - Plano ${plano.toUpperCase()} (${tenant?.nome || ''})`,
+        cycle: asaasCycle,
+        description: planDesc,
         externalReference: tenantId,
       };
 
@@ -491,6 +505,7 @@ serve(async (req) => {
       asaas_customer_id: asaasCustomerId,
       asaas_subscription_id: subscriptionData.id,
       plano,
+      ciclo,
       forma_pagamento,
       valor_centavos: valorCentavos,
       url_pagamento_asaas: paymentUrl,

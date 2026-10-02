@@ -12,6 +12,8 @@ interface CheckoutModalProps {
   planoCodigo: 'pro' | 'studio';
   planoNome: string;
   precoMensal: string;
+  precoAnual?: string;
+  cicloInicial?: 'mensal' | 'anual';
   cupomInicial?: string;
   onSuccess?: () => void;
 }
@@ -22,11 +24,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   planoCodigo,
   planoNome,
   precoMensal,
+  precoAnual,
+  cicloInicial = 'mensal',
   cupomInicial,
   onSuccess,
 }) => {
   const { showSuccess, showError } = useToast();
   const { tenant, refetchTenantData } = useAuth();
+  const [ciclo, setCiclo] = useState<'mensal' | 'anual'>(cicloInicial);
   const [formaPagamento, setFormaPagamento] = useState<'cartao' | 'pix'>('cartao');
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -44,7 +49,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [validandoCupom, setValidandoCupom] = useState(false);
   const [erroCupom, setErroCupom] = useState<string | null>(null);
 
-  const handleValidarCupom = async (codigoParaValidar?: string) => {
+  const handleValidarCupom = async (codigoParaValidar?: string, cicloEscolhido?: 'mensal' | 'anual') => {
     const cod = (codigoParaValidar || codigoCupom).trim().toUpperCase();
     if (!cod) {
       showError('Informe o código do cupom.');
@@ -56,6 +61,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const { data, error } = await supabase.rpc('validar_cupom', {
         p_codigo: cod,
         p_plano: planoCodigo,
+        p_ciclo: cicloEscolhido || ciclo,
       });
       if (error) throw error;
       if (!data?.valido) {
@@ -95,9 +101,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       return;
     }
 
+    setCiclo(cicloInicial);
+
     if (cupomInicial) {
       setCodigoCupom(cupomInicial);
-      handleValidarCupom(cupomInicial);
+      handleValidarCupom(cupomInicial, cicloInicial);
     }
 
     const carregarDadosUsuario = async () => {
@@ -122,7 +130,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       }
     };
     carregarDadosUsuario();
-  }, [isOpen]);
+  }, [isOpen, cicloInicial]);
 
   // Polling em tempo real: detecta confirmação do pagamento no banco via webhook do Asaas
   useEffect(() => {
@@ -223,6 +231,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         },
         body: JSON.stringify({
           plano: planoCodigo,
+          ciclo,
           forma_pagamento: formaPagamento,
           term_version: 'v1.0-2026-08',
           telefone: telefone ? telefone.replace(/\D/g, '') : undefined,
@@ -274,15 +283,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-vapor-100 uppercase tracking-wide">
-                Checkout Seguro • Plano {planoNome}
+                Checkout Seguro • Plano {planoNome} {ciclo === 'anual' ? '(Anual)' : '(Mensal)'}
               </h3>
               {cupomAplicado ? (
                 <div className="flex flex-wrap items-center gap-2 mt-0.5">
                   <span className="text-xs text-vapor-400 font-mono line-through">
-                    {precoMensal}
+                    {ciclo === 'anual' && precoAnual ? precoAnual : precoMensal}
                   </span>
                   <span className="text-xs text-emerald-400 font-mono font-bold">
-                    R$ {Number(cupomAplicado.valor_final).toFixed(2)} / mês
+                    R$ {Number(cupomAplicado.valor_final).toFixed(2)} {ciclo === 'anual' ? '/ ano' : '/ mês'}
                   </span>
                   <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
                     {cupomAplicado.codigo} • {cupomAplicado.desconto_tipo === 'percentual' ? `${cupomAplicado.desconto_valor}% OFF` : `R$ ${cupomAplicado.desconto_valor} OFF`}
@@ -290,7 +299,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
               ) : (
                 <p className="text-xs text-vapor-400 font-mono">
-                  {precoMensal} / mês • Cobrança Recorrente Asaas
+                  {ciclo === 'anual' && precoAnual
+                    ? `${precoAnual} • Cobrança Anual (Até 12x no Cartão ou PIX)`
+                    : `${precoMensal} / mês • Cobrança Recorrente Asaas`}
                 </p>
               )}
             </div>
@@ -496,10 +507,59 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleCheckout} className="flex flex-col gap-6">
+              {/* Seleção do Ciclo de Cobrança */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono font-bold text-vapor-300 uppercase tracking-wider">
+                    Ciclo de Assinatura
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                    Anual com ~2 Meses Grátis
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCiclo('mensal');
+                      if (codigoCupom) handleValidarCupom(codigoCupom, 'mensal');
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all ${
+                      ciclo === 'mensal'
+                        ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                        : 'bg-graphite-800/50 border-graphite-700 text-vapor-300 hover:border-graphite-600'
+                    }`}
+                  >
+                    <span className="text-xs font-bold uppercase">Mensal</span>
+                    <span className="text-[11px] font-mono text-vapor-400 mt-0.5">{precoMensal} / mês</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCiclo('anual');
+                      if (codigoCupom) handleValidarCupom(codigoCupom, 'anual');
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all relative ${
+                      ciclo === 'anual'
+                        ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400 shadow-lg shadow-emerald-500/5'
+                        : 'bg-graphite-800/50 border-graphite-700 text-vapor-300 hover:border-graphite-600'
+                    }`}
+                  >
+                    <span className="text-xs font-bold uppercase flex items-center gap-1">
+                      Anual (12 Meses)
+                    </span>
+                    <span className="text-[11px] font-mono text-vapor-400 mt-0.5">
+                      {precoAnual || 'Desconto Promocional'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Seleção de Forma de Pagamento */}
               <div className="flex flex-col gap-2">
                 <label className="text-xs font-mono font-bold text-vapor-300 uppercase tracking-wider">
-                  Forma de Pagamento Recorrente
+                  Forma de Pagamento
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -524,7 +584,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     }`}
                   >
                     <QrCode size={18} />
-                    PIX Recorrente
+                    {ciclo === 'anual' ? 'PIX à Vista' : 'PIX Recorrente'}
                   </button>
                 </div>
               </div>
@@ -663,6 +723,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     Política de Privacidade
                   </a>{' '}
                   do NuvemWash.
+                  {ciclo === 'anual' ? (
+                    <span className="block mt-1 text-[11px] text-vapor-400">
+                      <strong>Plano Anual:</strong> Garantia legal de arrependimento de 7 dias (Art. 49 CDC). Após os 7 dias, o cancelamento encerra as renovações para os anos seguintes, mantendo o acesso garantido até o término dos 12 meses já contratados sem reembolso proporcional.
+                    </span>
+                  ) : null}
                 </label>
               </div>
 
@@ -680,12 +745,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 ) : formaPagamento === 'cartao' ? (
                   <>
                     <CreditCard size={18} />
-                    Digitar Cartão no Asaas ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal}) ➔
+                    Digitar Cartão no Asaas ({ciclo === 'anual' ? 'Até 12x no Cartão' : (cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal)}) ➔
                   </>
                 ) : (
                   <>
                     <QrCode size={18} />
-                    Gerar QR Code Pix ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal})
+                    Gerar QR Code Pix ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : (ciclo === 'anual' && precoAnual ? precoAnual : precoMensal)})
                   </>
                 )}
               </button>

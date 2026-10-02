@@ -85,11 +85,17 @@ serve(async (req) => {
       }
     }
 
-    // Atualizar registro local para cancelada
+    // Atualizar registro local
+    const isAnual = ass.ciclo === 'anual';
+    const hoje = new Date().toISOString().split('T')[0];
+    const temVigenciaFutura = ass.proximo_vencimento && ass.proximo_vencimento > hoje;
+    const novoStatus = (isAnual && temVigenciaFutura) ? 'ativa' : 'cancelada';
+
     await supabase
       .from('assinaturas')
       .update({
-        status: 'cancelada',
+        status: novoStatus,
+        asaas_subscription_id: null,
         cancelada_em: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -101,14 +107,17 @@ serve(async (req) => {
       acao: 'assinatura_cancelada_pelo_usuario',
       entidade: 'assinaturas',
       entidade_id: ass.id,
-      valor_anterior: { status: ass.status, plano: ass.plano },
-      valor_novo: { status: 'cancelada' },
+      valor_anterior: { status: ass.status, plano: ass.plano, ciclo: ass.ciclo },
+      valor_novo: { status: novoStatus, cancelada_em: new Date().toISOString() },
     });
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Assinatura cancelada com sucesso no Asaas e no sistema',
+        message: isAnual && temVigenciaFutura
+          ? 'Renovação anual cancelada com sucesso. Seu acesso continuará ativo até o término do período contratado.'
+          : 'Assinatura cancelada com sucesso no Asaas e no sistema',
+        status: novoStatus,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
