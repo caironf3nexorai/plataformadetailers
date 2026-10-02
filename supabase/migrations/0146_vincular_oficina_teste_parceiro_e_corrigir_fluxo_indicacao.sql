@@ -1,110 +1,57 @@
--- Migration 0146: Vincular Retroativamente Oficina Teste Parceiro, Comissões Dinâmicas em Tempo Real e Correção de Esquema
--- 1. Vincula oficinas de teste e indicadas ao parceiro comercial
--- 2. Ativa o plano Pro e credita comissão calculada DINAMICAMENTE sobre o valor atual do plano (ex: R$ 5,00 -> 20% = R$ 1,00)
--- 3. Atualiza processar_pagamento_asaas_parceiro para calcular comissões dinâmicas em tempo real conforme valor cadastrado
--- 4. Atualiza admin_salvar_plano_completo para sincronizar valor de assinaturas ativas em tempo real
--- 5. Atualiza criar_oficina para aceitar códigos de parceiro também em p_codigo_indicacao
--- 6. Cria RPC admin_vincular_oficina_parceiro com SECURITY DEFINER
+-- Migration 0146: Vincular Oficina Teste Parceiro e Deixar Pronto para Teste Real no Asaas
+-- 1. Limpa registros prematuros/forçados de teste
+-- 2. Vincula a 'Oficina Teste Parceiro' ao parceiro TESTETES10 sem forçar pagamento (status real trial/aguardando)
+-- 3. Atualiza processar_pagamento_asaas_parceiro para calcular comissões dinâmicas em tempo real quando o Asaas confirmar
+-- 4. Atualiza admin_salvar_plano_completo para sincronizar planos e assinaturas
+-- 5. Atualiza criar_oficina para capturar parceiros de forma resiliente
+-- 6. Cria RPC admin_vincular_oficina_parceiro
 
 -- ==============================================================================
--- 1. VINCULAR OFICINA(S) E CREDITAR COMISSÃO DINÂMICA
+-- 1. LIMPAR TESTES PREMATUROS E VINCULAR APENAS A OFICINA TESTE NO ESTADO REAL
 -- ==============================================================================
 DO $$
 DECLARE
-  v_parceiro RECORD;
-  v_tenant RECORD;
-  v_plano_pro RECORD;
-  v_comp DATE;
-  v_preco_centavos_atual INTEGER;
-  v_valor_base NUMERIC(10,2);
-  v_valor_comissao NUMERIC(10,2);
+  v_parceiro_id UUID := 'b5148aa2-6080-47f4-b356-95c935ef715f';
+  v_tenant_id UUID := '37aa41e4-9088-4ba0-842d-b58ff034350b';
 BEGIN
-  -- 1.1 Localizar o parceiro TESTETES10
-  SELECT * INTO v_parceiro 
-  FROM public.parceiros 
-  WHERE codigo = 'TESTETES10' OR id = 'b5148aa2-6080-47f4-b356-95c935ef715f'
-  LIMIT 1;
+  -- 1.1 Limpar comissões criadas prematuramente
+  DELETE FROM public.parceiro_comissoes 
+  WHERE parceiro_id = v_parceiro_id;
 
-  IF v_parceiro.id IS NULL THEN
-    RAISE NOTICE 'Parceiro não encontrado.';
-    RETURN;
-  END IF;
+  -- 1.2 Desvincular outras oficinas que foram associadas no loop de teste
+  DELETE FROM public.parceiro_oficinas 
+  WHERE parceiro_id = v_parceiro_id AND tenant_id != v_tenant_id;
 
-  -- 1.2 Obter o valor atual do plano PRO cadastrado em public.plans (ex: 500 = R$ 5,00)
-  SELECT * INTO v_plano_pro
-  FROM public.plans
-  WHERE codigo = 'pro';
-
-  v_preco_centavos_atual := COALESCE(v_plano_pro.preco_centavos, 500);
-  v_valor_base := round(v_preco_centavos_atual / 100.0, 2);
-
-  -- 1.3 Calcular a comissão do parceiro dinamicamente
-  IF v_parceiro.comissao_tipo = 'percentual' THEN
-    v_valor_comissao := round(v_valor_base * (v_parceiro.comissao_valor / 100.0), 2);
-  ELSE
-    v_valor_comissao := v_parceiro.comissao_valor;
-  END IF;
-
-  v_comp := date_trunc('month', (now() AT TIME ZONE 'America/Sao_Paulo'))::date;
-
-  -- 1.4 Vincular retroativamente as oficinas criadas para teste ou via parceiro
-  FOR v_tenant IN 
-    SELECT t.* 
-    FROM public.tenants t
-    WHERE t.id = '37aa41e4-9088-4ba0-842d-b58ff034350b'
-       OR t.criado_por IN (SELECT id FROM auth.users WHERE lower(email) = 'caironfelipe3@gmail.com')
-       OR (v_parceiro.user_id IS NOT NULL AND t.criado_por != v_parceiro.user_id)
-  LOOP
-    -- Inserir vínculo com o parceiro
+  -- 1.3 Garantir o vínculo real da Oficina Teste Parceiro com o parceiro TESTETES10
+  IF EXISTS (SELECT 1 FROM public.tenants WHERE id = v_tenant_id) THEN
     INSERT INTO public.parceiro_oficinas (parceiro_id, tenant_id)
-    VALUES (v_parceiro.id, v_tenant.id)
+    VALUES (v_parceiro_id, v_tenant_id)
     ON CONFLICT (tenant_id) DO UPDATE SET parceiro_id = EXCLUDED.parceiro_id;
 
-    -- Atualizar o plano da oficina em public.tenants
+    -- Deixar o status real como trial / aguardando ativação (NÃO ativa até o Asaas confirmar)
+    UPDATE public.assinaturas
+    SET status = 'trial',
+        plano = 'pro',
+        valor_centavos = 500,
+        cancelada_em = NULL,
+        updated_at = NOW()
+    WHERE tenant_id = v_tenant_id;
+
     UPDATE public.tenants
     SET plano = 'pro',
         updated_at = NOW()
-    WHERE id = v_tenant.id;
+    WHERE id = v_tenant_id;
 
-    -- Atualizar ou inserir assinatura ativa com o valor dinâmico do plano
-    INSERT INTO public.assinaturas (
-      tenant_id, plano, status, valor_centavos, proximo_vencimento, updated_at
-    ) VALUES (
-      v_tenant.id, 'pro', 'ativa', v_preco_centavos_atual, (v_comp + INTERVAL '1 month' - INTERVAL '1 day')::date, NOW()
-    )
-    ON CONFLICT (tenant_id) DO UPDATE SET
-      plano = 'pro',
-      status = 'ativa',
-      valor_centavos = v_preco_centavos_atual,
-      proximo_vencimento = (v_comp + INTERVAL '1 month' - INTERVAL '1 day')::date,
-      cancelada_em = NULL,
-      updated_at = NOW();
+    -- Remover qualquer registro de pagamento manual para que o teste seja 100% real
+    DELETE FROM public.pagamentos_competencia
+    WHERE tenant_id = v_tenant_id;
 
-    -- Registrar pagamento da competência com o valor real
-    INSERT INTO public.pagamentos_competencia (tenant_id, competencia, valor_pago_centavos, confirmado_em)
-    VALUES (v_tenant.id, v_comp, v_preco_centavos_atual, NOW())
-    ON CONFLICT (tenant_id, competencia)
-    DO UPDATE SET valor_pago_centavos = EXCLUDED.valor_pago_centavos, confirmado_em = NOW();
-
-    -- Gravar a comissão aprovada calculada dinamicamente
-    INSERT INTO public.parceiro_comissoes (
-      parceiro_id, tenant_id, competencia, valor_base, valor_comissao, status
-    ) VALUES (
-      v_parceiro.id, v_tenant.id, v_comp, v_valor_base, v_valor_comissao, 'aprovada'
-    )
-    ON CONFLICT (parceiro_id, tenant_id, competencia)
-    DO UPDATE SET
-      valor_base = EXCLUDED.valor_base,
-      valor_comissao = EXCLUDED.valor_comissao,
-      status = 'aprovada';
-
-    RAISE NOTICE 'Oficina % vinculada ao parceiro %. Plano: R$ %, Comissao (%): R$ %',
-      v_tenant.id, v_parceiro.id, v_valor_base, v_parceiro.comissao_valor, v_valor_comissao;
-  END LOOP;
+    RAISE NOTICE 'Oficina Teste vinculada com sucesso. Aguardando pagamento real no Asaas.';
+  END IF;
 END $$;
 
 -- ==============================================================================
--- 2. RPC DE PROCESSAMENTO DE PAGAMENTO ASAAS / COMISSÃO 100% DINÂMICA
+-- 2. RPC DE PROCESSAMENTO DE PAGAMENTO ASAAS (DISPARADA QUANDO O USUÁRIO PAGAR DE FATO)
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.processar_pagamento_asaas_parceiro(
   p_tenant_id UUID,
@@ -151,11 +98,13 @@ BEGIN
     END IF;
   END IF;
 
+  -- 1. Registra o pagamento da competência
   INSERT INTO public.pagamentos_competencia (tenant_id, competencia, valor_pago_centavos, confirmado_em)
   VALUES (p_tenant_id, v_comp, v_valor_centavos_final, NOW())
   ON CONFLICT (tenant_id, competencia)
   DO UPDATE SET valor_pago_centavos = EXCLUDED.valor_pago_centavos, confirmado_em = NOW();
 
+  -- 2. Verifica se a oficina possui vínculo com um parceiro comercial
   SELECT * INTO v_vinc FROM public.parceiro_oficinas WHERE tenant_id = p_tenant_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('sucesso', true, 'parceiro_vinculado', false);
@@ -170,7 +119,7 @@ BEGIN
     RETURN jsonb_build_object('sucesso', true, 'nao_recorrente_ignorado', true);
   END IF;
 
-  -- Cálculo dinâmico em tempo real
+  -- 3. Cálculo dinâmico em tempo real sobre o valor real do plano
   v_valor_base := round((v_valor_centavos_final / 100.0), 2);
 
   IF v_parceiro.comissao_tipo = 'percentual' THEN
@@ -179,6 +128,7 @@ BEGIN
     v_valor_comissao := v_parceiro.comissao_valor;
   END IF;
 
+  -- 4. Grava a comissão aprovada no extrato do parceiro
   INSERT INTO public.parceiro_comissoes (
     parceiro_id, tenant_id, competencia, valor_base, valor_comissao, status
   ) VALUES (
