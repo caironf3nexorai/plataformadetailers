@@ -124,7 +124,6 @@ export const SidebarNav: React.FC = () => {
       titulo: 'GESTÃO & SISTEMA',
       itens: [
         { path: '/configuracoes', label: 'Minha Oficina', icon: Building2, visible: true },
-        { path: '/configuracoes?aba=termos', label: 'Termos & Garantias (CDC)', icon: ShieldCheck, visible: podeGerirServicos() },
         { path: '/planos', label: 'Planos & Assinatura', icon: Sparkles, visible: !isOperador },
       ],
     },
@@ -255,6 +254,9 @@ export const SidebarNav: React.FC = () => {
                     if (item.path === '/servicos/precificacao') {
                       return location.pathname.startsWith('/servicos/precificacao') || location.pathname === '/precificacao';
                     }
+                    if (item.path === '/configuracoes') {
+                      return location.pathname === '/configuracoes';
+                    }
                     return reactRouterActive;
                   };
 
@@ -264,7 +266,7 @@ export const SidebarNav: React.FC = () => {
                     <NavLink
                       key={item.path}
                       to={item.path}
-                      end={item.path === '/' || item.path === '/servicos'}
+                      end={item.path === '/' || item.path === '/servicos' || item.path === '/configuracoes'}
                       className={({ isActive }) => {
                         const active = isItemActive(isActive);
                         return `relative flex items-center gap-3 px-6 py-2.5 min-h-[40px] font-sans text-[13.5px] transition-colors ${

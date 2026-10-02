@@ -140,7 +140,6 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
       titulo: 'GESTÃO & SISTEMA',
       itens: [
         { path: '/configuracoes', label: 'Minha Oficina', icon: Building2, visible: true },
-        { path: '/configuracoes?aba=termos', label: 'Termos & Garantias (CDC)', icon: ShieldCheck, visible: podeGerirServicos() },
         { path: '/planos', label: 'Planos & Assinatura', icon: Sparkles, visible: !isOperador },
       ],
     },
@@ -298,6 +297,9 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
                           location.pathname === '/precificacao'
                         );
                       }
+                      if (item.path === '/configuracoes') {
+                        return location.pathname === '/configuracoes';
+                      }
                       return reactRouterActive;
                     };
 
@@ -307,7 +309,7 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
                       <NavLink
                         key={item.path}
                         to={item.path}
-                        end={item.path === '/' || item.path === '/servicos'}
+                        end={item.path === '/' || item.path === '/servicos' || item.path === '/configuracoes'}
                         onClick={onClose}
                         className={({ isActive }) => {
                           const active = isItemActive(isActive);

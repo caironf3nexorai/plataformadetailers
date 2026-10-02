@@ -18,7 +18,8 @@ import {
   Shield,
   LogIn,
   Award,
-  Trash2
+  Trash2,
+  UserX
 } from 'lucide-react';
 
 interface TenantItem {
@@ -113,6 +114,39 @@ export const AdminOficinas: React.FC = () => {
   const [excluirAuthUsers, setExcluirAuthUsers] = useState(true);
   const [confirmacaoNome, setConfirmacaoNome] = useState('');
   const [excluindoOficina, setExcluindoOficina] = useState(false);
+
+  // Estados para Modal de Purgação Manual de E-mail
+  const [modalPurgarEmailOpen, setModalPurgarEmailOpen] = useState(false);
+  const [emailParaPurgar, setEmailParaPurgar] = useState('');
+  const [purgandoEmail, setPurgandoEmail] = useState(false);
+
+  const handleConfirmarPurgarEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = emailParaPurgar.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      showError('Informe um e-mail válido para liberar.');
+      return;
+    }
+
+    setPurgandoEmail(true);
+    try {
+      const { error } = await supabase.rpc('admin_purgar_usuario_por_email', {
+        p_email: cleanEmail,
+      });
+
+      if (error) throw error;
+
+      showSuccess(`E-mail "${cleanEmail}" liberado com sucesso do banco de dados e do auth.users!`);
+      setEmailParaPurgar('');
+      setModalPurgarEmailOpen(false);
+      fetchTenants();
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao purgar e-mail:', err);
+      showError('Erro ao purgar e-mail', err);
+    } finally {
+      setPurgandoEmail(false);
+    }
+  };
 
   const handleAbrirModalExcluir = (id: string, nome: string, slug: string) => {
     setTenantParaExcluir({ id, nome, slug });
@@ -355,9 +389,24 @@ export const AdminOficinas: React.FC = () => {
             Visualização agregada do ecossistema de oficinas parceiras e gestão de planos.
           </p>
         </div>
-        <div className="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
-          <Building2 className="w-4 h-4 text-amber-500" />
-          <span>Total: <strong className="text-white">{tenants.length}</strong> oficinas</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setEmailParaPurgar('');
+              setModalPurgarEmailOpen(true);
+            }}
+            className="flex items-center space-x-1.5 text-xs font-mono font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+            title="Exclui um e-mail do auth.users e de todas as tabelas para liberar novo cadastro"
+          >
+            <UserX className="w-3.5 h-3.5" />
+            <span>Liberar E-mail</span>
+          </button>
+
+          <div className="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
+            <Building2 className="w-4 h-4 text-amber-500" />
+            <span>Total: <strong className="text-white">{tenants.length}</strong> oficinas</span>
+          </div>
         </div>
       </div>
 
@@ -1091,6 +1140,80 @@ export const AdminOficinas: React.FC = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>{excluindoOficina ? 'Excluindo...' : 'Excluir Definitivamente'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal para Purgar / Liberar E-mail do auth.users */}
+      {modalPurgarEmailOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-red-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-red-950/40 relative">
+            <button
+              onClick={() => setModalPurgarEmailOpen(false)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-white transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-red-500/15 border border-red-500/30 rounded-xl text-red-400 shrink-0">
+                <UserX className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white font-heading">
+                  Liberar E-mail / Excluir Cadastro
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Desbloqueia um e-mail do sistema de autenticação (auth.users)
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-red-950/30 border border-red-500/20 rounded-xl text-xs text-red-200 leading-relaxed mb-4">
+              <p>
+                Use esta ferramenta quando um colaborador ou usuário antigo foi apagado mas o e-mail continua aparecendo como <em>"já cadastrado"</em> ao tentar criar uma conta nova.
+              </p>
+              <p className="mt-1 font-semibold text-red-300">
+                O e-mail será totalmente expurgado e liberado imediatamente para novos cadastros e testes de afiliados.
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmarPurgarEmail} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-slate-300">
+                  E-mail para liberar:
+                </label>
+                <input
+                  type="email"
+                  value={emailParaPurgar}
+                  onChange={(e) => setEmailParaPurgar(e.target.value)}
+                  placeholder="exemplo@gmail.com"
+                  autoFocus
+                  required
+                  className="p-3 bg-slate-950 border border-slate-800 focus:border-red-500 rounded-xl text-xs text-white font-medium outline-none transition"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalPurgarEmailOpen(false)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={purgandoEmail || !emailParaPurgar.trim()}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-red-950/50 flex items-center justify-center gap-2"
+                >
+                  <UserX className="w-4 h-4" />
+                  <span>{purgandoEmail ? 'Liberando...' : 'Liberar E-mail'}</span>
                 </button>
               </div>
             </form>

@@ -188,12 +188,20 @@ export const AbaEquipe: React.FC = () => {
 
     try {
       if (action === 'excluir') {
-        const { error } = await supabase
-          .from('tenant_members')
-          .delete()
-          .eq('id', memberToDelete.id);
+        // Tenta executar exclusão completa em cascata (tenant_members + auth.users se isolado)
+        const { error: rpcError } = await supabase.rpc('excluir_membro_equipe', {
+          p_member_id: memberToDelete.id,
+        });
 
-        if (error) throw error;
+        if (rpcError) {
+          console.warn('[AbaEquipe] Fallback para exclusão direta de tenant_members:', rpcError.message);
+          const { error: directError } = await supabase
+            .from('tenant_members')
+            .delete()
+            .eq('id', memberToDelete.id);
+
+          if (directError) throw directError;
+        }
       } else {
         const { error } = await supabase
           .from('tenant_members')

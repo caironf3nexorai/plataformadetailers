@@ -327,36 +327,52 @@ export const AbaTermosGarantia: React.FC = () => {
       </div>
 
       {/* 1. TERMO FIXO DE RESPONSABILIDADE & FALHAS OCULTAS DA OFICINA */}
-      <div className="bg-graphite-900 border border-graphite-700 rounded-xl p-5 flex flex-col gap-4 shadow-md">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
+      {/* 1. TERMO FIXO DE RESPONSABILIDADE & FALHAS OCULTAS DA OFICINA */}
+      <div className="bg-graphite-900 border border-graphite-700/80 rounded-xl p-5 sm:p-6 flex flex-col gap-4 shadow-lg shadow-black/20">
+        {/* Cabeçalho do Card: Ícone + Título + Badge + Botão Salvar Primário */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-graphite-800">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20 shrink-0 mt-0.5 sm:mt-0">
               <FileText size={22} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-display text-sm font-bold text-vapor-100 uppercase tracking-wide">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-display text-sm sm:text-base font-bold text-vapor-100 uppercase tracking-wide">
                   Termo Fixo de Responsabilidade & Falhas Ocultas
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
                   FIXO EM TODA A OFICINA
                 </span>
               </div>
-              <p className="font-sans text-xs text-vapor-400 mt-0.5">
+              <p className="font-sans text-xs text-vapor-400 mt-1 max-w-3xl leading-relaxed">
                 Aplicado automaticamente em 100% dos veículos: orçamentos, vistorias de entrada e ordens de serviço. Protege sua oficina contra alegações de falhas preexistentes, danos camuflados por sujeira, pertences não retirados e autoriza testes de rodagem e manobras.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="primary"
+            onClick={handleSalvarResponsabilidade}
+            disabled={salvandoResponsabilidade}
+            className="text-xs font-bold h-9 px-4 shrink-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md self-start md:self-auto hover:opacity-95"
+          >
+            <Save size={14} />
+            <span>{salvandoResponsabilidade ? 'Salvando...' : 'Salvar Termo Fixo'}</span>
+          </Button>
+        </div>
+
+        {/* Toolbar de Ações Rápidas da Minuta */}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-graphite-950/70 p-2.5 rounded-lg border border-graphite-800">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="secondary"
               onClick={handleAplicarMinutaAdvogado}
-              className="text-xs font-bold h-9 px-3 text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40"
+              className="text-xs font-bold h-8 px-3 text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40"
               title="Carregar a Minuta Oficial do Advogado amparada no CDC"
             >
-              <Scale size={13} className="mr-1.5" />
+              <Scale size={13} className="mr-1.5 text-amber-400" />
               <span>⚡ Aplicar Minuta do Advogado</span>
             </Button>
 
@@ -364,7 +380,7 @@ export const AbaTermosGarantia: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setModalBibliotecaOpen(true)}
-              className="text-xs h-9 px-3 text-amber-400 hover:text-amber-300 border-amber-500/30"
+              className="text-xs h-8 px-3 text-amber-400 hover:text-amber-300 border-amber-500/30"
               title="Ver modelos sugeridos na biblioteca"
             >
               <BookOpen size={13} className="mr-1.5" />
@@ -375,24 +391,25 @@ export const AbaTermosGarantia: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={handleRestaurarPadraoResponsabilidade}
-              className="text-xs h-9 px-3 text-vapor-300 hover:text-vapor-100"
-              title="Restaurar o modelo jurídico padrão inicial"
+              className="text-xs h-8 px-3 text-vapor-300 hover:text-vapor-100"
+              title="Restaurar o modelo padrão inicial"
             >
               <RotateCcw size={13} className="mr-1.5" />
               <span>Restaurar Padrão</span>
             </Button>
-
-            <Button
-              type="button"
-              variant="primary"
-              onClick={handleSalvarResponsabilidade}
-              disabled={salvandoResponsabilidade}
-              className="text-xs font-bold h-9 px-4 flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950"
-            >
-              <Save size={14} />
-              <span>{salvandoResponsabilidade ? 'Salvando...' : 'Salvar Termo Fixo'}</span>
-            </Button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(termoResponsabilidade);
+              showSuccess('Termo de Responsabilidade copiado!');
+            }}
+            className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1 rounded hover:bg-amber-500/10 transition-colors font-medium ml-auto"
+          >
+            <Copy size={12} />
+            <span>Copiar Termo</span>
+          </button>
         </div>
 
         <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-lg flex items-start gap-2.5 text-xs text-amber-200">
@@ -412,37 +429,26 @@ export const AbaTermosGarantia: React.FC = () => {
 
         <div className="flex items-center justify-between text-[11px] font-mono text-vapor-400 pt-1 border-t border-graphite-800">
           <span>{termoResponsabilidade.length} caracteres</span>
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(termoResponsabilidade);
-              showSuccess('Termo de Responsabilidade copiado!');
-            }}
-            className="flex items-center gap-1 text-amber-400 hover:text-amber-300"
-          >
-            <Copy size={12} />
-            <span>Copiar Termo</span>
-          </button>
         </div>
       </div>
 
       {/* 2. TERMOS VARIÁVEIS DE GARANTIA POR SERVIÇO */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-amber-500/10 via-graphite-900 to-graphite-900 p-5 rounded-xl border border-amber-500/30 shadow-md">
-        <div className="flex items-center gap-3.5">
-          <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-gradient-to-r from-amber-500/10 via-graphite-900 to-graphite-900 p-5 rounded-xl border border-amber-500/30 shadow-md">
+        <div className="flex items-start sm:items-center gap-3.5">
+          <div className="p-3 bg-amber-500/20 text-amber-400 rounded-xl border border-amber-500/30 shrink-0 mt-0.5 sm:mt-0">
             <ShieldCheck size={28} />
           </div>
           <div>
-            <h2 className="font-display text-lg font-bold text-vapor-100 uppercase tracking-wide">
+            <h2 className="font-display text-base sm:text-lg font-bold text-vapor-100 uppercase tracking-wide">
               Termos de Garantia Específicos (Variáveis por Serviço)
             </h2>
-            <p className="font-sans text-xs text-vapor-300 leading-relaxed max-w-2xl">
+            <p className="font-sans text-xs text-vapor-300 leading-relaxed max-w-2xl mt-0.5">
               Crie termos técnicos separados por serviço (Polimento, Lavagem de Motor, Vitrificação, Microreparos, etc.). Eles podem ser selecionados nos orçamentos, na entrada de balcão e impressos na OS e Vistoria.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 self-start md:self-auto">
           <Button
             type="button"
             variant="secondary"
@@ -454,32 +460,32 @@ export const AbaTermosGarantia: React.FC = () => {
               setPadrao(true);
               setModalOpen(true);
             }}
-            className="text-xs font-bold h-10 px-3 flex items-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25"
+            className="text-xs font-bold h-9 px-3 flex items-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25"
             title="Criar termo oficial de garantia validado pelo advogado"
           >
             <Scale size={14} />
-            <span>⚡ Minuta de Garantia do Advogado</span>
+            <span>⚡ Minuta do Advogado</span>
           </Button>
 
           <Button
             type="button"
             variant="secondary"
             onClick={() => setModalBibliotecaOpen(true)}
-            className="text-xs font-semibold h-10 px-3 flex items-center gap-1.5 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10"
+            className="text-xs font-semibold h-9 px-3 flex items-center gap-1.5 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10"
             title="Explorar biblioteca de termos da plataforma"
           >
             <BookOpen size={14} />
-            <span>Biblioteca de Modelos</span>
+            <span>Biblioteca</span>
           </Button>
 
           <Button
             type="button"
             variant="primary"
             onClick={() => handleNovoTermo('polimento')}
-            className="min-h-[40px] px-4 font-bold text-xs flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md"
+            className="min-h-[36px] px-4 font-bold text-xs flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md"
           >
             <Plus size={16} />
-            <span>Novo Termo de Garantia</span>
+            <span>Novo Termo</span>
           </Button>
         </div>
       </div>
