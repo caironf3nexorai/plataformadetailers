@@ -60,7 +60,7 @@ BEGIN
     VALUES (v_parceiro.id, v_tenant.id)
     ON CONFLICT (tenant_id) DO UPDATE SET parceiro_id = EXCLUDED.parceiro_id;
 
-    -- Atualizar o plano da oficina em public.tenants (tenants não possui coluna status)
+    -- Atualizar o plano da oficina em public.tenants
     UPDATE public.tenants
     SET plano = 'pro',
         updated_at = NOW()
@@ -124,16 +124,14 @@ DECLARE
   v_valor_base NUMERIC(10,2);
   v_valor_comissao NUMERIC(10,2);
 BEGIN
-  v_comp := date_trunc('month', COALESCE(p_competencia, (now() AT TIME ZONE 'America/Sao_Paulo')::date))::date;
+  v_comp := date_trunc('month', COALESCE(p_competencia, (now() AT TIME ZONE 'America/Sao_Paulo'))::date))::date;
 
-  -- 1. Obter a oficina
   SELECT * INTO v_tenant FROM public.tenants WHERE id = p_tenant_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('sucesso', false, 'erro', 'Oficina não encontrada');
   END IF;
 
-  -- 2. Descobrir dinamicamente o valor real do plano no momento
-  -- Se p_valor_centavos foi informado (> 0, vindo do webhook Asaas), usa ele.
+  -- Se o webhook do Asaas informou o valor real pago, usa ele.
   -- Senão, busca o preço atual do plano cadastrado em public.plans.
   IF p_valor_centavos IS NOT NULL AND p_valor_centavos > 0 THEN
     v_valor_centavos_final := p_valor_centavos;
@@ -153,13 +151,11 @@ BEGIN
     END IF;
   END IF;
 
-  -- 3. Registra o pagamento de competência da oficina com o valor real
   INSERT INTO public.pagamentos_competencia (tenant_id, competencia, valor_pago_centavos, confirmado_em)
   VALUES (p_tenant_id, v_comp, v_valor_centavos_final, NOW())
   ON CONFLICT (tenant_id, competencia)
   DO UPDATE SET valor_pago_centavos = EXCLUDED.valor_pago_centavos, confirmado_em = NOW();
 
-  -- 4. Verifica se a oficina possui vínculo com um parceiro comercial
   SELECT * INTO v_vinc FROM public.parceiro_oficinas WHERE tenant_id = p_tenant_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('sucesso', true, 'parceiro_vinculado', false);
@@ -170,12 +166,11 @@ BEGIN
     RETURN jsonb_build_object('sucesso', true, 'parceiro_ativo', false);
   END IF;
 
-  -- Se o parceiro não for recorrente e não for o primeiro mês do vínculo, não gera comissão
   IF NOT v_parceiro.recorrente AND date_trunc('month', v_vinc.created_at)::date != v_comp THEN
     RETURN jsonb_build_object('sucesso', true, 'nao_recorrente_ignorado', true);
   END IF;
 
-  -- 5. Calcula comissão DINÂMICA com base no valor real do plano
+  -- Cálculo dinâmico em tempo real
   v_valor_base := round((v_valor_centavos_final / 100.0), 2);
 
   IF v_parceiro.comissao_tipo = 'percentual' THEN
@@ -184,7 +179,6 @@ BEGIN
     v_valor_comissao := v_parceiro.comissao_valor;
   END IF;
 
-  -- 6. Grava a comissão aprovada diretamente no painel do parceiro
   INSERT INTO public.parceiro_comissoes (
     parceiro_id, tenant_id, competencia, valor_base, valor_comissao, status
   ) VALUES (
@@ -209,7 +203,7 @@ $$;
 GRANT EXECUTE ON FUNCTION public.processar_pagamento_asaas_parceiro(UUID, INTEGER, DATE) TO authenticated, service_role;
 
 -- ==============================================================================
--- 3. ATUALIZAÇÃO DO SALVAR PLANO COMPLETO PARA ATUALIZAR ASSINATURAS EM TEMPO REAL
+-- 3. ATUALIZAÇÃO DO SALVAR PLANO COMPLETO PARA SINCRONIZAR ASSINATURAS EM TEMPO REAL
 -- ==============================================================================
 CREATE OR REPLACE FUNCTION public.admin_salvar_plano_completo(
   p_codigo TEXT,
@@ -232,7 +226,6 @@ BEGIN
     RAISE EXCEPTION 'Permissão negada. Apenas administradores editores podem alterar planos.';
   END IF;
 
-  -- 1. Atualiza dados do plano
   UPDATE public.plans
   SET 
     nome = TRIM(p_nome),
@@ -245,13 +238,12 @@ BEGIN
     RAISE EXCEPTION 'Plano % não encontrado.', p_codigo;
   END IF;
 
-  -- 2. Atualizar em tempo real o valor das assinaturas ativas deste plano
+  -- Atualiza em tempo real o valor das assinaturas ativas deste plano
   UPDATE public.assinaturas
   SET valor_centavos = p_preco_centavos,
       updated_at = NOW()
   WHERE plano = LOWER(TRIM(p_codigo)) AND status = 'ativa';
 
-  -- 3. Atualiza features
   IF p_features IS NOT NULL AND jsonb_typeof(p_features) = 'object' THEN
     FOR v_key, v_val IN SELECT * FROM jsonb_each(p_features)
     LOOP
@@ -263,7 +255,6 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- 4. Atualiza limites numéricos
   IF p_limites IS NOT NULL AND jsonb_typeof(p_limites) = 'object' THEN
     FOR v_key, v_val IN SELECT * FROM jsonb_each(p_limites)
     LOOP
@@ -280,7 +271,6 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- 5. Registrar na auditoria
   INSERT INTO public.audit_logs (usuario_id, email, acao, entidade, registro_id, detalhes)
   VALUES (
     auth.uid(),
@@ -304,15 +294,17 @@ GRANT EXECUTE ON FUNCTION public.admin_salvar_plano_completo(TEXT, TEXT, INTEGER
 -- ==============================================================================
 -- 4. CRIAR_OFICINA COM DETECÇÃO INTELIGENTE DE CÓDIGO DE PARCEIRO
 -- ==============================================================================
+DROP FUNCTION IF EXISTS public.criar_oficina(text, text, text, text, text, text, text, text);
+
 CREATE OR REPLACE FUNCTION public.criar_oficina(
   p_nome text,
-  p_cidade text DEFAULT NULL::text,
-  p_uf text DEFAULT NULL::text,
-  p_telefone text DEFAULT NULL::text,
-  p_documento text DEFAULT NULL::text,
-  p_codigo_indicacao text DEFAULT NULL::text,
-  p_codigo_parceiro text DEFAULT NULL::text,
-  p_codigo_campanha text DEFAULT NULL::text
+  p_cidade text DEFAULT NULL,
+  p_uf text DEFAULT NULL,
+  p_telefone text DEFAULT NULL,
+  p_codigo_indicacao text DEFAULT NULL,
+  p_codigo_parceiro text DEFAULT NULL,
+  p_documento text DEFAULT NULL,
+  p_codigo_campanha text DEFAULT NULL
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -411,7 +403,7 @@ BEGIN
 
   v_codigo_proprio := public.gerar_codigo_indicacao_unico();
 
-  -- Criar Tenant (sem coluna status)
+  -- Criar Tenant
   INSERT INTO public.tenants (nome, slug, cidade, uf, telefone, documento, criado_por, plano, codigo_indicacao)
     VALUES (p_nome, v_slug, p_cidade, p_uf, p_telefone, p_documento, auth.uid(), v_plano_inicial, v_codigo_proprio)
     RETURNING id INTO v_tenant;
@@ -461,7 +453,7 @@ BEGIN
     VALUES (v_tenant, 'Maquininha Padrão', true, 1);
   END IF;
 
-  -- 4.1 Processar Código de PARCEIRO COMERCIAL (Precedência Absoluta)
+  -- Checagem de Parceiro (aceita tanto p_codigo_parceiro quanto p_codigo_indicacao se for parceiro)
   IF p_codigo_parceiro IS NOT NULL AND trim(p_codigo_parceiro) != '' THEN
     SELECT * INTO v_parceiro FROM public.parceiros 
     WHERE upper(codigo) = upper(trim(p_codigo_parceiro)) AND ativo = true;
@@ -472,7 +464,6 @@ BEGIN
       ON CONFLICT (tenant_id) DO UPDATE SET parceiro_id = EXCLUDED.parceiro_id;
     END IF;
   ELSIF p_codigo_indicacao IS NOT NULL AND trim(p_codigo_indicacao) != '' THEN
-    -- Fallback inteligente: se o código for de parceiro
     SELECT * INTO v_parceiro FROM public.parceiros 
     WHERE upper(codigo) = upper(trim(p_codigo_indicacao)) AND ativo = true;
 
@@ -483,7 +474,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- 4.2 Processar Código de INDICAÇÃO DE OFICINA (Apenas se não vinculou a parceiro)
+  -- Indicação entre oficinas
   IF NOT EXISTS (SELECT 1 FROM public.parceiro_oficinas WHERE tenant_id = v_tenant)
      AND p_codigo_indicacao IS NOT NULL AND trim(p_codigo_indicacao) != '' THEN
     SELECT * INTO v_indicador FROM public.tenants 
