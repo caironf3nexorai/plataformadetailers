@@ -38,7 +38,51 @@ serve(async (req) => {
       });
     }
 
-    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj, cupom: reqCupom } = await req.json();
+    const body = await req.json();
+
+    if (body.action === 'sincronizar_valor_plano') {
+      const targetPlano = body.plano;
+      const novoPrecoCentavos = body.novo_preco_centavos;
+      const novoValorReais = Number((novoPrecoCentavos / 100).toFixed(2));
+
+      // Buscar todas as assinaturas ativas desse plano que possuam asaas_subscription_id
+      const { data: assinaturasAtivas } = await supabase
+        .from('assinaturas')
+        .select('id, tenant_id, asaas_subscription_id')
+        .eq('plano', targetPlano)
+        .eq('status', 'ativa')
+        .not('asaas_subscription_id', 'is', null);
+
+      const resultados: any[] = [];
+      if (assinaturasAtivas && assinaturasAtivas.length > 0) {
+        for (const sub of assinaturasAtivas) {
+          try {
+            const resSub = await fetch(`${ASAAS_API_URL}/subscriptions/${sub.asaas_subscription_id}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'access_token': ASAAS_API_KEY,
+              },
+              body: JSON.stringify({
+                value: novoValorReais,
+                updatePendingPayments: true,
+              }),
+            });
+            const subData = await resSub.json();
+            resultados.push({ subscriptionId: sub.asaas_subscription_id, ok: resSub.ok, data: subData });
+          } catch (err: any) {
+            resultados.push({ subscriptionId: sub.asaas_subscription_id, ok: false, error: err.message });
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ sucesso: true, sincronizadas: resultados.length, resultados }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { plano, forma_pagamento, term_version, creditCard, creditCardHolderInfo, telefone: reqTelefone, cpfCnpj: reqCpfCnpj, cupom: reqCupom } = body;
 
     if (!['pro', 'studio'].includes(plano)) {
       return new Response(JSON.stringify({ error: 'Plano inválido para checkout' }), {

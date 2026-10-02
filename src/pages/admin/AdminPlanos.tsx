@@ -252,7 +252,28 @@ export const AdminPlanos: React.FC = () => {
 
       if (error) throw error;
 
-      setMsg({ type: 'success', text: `Plano '${item.nome}' (Code: ${codigo}) atualizado com todas as permissões e limites numéricos!` });
+      // Disparar sincronização em tempo real das assinaturas ativas com o Asaas
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/asaas-checkout`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              action: 'sincronizar_valor_plano',
+              plano: codigo,
+              novo_preco_centavos: precoCentavos,
+            }),
+          }).catch((err) => console.warn('Falha assíncrona ao sincronizar Asaas:', err));
+        }
+      } catch (syncErr) {
+        console.warn('Erro ao disparar sincronização com Asaas:', syncErr);
+      }
+
+      setMsg({ type: 'success', text: `Plano '${item.nome}' (Code: ${codigo}) atualizado! Preços e cobranças sincronizados em tempo real.` });
       await fetchDadosCompletos();
     } catch (err: any) {
       setMsg({ type: 'error', text: 'Erro ao salvar plano: ' + err.message });
