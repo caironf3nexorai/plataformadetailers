@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { AlertTriangle, UserPlus, Mail, Rocket } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
+import { trackCompleteRegistration } from '../../utils/pixel';
 
 export const CriarConta: React.FC = () => {
   const navigate = useNavigate();
@@ -129,6 +130,13 @@ export const CriarConta: React.FC = () => {
         setLoading(false);
         return;
       }
+
+      // Dispara o evento de ouro de conversão para o Meta/Google Ads
+      trackCompleteRegistration({
+        method: 'email',
+        convite: !!conviteToken,
+        plano: campanhaInfo?.plano_nome || (trialCadastroAtivo ? 'Trial 15 Dias Pro' : 'Free'),
+      });
 
       // Verifica se houve criação de sessão ativa imediatamente
       const activeSession = data?.session || (await supabase.auth.getSession()).data.session;

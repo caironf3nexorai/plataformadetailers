@@ -5,6 +5,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import { NotificacoesProvider } from './contexts/NotificacoesContext';
 import { RotaProtegida } from './components/auth/RotaProtegida';
 import { AppShell } from './components/layout/AppShell';
+import { AnalyticsTracker } from './components/analytics/AnalyticsTracker';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // Páginas Públicas (Carregamento Assíncrono sob Demanda)
@@ -95,6 +96,7 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <NotificacoesProvider>
+          <AnalyticsTracker />
           <Suspense fallback={<PaginaCarregando />}>
             <Routes>
             {/* Rotas Públicas */}

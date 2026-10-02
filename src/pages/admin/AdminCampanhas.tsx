@@ -12,7 +12,9 @@ import {
   Share2,
   Calendar,
   ExternalLink,
-  Power
+  Power,
+  Target,
+  Save
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
@@ -67,6 +69,14 @@ export const AdminCampanhas: React.FC = () => {
   const [trialDiasPadrao, setTrialDiasPadrao] = useState(15);
   const [alterandoTrial, setAlterandoTrial] = useState(false);
 
+  // Configuração de Pixels de Tráfego Pago (Meta, Google Ads, GA4, TikTok)
+  const [metaPixelId, setMetaPixelId] = useState('');
+  const [googleAdsId, setGoogleAdsId] = useState('');
+  const [googleAnalyticsId, setGoogleAnalyticsId] = useState('');
+  const [tiktokPixelId, setTiktokPixelId] = useState('');
+  const [salvandoPixels, setSalvandoPixels] = useState(false);
+  const [painelPixelsAberto, setPainelPixelsAberto] = useState(false);
+
   // Previne rolagem de fundo no modal
   useEffect(() => {
     if (modalAberto) {
@@ -89,9 +99,63 @@ export const AdminCampanhas: React.FC = () => {
         if (typeof data.trial_dias_padrao === 'number') {
           setTrialDiasPadrao(data.trial_dias_padrao);
         }
+        if (data.meta_pixel_id) setMetaPixelId(data.meta_pixel_id);
+        if (data.google_ads_id) setGoogleAdsId(data.google_ads_id);
+        if (data.google_analytics_id) setGoogleAnalyticsId(data.google_analytics_id);
+        if (data.tiktok_pixel_id) setTiktokPixelId(data.tiktok_pixel_id);
+      }
+
+      // Fallback para carregar diretamente da tabela caso a RPC antiga não retorne os novos campos
+      if (!data?.meta_pixel_id && !data?.google_ads_id) {
+        const { data: directData } = await supabase
+          .from('plataforma_config')
+          .select('meta_pixel_id, google_ads_id, google_analytics_id, tiktok_pixel_id')
+          .eq('id', 1)
+          .single();
+        if (directData) {
+          if (directData.meta_pixel_id) setMetaPixelId(directData.meta_pixel_id);
+          if (directData.google_ads_id) setGoogleAdsId(directData.google_ads_id);
+          if (directData.google_analytics_id) setGoogleAnalyticsId(directData.google_analytics_id);
+          if (directData.tiktok_pixel_id) setTiktokPixelId(directData.tiktok_pixel_id);
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar configuracao da plataforma no campanhas:', err);
+    }
+  };
+
+  const handleSalvarPixels = async () => {
+    setSalvandoPixels(true);
+    try {
+      const { error } = await supabase.rpc('admin_salvar_config_pixels', {
+        p_meta_pixel_id: metaPixelId.trim() || null,
+        p_google_ads_id: googleAdsId.trim() || null,
+        p_google_analytics_id: googleAnalyticsId.trim() || null,
+        p_tiktok_pixel_id: tiktokPixelId.trim() || null,
+      });
+
+      if (error) {
+        console.warn('RPC admin_salvar_config_pixels falhou, usando fallback direto em plataforma_config:', error);
+        const { error: directErr } = await supabase
+          .from('plataforma_config')
+          .update({
+            meta_pixel_id: metaPixelId.trim() || null,
+            google_ads_id: googleAdsId.trim() || null,
+            google_analytics_id: googleAnalyticsId.trim() || null,
+            tiktok_pixel_id: tiktokPixelId.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', 1);
+
+        if (directErr) throw directErr;
+      }
+
+      showSuccess('Pixels de tráfego pago salvos com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao salvar pixels:', err);
+      showError('Erro ao salvar pixels: ' + (err.message || 'Falha de permissão'));
+    } finally {
+      setSalvandoPixels(false);
     }
   };
 
@@ -341,6 +405,143 @@ export const AdminCampanhas: React.FC = () => {
             <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
           </label>
         </div>
+      </div>
+
+      {/* 🎯 Card de Rastreamento de Tráfego Pago & Pixels */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <Target size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-sm font-bold text-slate-100 uppercase tracking-wide">
+                  Pixels de Tráfego Pago & Rastreamento
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  Meta • Google • TikTok
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Insira os IDs de anúncio para ativar o rastreamento automático de visitas (PageView), interesse (Lead) e cadastros (CompleteRegistration).
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setPainelPixelsAberto(!painelPixelsAberto)}
+            className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors self-start sm:self-center"
+          >
+            {painelPixelsAberto ? 'Recolher Configurações ▲' : 'Configurar Pixels ▼'}
+          </button>
+        </div>
+
+        {painelPixelsAberto && (
+          <div className="flex flex-col gap-4 animate-fade-in pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Meta Pixel */}
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    Meta Pixel ID (Facebook / Instagram Ads)
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-500">Ex: 948123049182301</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Cole aqui o ID do Pixel do Facebook..."
+                  value={metaPixelId}
+                  onChange={(e) => setMetaPixelId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <span className="text-[10px] text-slate-400">
+                  Dispara automaticamente <strong>CompleteRegistration</strong> no cadastro de novas contas.
+                </span>
+              </div>
+
+              {/* Google Ads */}
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    Google Ads Tag ID (Conversão)
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-500">Ex: AW-1234567890</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="AW-XXXXXXXXX"
+                  value={googleAdsId}
+                  onChange={(e) => setGoogleAdsId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <span className="text-[10px] text-slate-400">
+                  Tag de conversão do Google Ads para campanhas de Pesquisa e YouTube.
+                </span>
+              </div>
+
+              {/* Google Analytics 4 */}
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                    Google Analytics 4 (GA4)
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-500">Ex: G-XXXXXXXXXX</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="G-XXXXXXXXXX"
+                  value={googleAnalyticsId}
+                  onChange={(e) => setGoogleAnalyticsId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <span className="text-[10px] text-slate-400">
+                  Métricas de tráfego, fontes de aquisição e tempo de retenção do site.
+                </span>
+              </div>
+
+              {/* TikTok Pixel */}
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                    TikTok Pixel ID
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-500">Ex: C1234567890</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Cole o ID do Pixel do TikTok..."
+                  value={tiktokPixelId}
+                  onChange={(e) => setTiktokPixelId(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <span className="text-[10px] text-slate-400">
+                  Rastreamento para anúncios em vídeo e campanhas de TikTok Ads.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 flex-wrap gap-3">
+              <span className="text-[11px] text-slate-400 font-sans">
+                🔒 <strong>100% Seguro:</strong> Nenhum segredo ou chave de API é exposto. Apenas os IDs públicos de medição são ativados no navegador do visitante.
+              </span>
+              <button
+                type="button"
+                onClick={handleSalvarPixels}
+                disabled={salvandoPixels}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+              >
+                <Save size={14} />
+                <span>{salvandoPixels ? 'Salvando...' : 'Salvar Pixels de Marketing'}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Cards de Métricas */}
