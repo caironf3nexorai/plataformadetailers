@@ -16,12 +16,14 @@ export const PaginaConvite: React.FC = () => {
         setLoading(false);
         return;
       }
+      const codLimpo = codigo.trim().toUpperCase();
       try {
+        localStorage.setItem('convite_codigo', codLimpo);
         const { data, error } = await supabase
           .from('tenants')
           .select('nome')
-          .eq('codigo_indicacao', codigo.toUpperCase())
-          .single();
+          .eq('codigo_indicacao', codLimpo)
+          .maybeSingle();
 
         if (data && !error) {
           setIndicadorNome(data.nome);
@@ -37,7 +39,11 @@ export const PaginaConvite: React.FC = () => {
   }, [codigo]);
 
   const handleIrParaCadastro = () => {
-    navigate(`/criar-conta?cupom=${codigo || ''}`);
+    const codLimpo = (codigo || '').trim().toUpperCase();
+    if (codLimpo) {
+      localStorage.setItem('convite_codigo', codLimpo);
+    }
+    navigate(`/criar-conta?convite=${encodeURIComponent(codLimpo)}`);
   };
 
   return (

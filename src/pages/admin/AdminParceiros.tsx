@@ -321,14 +321,20 @@ export const AdminParceiros: React.FC = () => {
 
     setSalvandoVinculo(true);
     try {
-      const { error } = await supabase
-        .from('parceiro_oficinas')
-        .upsert(
-          { parceiro_id: parceiroVinculoTarget.id, tenant_id: tenantIdVinculo },
-          { onConflict: 'tenant_id' }
-        );
+      const { error } = await supabase.rpc('admin_vincular_oficina_parceiro', {
+        p_tenant_id: tenantIdVinculo,
+        p_parceiro_id: parceiroVinculoTarget.id,
+      });
 
-      if (error) throw error;
+      if (error) {
+        const { error: upsertErr } = await supabase
+          .from('parceiro_oficinas')
+          .upsert(
+            { parceiro_id: parceiroVinculoTarget.id, tenant_id: tenantIdVinculo },
+            { onConflict: 'tenant_id' }
+          );
+        if (upsertErr) throw upsertErr;
+      }
 
       showSuccess(`Oficina vinculada com sucesso ao parceiro "${parceiroVinculoTarget.nome}"!`);
       setParceiroVinculoTarget(null);

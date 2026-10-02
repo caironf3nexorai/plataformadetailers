@@ -50,8 +50,21 @@ export const CriarConta: React.FC = () => {
     fetchConfig();
   }, []);
 
-  // Captura de Campanha de Lançamento
+  // Captura de Parâmetros de Indicação, Parceiro e Campanha
   useEffect(() => {
+    // 1. Parceiro Comercial
+    const codParceiro = searchParams.get('parceiro') || searchParams.get('ref') || searchParams.get('cupom');
+    if (codParceiro && codParceiro.trim()) {
+      localStorage.setItem('parceiro_codigo', codParceiro.trim().toUpperCase());
+    }
+
+    // 2. Indicação de Oficina (Indique e Ganhe)
+    const codIndicacao = searchParams.get('indicacao') || (!searchParams.get('parceiro') ? searchParams.get('convite') : null);
+    if (codIndicacao && codIndicacao.trim()) {
+      localStorage.setItem('convite_codigo', codIndicacao.trim().toUpperCase());
+    }
+
+    // 3. Campanha de Lançamento
     const codCampanha = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
     if (codCampanha) {
       const codLimpo = codCampanha.trim().toUpperCase();
@@ -156,8 +169,17 @@ export const CriarConta: React.FC = () => {
             console.error('[Aceitar Convite Exception no Signup]:', err);
           }
         }
-        // Sem convite: vai para o cadastro da nova oficina
-        navigate('/nova-oficina');
+        // Sem convite: vai para o cadastro da nova oficina preservando parceiro/convite/campanha
+        const navParams = new URLSearchParams();
+        const pCod = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
+        const cCod = searchParams.get('convite') || localStorage.getItem('convite_codigo');
+        const campCod = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
+        if (pCod) navParams.set('parceiro', pCod);
+        if (cCod) navParams.set('convite', cCod);
+        if (campCod) navParams.set('campanha', campCod);
+
+        const qs = navParams.toString() ? `?${navParams.toString()}` : '';
+        navigate(`/nova-oficina${qs}`);
       } else {
         // Sem sessão: o projeto Supabase exige confirmação por e-mail
         setEmailConfirmationRequired(true);

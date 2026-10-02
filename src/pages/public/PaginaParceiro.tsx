@@ -16,12 +16,14 @@ export const PaginaParceiro: React.FC = () => {
         setLoading(false);
         return;
       }
+      const codLimpo = codigo.trim().toUpperCase();
       try {
+        localStorage.setItem('parceiro_codigo', codLimpo);
         const { data, error } = await supabase
-          .from('afiliados')
+          .from('parceiros')
           .select('nome')
-          .eq('codigo', codigo.toUpperCase())
-          .single();
+          .eq('codigo', codLimpo)
+          .maybeSingle();
 
         if (data && !error) {
           setParceiroNome(data.nome);
@@ -37,7 +39,11 @@ export const PaginaParceiro: React.FC = () => {
   }, [codigo]);
 
   const handleIrParaCadastro = () => {
-    navigate(`/criar-conta?cupom=${codigo || ''}`);
+    const codLimpo = (codigo || '').trim().toUpperCase();
+    if (codLimpo) {
+      localStorage.setItem('parceiro_codigo', codLimpo);
+    }
+    navigate(`/criar-conta?parceiro=${encodeURIComponent(codLimpo)}`);
   };
 
   return (

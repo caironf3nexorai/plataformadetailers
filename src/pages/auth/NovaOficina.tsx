@@ -78,8 +78,8 @@ export const NovaOficina: React.FC = () => {
 
       // Obter código de convite, parceiro ou campanha do localStorage ou URL
       const searchParams = new URLSearchParams(window.location.search);
-      const conviteCodigo = searchParams.get('convite') || localStorage.getItem('convite_codigo');
-      const parceiroCodigo = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
+      const parceiroCodigo = searchParams.get('parceiro') || searchParams.get('ref') || searchParams.get('cupom') || localStorage.getItem('parceiro_codigo');
+      const conviteCodigo = searchParams.get('convite') || searchParams.get('indicacao') || localStorage.getItem('convite_codigo');
       const campanhaCodigo = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
 
       // Chamada RPC para criação atômica da oficina e do membro dono com convite/parceiro/campanha
