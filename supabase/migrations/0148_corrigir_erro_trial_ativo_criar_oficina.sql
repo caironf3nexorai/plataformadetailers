@@ -20,6 +20,9 @@ SET trial_ativo = COALESCE(trial_cadastro_ativo, true),
 WHERE id = 1;
 
 -- 2. Recriação da função criar_oficina 100% blindada e resiliente
+DROP FUNCTION IF EXISTS public.criar_oficina(text, text, text, text, text, text, text);
+DROP FUNCTION IF EXISTS public.criar_oficina(text, text, text, text, text, text, text, text);
+
 CREATE OR REPLACE FUNCTION public.criar_oficina(
   p_nome text,
   p_cidade text DEFAULT NULL,
