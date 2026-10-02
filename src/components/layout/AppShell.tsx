@@ -25,15 +25,18 @@ export const AppShell: React.FC = () => {
 
   useEffect(() => {
     async function carregarAssinatura() {
+      if (!tenant?.id) return;
       try {
-        const { data } = await supabase.rpc('obter_assinatura_tenant');
+        const { data } = await supabase.rpc('obter_assinatura_tenant', {
+          p_tenant_id: tenant.id,
+        });
         if (data) setAssinatura(data);
       } catch (err) {
         console.error('Erro ao carregar assinatura:', err);
       }
     }
     carregarAssinatura();
-  }, []);
+  }, [tenant?.id]);
 
   // Escuta evento customizado para abertura manual do Radar Financeiro
   useEffect(() => {

@@ -124,7 +124,9 @@ export const usePlano = () => {
 
       // 1. Buscar status da assinatura da oficina
       try {
-        const { data: assData } = await supabase.rpc('obter_assinatura_tenant');
+        const { data: assData } = await supabase.rpc('obter_assinatura_tenant', {
+          p_tenant_id: tenant.id,
+        });
         if (assData?.status) {
           setStatusAssinatura(assData.status);
         }

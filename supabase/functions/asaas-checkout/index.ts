@@ -450,6 +450,7 @@ serve(async (req) => {
       forma_pagamento,
       valor_centavos: valorCentavos,
       url_pagamento_asaas: paymentUrl,
+      status: (assExistente?.status === 'ativa' && assExistente?.asaas_subscription_id) ? 'ativa' : 'trial',
       updated_at: new Date().toISOString(),
     });
 

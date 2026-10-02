@@ -36,6 +36,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [telefone, setTelefone] = useState('');
   const [cpfCnpj, setCpfCnpj] = useState('');
   const [pagamentoConfirmado, setPagamentoConfirmado] = useState(false);
+  const [checkoutIniciadoEm, setCheckoutIniciadoEm] = useState<number | null>(null);
 
   // Estados de Cupom de Desconto
   const [codigoCupom, setCodigoCupom] = useState(cupomInicial || '');
@@ -90,6 +91,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setCupomAplicado(null);
       setCodigoCupom(cupomInicial || '');
       setErroCupom(null);
+      setCheckoutIniciadoEm(null);
       return;
     }
 
@@ -124,7 +126,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   // Polling em tempo real: detecta confirmação do pagamento no banco via webhook do Asaas
   useEffect(() => {
-    if (!isOpen || (!pixData && !paymentUrl) || pagamentoConfirmado || !tenant?.id) {
+    if (!isOpen || (!pixData && !paymentUrl) || pagamentoConfirmado || !tenant?.id || !checkoutIniciadoEm) {
       return;
     }
 
@@ -132,13 +134,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       try {
         const { data: assin } = await supabase
           .from('assinaturas')
-          .select('status, plano')
+          .select('status, plano, updated_at, asaas_subscription_id')
           .eq('tenant_id', tenant.id)
           .maybeSingle();
 
-        // IMPORTANTE: Uma assinatura só é considerada confirmada se assin?.status for 'ativa'.
-        // Contas em trial já possuem plano === 'pro', portanto NUNCA podemos considerar ten.plano como confirmação de pagamento.
-        const assinaturaAtiva = assin?.status === 'ativa' && assin?.plano === planoCodigo;
+        // IMPORTANTE: Uma assinatura só é considerada confirmada se:
+        // 1. assin?.status for estritamente 'ativa'
+        // 2. Pertencer ao plano solicitado
+        // 3. Tiver ID de assinatura Asaas real
+        // 4. O registro tiver sido atualizado APÓS o início deste checkout (evita falso positivo de registros antigos ou de trial)
+        const dataAtualizacao = assin?.updated_at ? new Date(assin.updated_at).getTime() : 0;
+        const atualizadoAposCheckout = dataAtualizacao >= (checkoutIniciadoEm - 3000);
+
+        const assinaturaAtiva = assin?.status === 'ativa' &&
+                               assin?.plano === planoCodigo &&
+                               Boolean(assin?.asaas_subscription_id) &&
+                               atualizadoAposCheckout;
 
         if (assinaturaAtiva) {
           setPagamentoConfirmado(true);
@@ -151,7 +162,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }, 3500);
 
     return () => clearInterval(intervalId);
-  }, [isOpen, pixData, paymentUrl, pagamentoConfirmado, tenant?.id, planoCodigo, planoNome, refetchTenantData, showSuccess]);
+  }, [isOpen, pixData, paymentUrl, pagamentoConfirmado, tenant?.id, planoCodigo, planoNome, refetchTenantData, showSuccess, checkoutIniciadoEm]);
 
   if (!isOpen) return null;
 
@@ -193,6 +204,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setLoading(true);
     setPaymentUrl(null);
     setPixData(null);
+    const inicioTs = Date.now();
+    setCheckoutIniciadoEm(inicioTs);
 
     try {
       // 1. Obter sessão do usuário
@@ -233,19 +246,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       if (result.paymentUrl) {
         setPaymentUrl(result.paymentUrl);
         if (formaPagamento === 'cartao') {
-          try {
-            window.open(result.paymentUrl, '_blank', 'noopener,noreferrer');
-          } catch (e) {
-            console.warn('Bloqueador de popup impediu abertura automática:', e);
-          }
+          showSuccess('Redirecionando para a página segura do Asaas para digitar o cartão...');
+          // Redirecionamento direto sem bloqueio de popup
+          window.location.href = result.paymentUrl;
+          return;
         }
       }
 
-      if (formaPagamento === 'cartao') {
-        showSuccess(`Cobrança gerada no Asaas! Complete inserindo os dados do cartão.`);
-      } else {
-        showSuccess(`Código Pix gerado com sucesso!`);
-      }
+      showSuccess(`Código Pix gerado com sucesso!`);
     } catch (err: any) {
       showError(err.message || 'Erro ao comunicar com o gateway de pagamento');
     } finally {
@@ -662,16 +670,22 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <button
                 type="submit"
                 disabled={loading || !aceitouTermos}
-                className="w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-graphite-950 font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/10 text-sm uppercase tracking-wider"
+                className="w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-graphite-950 font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/10 text-sm uppercase tracking-wider cursor-pointer"
               >
                 {loading ? (
                   <>
                     <Loader2 size={18} className="animate-spin" />
-                    Gerando Assinatura...
+                    Conectando ao Asaas...
+                  </>
+                ) : formaPagamento === 'cartao' ? (
+                  <>
+                    <CreditCard size={18} />
+                    Digitar Cartão no Asaas ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal}) ➔
                   </>
                 ) : (
                   <>
-                    Ir para Pagamento no Asaas ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal})
+                    <QrCode size={18} />
+                    Gerar QR Code Pix ({cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal})
                   </>
                 )}
               </button>

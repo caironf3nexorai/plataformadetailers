@@ -46,7 +46,9 @@ export const AbaAssinatura: React.FC = () => {
     try {
       // 1. Carregar assinatura do tenant
       try {
-        const { data, error } = await supabase.rpc('obter_assinatura_tenant');
+        const { data, error } = await supabase.rpc('obter_assinatura_tenant', {
+          p_tenant_id: tenant?.id,
+        });
         if (!error && data) {
           setAssinatura(data);
         }
@@ -162,6 +164,9 @@ export const AbaAssinatura: React.FC = () => {
 
   const planoSigla = (assinatura?.plano || 'free').toUpperCase();
 
+  const isEmTrial = assinatura?.status === 'trial' || tenant?.status === 'trial' || (!assinatura?.status && tenant?.plano === 'pro');
+  const statusAssin = isEmTrial ? 'trial' : (assinatura?.status || 'trial');
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 shadow-xl">
@@ -180,17 +185,24 @@ export const AbaAssinatura: React.FC = () => {
             </div>
           </div>
 
-          <Badge tone={statusToneMap[assinatura?.status || 'ativa'] || 'glass'}>
-            {statusLabelMap[assinatura?.status] || 'STATUS DESCONHECIDO'}
+          <Badge tone={statusToneMap[statusAssin] || 'amber'}>
+            {statusLabelMap[statusAssin] || 'EM DEGUSTAÇÃO (TRIAL)'}
           </Badge>
         </div>
 
         {/* Detalhes do Plano */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="p-4 rounded-xl bg-graphite-900/60 border border-graphite-700 flex flex-col gap-1">
-            <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">Plano Ativo</span>
-            <span className="text-xl font-bold font-display text-vapor-100">
+            <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">
+              {isEmTrial ? 'Plano em Degustação' : 'Plano Contratado'}
+            </span>
+            <span className="text-xl font-bold font-display text-vapor-100 flex items-center gap-2">
               {planoSigla}
+              {isEmTrial && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold">
+                  TRIAL
+                </span>
+              )}
             </span>
             <span className="text-xs text-vapor-400">
               {planoSigla === 'FREE'
