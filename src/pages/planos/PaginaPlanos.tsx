@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Check, X, Sparkles, ShieldCheck, Zap, CreditCard } from 'lucide-react';
+import { Check, X, Sparkles, ShieldCheck, Zap, CreditCard, Clock } from 'lucide-react';
 import { usePermissao } from '../../hooks/usePermissao';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePlano } from '../../hooks/usePlano';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
 import { supabase } from '../../lib/supabase';
 
 export const PaginaPlanos: React.FC = () => {
   const { isOperador } = usePermissao();
   const { tenant, refetchTenantData } = useAuth();
+  const { planoAtual: planoHook, statusAssinatura, isTrial } = usePlano();
 
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
@@ -95,7 +97,8 @@ export const PaginaPlanos: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  const planoAtual = tenant?.plano || 'free';
+  const planoAtual = tenant?.plano || planoHook || 'free';
+  const emTrial = isTrial || statusAssinatura === 'trial' || tenant?.status === 'trial' || (planoAtual === 'pro' && statusAssinatura !== 'ativa');
 
   const planos = [
     {
@@ -215,10 +218,47 @@ export const PaginaPlanos: React.FC = () => {
         </p>
       </div>
 
+      {/* Banner de Degustação / Trial Ativo */}
+      {emTrial && (
+        <div className="max-w-4xl mx-auto p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-graphite-900 border border-amber-500/40 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 text-left">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Clock className="w-6 h-6 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold text-vapor-100 uppercase tracking-wide">
+                  Período de Degustação Gratuito (Trial) Ativo
+                </span>
+                <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  14 Dias Grátis
+                </span>
+              </div>
+              <p className="text-xs text-vapor-300 mt-1 leading-relaxed">
+                Você <strong>não precisa esperar os 14 dias terminarem</strong> para assinar! Você pode efetivar sua assinatura definitiva agora mesmo via PIX ou Cartão para garantir sua conta sem interrupções e validar todas as comissões e integrações em tempo real.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const proPlano = planos.find((x) => x.id === 'pro') || planos[1];
+              handleAbrirCheckout(proPlano);
+            }}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 hover:bg-amber-400 shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 shrink-0 transition-all cursor-pointer"
+          >
+            <CreditCard className="w-4 h-4" />
+            Ativar Plano Pro Agora
+          </button>
+        </div>
+      )}
+
       {/* Cards Comparativos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch pt-4">
         {planos.map((p) => {
           const isCurrent = planoAtual === p.id;
+          const isCurrentPaid = isCurrent && !emTrial && statusAssinatura === 'ativa';
+          const isCurrentTrial = isCurrent && emTrial;
 
           return (
             <div
@@ -229,15 +269,21 @@ export const PaginaPlanos: React.FC = () => {
                   : 'bg-graphite-800/40 border-graphite-600 hover:border-graphite-500'
               }`}
             >
-              {p.destaque && (
+              {p.destaque && !isCurrentTrial && !isCurrentPaid && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-amber-500 text-graphite-950 px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 shadow">
                   <Sparkles className="w-3 h-3" /> Mais Recomendado
                 </div>
               )}
 
-              {isCurrent && (
-                <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                  Seu Plano Atual
+              {isCurrentPaid && (
+                <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" /> Seu Plano Ativo
+                </div>
+              )}
+
+              {isCurrentTrial && (
+                <div className="absolute top-4 right-4 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Degustação (Trial)
                 </div>
               )}
 
@@ -287,12 +333,21 @@ export const PaginaPlanos: React.FC = () => {
 
               {/* Botão de Ação */}
               <div className="mt-8 pt-4">
-                {isCurrent ? (
+                {isCurrentPaid ? (
                   <button
                     disabled
                     className="w-full py-2.5 rounded-lg bg-graphite-700 text-vapor-400 font-semibold text-sm cursor-default border border-graphite-600"
                   >
                     Plano Ativo
+                  </button>
+                ) : isCurrentTrial ? (
+                  <button
+                    type="button"
+                    onClick={() => handleAbrirCheckout(p)}
+                    className="w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Ativar Plano {p.nome} Definitivo ({p.precoMensal}/mês)
                   </button>
                 ) : p.codigo === 'free' ? (
                   <button
@@ -303,8 +358,9 @@ export const PaginaPlanos: React.FC = () => {
                   </button>
                 ) : (
                   <button
+                    type="button"
                     onClick={() => handleAbrirCheckout(p)}
-                    className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                    className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
                       p.destaque
                         ? 'bg-amber-500 text-graphite-950 hover:bg-amber-400 shadow-md shadow-amber-500/20 font-bold'
                         : 'bg-graphite-700 text-vapor-100 hover:bg-graphite-600 border border-graphite-500'

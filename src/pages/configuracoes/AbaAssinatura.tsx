@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 
 export const AbaAssinatura: React.FC = () => {
   const { showSuccess, showError } = useToast();
-  const { refetchTenantData } = useAuth();
+  const { tenant, refetchTenantData } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -253,16 +253,21 @@ export const AbaAssinatura: React.FC = () => {
         )}
 
         {/* Alerta de Trial */}
-        {assinatura?.status === 'trial' && (
-          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3">
+        {(assinatura?.status === 'trial' || tenant?.status === 'trial') && (
+          <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-graphite-900 border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <CheckCircle2 size={20} className="text-amber-400 shrink-0" />
+              <CheckCircle2 size={22} className="text-amber-400 shrink-0" />
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-amber-200 uppercase tracking-wide">
-                  Período de Degustação do Plano Pro (14 Dias)
-                </span>
-                <span className="text-xs text-amber-300">
-                  Restam <strong>{assinatura.dias_trial_restantes} dia(s)</strong> de trial. Assine antes do término para manter o acesso.
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-amber-200 uppercase tracking-wide">
+                    Período de Degustação do Plano Pro (14 Dias)
+                  </span>
+                  {assinatura?.dias_trial_restantes !== undefined && (
+                    <Badge tone="amber">{assinatura.dias_trial_restantes} dia(s) restantes</Badge>
+                  )}
+                </div>
+                <span className="text-xs text-amber-300/90 mt-1 leading-relaxed">
+                  Não precisa esperar os 14 dias terminarem! Ative sua assinatura definitiva agora para garantir seu plano e validar as comissões de parceiro.
                 </span>
               </div>
             </div>
@@ -274,8 +279,9 @@ export const AbaAssinatura: React.FC = () => {
                 setCheckoutModalOpen(true);
               }}
               variant="primary"
-              className="text-xs font-bold shrink-0"
+              className="text-xs font-bold shrink-0 shadow-md shadow-amber-500/20"
             >
+              <CreditCard size={14} className="mr-1.5" />
               Assinar Agora ({formatarPrecoMensal(precosCentavos['pro'] ?? 100)}/mês)
             </Button>
           </div>

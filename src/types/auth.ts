@@ -15,6 +15,8 @@ export interface Tenant {
   nome: string;
   slug: string;
   plano: PlanCode;
+  status?: string | null;
+  trial_ends_at?: string | null;
   telefone?: string | null;
   cidade?: string | null;
   uf?: string | null;
