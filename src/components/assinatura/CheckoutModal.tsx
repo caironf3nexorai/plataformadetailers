@@ -136,16 +136,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           .eq('tenant_id', tenant.id)
           .maybeSingle();
 
-        const { data: ten } = await supabase
-          .from('tenants')
-          .select('plano')
-          .eq('id', tenant.id)
-          .maybeSingle();
-
+        // IMPORTANTE: Uma assinatura só é considerada confirmada se assin?.status for 'ativa'.
+        // Contas em trial já possuem plano === 'pro', portanto NUNCA podemos considerar ten.plano como confirmação de pagamento.
         const assinaturaAtiva = assin?.status === 'ativa' && assin?.plano === planoCodigo;
-        const tenantUpgrade = ten?.plano === planoCodigo;
 
-        if (assinaturaAtiva || tenantUpgrade) {
+        if (assinaturaAtiva) {
           setPagamentoConfirmado(true);
           await refetchTenantData();
           showSuccess(`🎉 Pagamento confirmado! Seu plano ${planoNome} foi ativado com sucesso!`);
@@ -237,9 +232,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       // Se retornou link de pagamento
       if (result.paymentUrl) {
         setPaymentUrl(result.paymentUrl);
+        if (formaPagamento === 'cartao') {
+          try {
+            window.open(result.paymentUrl, '_blank', 'noopener,noreferrer');
+          } catch (e) {
+            console.warn('Bloqueador de popup impediu abertura automática:', e);
+          }
+        }
       }
 
-      showSuccess(`Assinatura do plano ${planoNome} gerada com sucesso!`);
+      if (formaPagamento === 'cartao') {
+        showSuccess(`Cobrança gerada no Asaas! Complete inserindo os dados do cartão.`);
+      } else {
+        showSuccess(`Código Pix gerado com sucesso!`);
+      }
     } catch (err: any) {
       showError(err.message || 'Erro ao comunicar com o gateway de pagamento');
     } finally {
@@ -330,94 +336,155 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           ) : pixData || paymentUrl ? (
             <div className="flex flex-col items-center text-center gap-5 py-2">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
-                <CheckCircle2 size={28} />
-              </div>
+              {pixData ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                    <QrCode size={26} />
+                  </div>
 
-              <div className="flex flex-col gap-1">
-                <h4 className="text-lg font-bold text-vapor-100">
-                  {pixData ? 'Pague via Pix para Ativar' : 'Assinatura Registrada!'}
-                </h4>
-                <p className="text-xs text-vapor-300 max-w-sm">
-                  {pixData
-                    ? `Escaneie o QR Code abaixo ou use o Pix Copia e Cola para pagar ${precoMensal}.`
-                    : 'Sua assinatura foi registrada. Clique no botão abaixo para concluir o pagamento ou cadastrar o cartão no ambiente seguro do Asaas.'}
-                </p>
-              </div>
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-lg font-bold text-vapor-100">
+                      Pague via Pix para Ativar
+                    </h4>
+                    <p className="text-xs text-vapor-300 max-w-sm">
+                      Escaneie o QR Code abaixo ou use o Pix Copia e Cola para pagar {cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal}.
+                    </p>
+                  </div>
 
-              {/* Status de escuta em tempo real */}
-              <div className="flex items-center justify-center gap-2 text-xs text-amber-400/90 font-mono bg-amber-500/10 border border-amber-500/20 py-2.5 px-3 rounded-xl w-full">
-                <Loader2 size={14} className="animate-spin text-amber-400 shrink-0" />
-                <span>Aguardando pagamento... A ativação é automática na hora!</span>
-              </div>
+                  {/* Status de escuta em tempo real */}
+                  <div className="flex items-center justify-center gap-2 text-xs text-amber-400/90 font-mono bg-amber-500/10 border border-amber-500/20 py-2.5 px-3 rounded-xl w-full">
+                    <Loader2 size={14} className="animate-spin text-amber-400 shrink-0" />
+                    <span>Aguardando pagamento Pix... A ativação é automática na hora!</span>
+                  </div>
 
-              {pixData?.encodedImage && (
-                <div className="p-3 bg-white rounded-2xl shadow-xl flex items-center justify-center">
-                  <img
-                    src={`data:image/png;base64,${pixData.encodedImage}`}
-                    alt="QR Code Pix Asaas"
-                    className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
-                  />
-                </div>
-              )}
+                  {pixData?.encodedImage && (
+                    <div className="p-3 bg-white rounded-2xl shadow-xl flex items-center justify-center">
+                      <img
+                        src={`data:image/png;base64,${pixData.encodedImage}`}
+                        alt="QR Code Pix Asaas"
+                        className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                      />
+                    </div>
+                  )}
 
-              {pixData?.payload && (
-                <div className="w-full flex flex-col gap-2">
-                  <div className="flex items-center gap-2 bg-graphite-950 p-2.5 rounded-xl border border-graphite-800">
-                    <input
-                      type="text"
-                      readOnly
-                      value={pixData.payload}
-                      className="bg-transparent text-vapor-300 font-mono text-xs flex-1 outline-none truncate selection:bg-amber-500 selection:text-graphite-950"
-                    />
+                  {pixData?.payload && (
+                    <div className="w-full flex flex-col gap-2">
+                      <div className="flex items-center gap-2 bg-graphite-950 p-2.5 rounded-xl border border-graphite-800">
+                        <input
+                          type="text"
+                          readOnly
+                          value={pixData.payload}
+                          className="bg-transparent text-vapor-300 font-mono text-xs flex-1 outline-none truncate selection:bg-amber-500 selection:text-graphite-950"
+                        />
+                        <button
+                          type="button"
+                          onClick={copiarPix}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
+                            copiado
+                              ? 'bg-emerald-500 text-white'
+                              : 'bg-amber-500 hover:bg-amber-400 text-graphite-950'
+                          }`}
+                        >
+                          {copiado ? (
+                            <>
+                              <Check size={14} />
+                              Copiado!
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={14} />
+                              Copiar Código Pix
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      <span className="text-[11px] text-vapor-400">
+                        Abra o app do seu banco ➔ Pix ➔ <strong>Pix Copia e Cola</strong> e confirme o pagamento.
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full mt-2">
+                    {paymentUrl && (
+                      <a
+                        href={paymentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full sm:flex-1 py-3 px-4 bg-graphite-800 hover:bg-graphite-700 border border-graphite-700 text-vapor-200 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all"
+                      >
+                        Abrir Fatura no Asaas
+                        <ExternalLink size={14} />
+                      </a>
+                    )}
                     <button
                       type="button"
-                      onClick={copiarPix}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 ${
-                        copiado
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-amber-500 hover:bg-amber-400 text-graphite-950'
-                      }`}
+                      onClick={handleFechar}
+                      className="w-full sm:flex-1 py-3 px-4 bg-graphite-800 hover:bg-graphite-700 text-vapor-300 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all border border-graphite-700"
                     >
-                      {copiado ? (
-                        <>
-                          <Check size={14} />
-                          Copiado!
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={14} />
-                          Copiar Código Pix
-                        </>
-                      )}
+                      Fechar
                     </button>
                   </div>
-                  <span className="text-[11px] text-vapor-400">
-                    Abra o app do seu banco ➔ Pix ➔ <strong>Pix Copia e Cola</strong> e confirme o pagamento.
-                  </span>
-                </div>
-              )}
+                </>
+              ) : (
+                <>
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-lg">
+                    <CreditCard size={30} />
+                  </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full mt-2">
-                {paymentUrl && (
-                  <a
-                    href={paymentUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:flex-1 py-3 px-4 bg-graphite-800 hover:bg-graphite-700 border border-graphite-700 text-vapor-200 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all"
+                  <div className="flex flex-col gap-1.5">
+                    <h4 className="text-lg font-bold text-vapor-100">
+                      Conclua o Pagamento com Cartão
+                    </h4>
+                    <p className="text-xs text-vapor-300 max-w-sm leading-relaxed">
+                      Por segurança bancária, a digitação do cartão é feita diretamente na página oficial e criptografada do <strong>Asaas</strong>.
+                    </p>
+                  </div>
+
+                  <div className="w-full p-4 rounded-xl bg-graphite-950/80 border border-amber-500/30 flex flex-col gap-3 text-left">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-vapor-400">Plano</span>
+                      <span className="text-vapor-100 font-bold uppercase">{planoNome}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-vapor-400">Valor</span>
+                      <span className="text-amber-400 font-bold">{cupomAplicado ? `R$ ${Number(cupomAplicado.valor_final).toFixed(2)}` : precoMensal} / mês</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-mono border-t border-graphite-800 pt-2">
+                      <span className="text-vapor-400">Status no Asaas</span>
+                      <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                        Aguardando Pagamento
+                      </span>
+                    </div>
+                  </div>
+
+                  {paymentUrl && (
+                    <a
+                      href={paymentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-500 hover:bg-amber-400 text-graphite-950 font-black text-sm rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-amber-500/20 cursor-pointer uppercase tracking-wider"
+                    >
+                      <CreditCard size={18} />
+                      Digitar Cartão e Pagar no Asaas
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
+
+                  <div className="flex items-center justify-center gap-2 text-xs text-amber-400/90 font-mono bg-amber-500/10 border border-amber-500/20 py-2.5 px-3 rounded-xl w-full">
+                    <Loader2 size={14} className="animate-spin text-amber-400 shrink-0" />
+                    <span>Aguardando confirmação do pagamento no Asaas...</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleFechar}
+                    className="w-full py-2.5 px-4 bg-transparent hover:bg-graphite-800 text-vapor-400 hover:text-vapor-200 font-medium text-xs rounded-xl transition-all"
                   >
-                    Abrir Fatura no Asaas
-                    <ExternalLink size={14} />
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={handleFechar}
-                  className="w-full sm:flex-1 py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
-                >
-                  Concluir / Já Realizei o Pagamento
-                </button>
-              </div>
+                    Fechar (Você pode pagar depois pelo link da fatura)
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <form onSubmit={handleCheckout} className="flex flex-col gap-6">
