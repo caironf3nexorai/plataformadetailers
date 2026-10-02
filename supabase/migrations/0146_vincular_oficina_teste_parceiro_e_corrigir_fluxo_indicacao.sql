@@ -123,8 +123,7 @@ DECLARE
   v_valor_centavos_final INTEGER;
   v_valor_base NUMERIC(10,2);
   v_valor_comissao NUMERIC(10,2);
-BEGIN
-  v_comp := date_trunc('month', COALESCE(p_competencia, (now() AT TIME ZONE 'America/Sao_Paulo'))::date))::date;
+  v_comp := date_trunc('month', COALESCE(p_competencia, (now() AT TIME ZONE 'America/Sao_Paulo')::date))::date;
 
   SELECT * INTO v_tenant FROM public.tenants WHERE id = p_tenant_id;
   IF NOT FOUND THEN
