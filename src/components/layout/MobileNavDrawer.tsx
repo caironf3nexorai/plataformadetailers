@@ -347,14 +347,19 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ isOpen, onClos
 
         {/* Rodapé com Perfil e Logout */}
         <div className="p-3 border-t border-graphite-700 bg-graphite-900/90 flex items-center justify-between gap-2">
-          <div className="flex flex-col truncate pr-2">
-            <span className="font-sans text-[12.5px] font-semibold text-vapor-100 truncate">
+          <Link
+            to="/configuracoes?aba=perfil"
+            onClick={onClose}
+            title="Editar meu perfil e nome"
+            className="flex flex-col truncate pr-2 group min-w-0"
+          >
+            <span className="font-sans text-[12.5px] font-semibold text-vapor-100 group-hover:text-amber-400 transition-colors truncate">
               {profile?.nome || 'Usuário'}
             </span>
             <span className="font-sans text-[11px] text-vapor-400 truncate">
               {membership?.email || ''}
             </span>
-          </div>
+          </Link>
 
           <button
             type="button"

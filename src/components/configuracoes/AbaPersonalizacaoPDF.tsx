@@ -174,14 +174,14 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
   return (
     <div className="flex flex-col gap-6 max-w-5xl">
       {/* Topo informativo do Plano */}
-      <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className={`p-3 rounded-xl ${isFree ? 'bg-graphite-700 text-vapor-300' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'}`}>
+          <div className={`p-3 rounded-xl shrink-0 ${isFree ? 'bg-graphite-700 text-vapor-300' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'}`}>
             <Palette size={24} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-display text-[16px] sm:text-[18px] text-vapor-100 uppercase tracking-wide">
                 Estúdio de Branding & Edição Completa de PDF
               </h3>
               <Badge tone={isFree ? 'graphite' : 'amber'}>
@@ -195,7 +195,7 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
         </div>
 
         {isFree && onNavigateToPlano && (
-          <Button type="button" variant="primary" onClick={onNavigateToPlano} className="shrink-0 text-[13px]">
+          <Button type="button" variant="primary" onClick={onNavigateToPlano} className="w-full md:w-auto justify-center shrink-0 text-[13px]">
             <Sparkles size={16} />
             <span>Desbloquear no Plano Pro</span>
           </Button>
@@ -515,7 +515,7 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
               </div>
 
               {/* Toggle Ocultar Marca d'água */}
-              <div className="flex items-center justify-between p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-1">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-graphite-900 rounded-lg border border-graphite-700 mt-1">
                 <div className="flex flex-col gap-0.5">
                   <span className="font-sans text-[13px] text-vapor-100 font-bold">
                     Ocultar marca da plataforma no rodapé (White-Label)
@@ -528,14 +528,14 @@ export const AbaPersonalizacaoPDF: React.FC<AbaPersonalizacaoPDFProps> = ({ onNa
                   type="checkbox"
                   checked={ocultarMarcaDagua}
                   onChange={(e) => setOcultarMarcaDagua(e.target.checked)}
-                  className="w-5 h-5 accent-amber-500 rounded cursor-pointer shrink-0 min-h-[28px] min-w-[28px]"
+                  className="w-5 h-5 accent-amber-500 rounded cursor-pointer shrink-0 min-h-[28px] min-w-[28px] self-start sm:self-auto"
                 />
               </div>
             </div>
 
             {!isFree && (
               <div className="flex justify-end pt-2">
-                <Button type="submit" variant="primary" disabled={saving} className="font-semibold flex items-center gap-2">
+                <Button type="submit" variant="primary" disabled={saving} className="font-semibold flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]">
                   <Save size={16} />
                   <span>{saving ? 'Salvando Alterações...' : 'Salvar Personalização de PDF'}</span>
                 </Button>

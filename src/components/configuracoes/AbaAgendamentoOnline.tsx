@@ -179,19 +179,20 @@ export function AbaAgendamentoOnline() {
 
       {/* Bloco 1: Ativação Geral e Confirmação */}
       <div className={`p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 ${!agendamentoLiberado ? 'opacity-60' : ''}`}>
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-emerald-400" /> Agendamento Online Público
+            <h3 className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
+              <Calendar className="w-5 h-5 text-emerald-400 shrink-0" /> 
+              <span>Agendamento Online Público</span>
               {!agendamentoLiberado && (
                 <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full font-normal inline-flex items-center gap-1">
                   <Lock size={10} /> Bloqueado no {nomePlano}
                 </span>
               )}
             </h3>
-            <p className="text-xs text-slate-400">Permite que seus clientes agendem serviços diretamente no seu catálogo público.</p>
+            <p className="text-xs text-slate-400 mt-0.5">Permite que seus clientes agendem serviços diretamente no seu catálogo público.</p>
           </div>
-          <label className={`relative inline-flex items-center ${agendamentoLiberado ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+          <label className={`relative inline-flex items-center shrink-0 ${agendamentoLiberado ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
             <input
               type="checkbox"
               disabled={!agendamentoLiberado}
@@ -234,19 +235,20 @@ export function AbaAgendamentoOnline() {
 
       {/* Bloco 2: Sinal de Agendamento e Pix */}
       <div className={`p-5 bg-slate-900 border border-slate-800 rounded-2xl space-y-4 ${!sinalPixLiberado ? 'opacity-60' : ''}`}>
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-emerald-400" /> Sinal Pix Estático
+            <h3 className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
+              <CreditCard className="w-5 h-5 text-emerald-400 shrink-0" /> 
+              <span>Sinal Pix Estático</span>
               {!sinalPixLiberado && (
                 <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full font-normal inline-flex items-center gap-1">
                   <Lock size={10} /> Bloqueado no {nomePlano}
                 </span>
               )}
             </h3>
-            <p className="text-xs text-slate-400">Solicite um sinal em Pix direto na sua conta bancária sem taxas da plataforma.</p>
+            <p className="text-xs text-slate-400 mt-0.5">Solicite um sinal em Pix direto na sua conta bancária sem taxas da plataforma.</p>
           </div>
-          <label className={`relative inline-flex items-center ${sinalPixLiberado ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+          <label className={`relative inline-flex items-center shrink-0 ${sinalPixLiberado ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
             <input
               type="checkbox"
               disabled={!sinalPixLiberado}
@@ -392,7 +394,7 @@ export function AbaAgendamentoOnline() {
         <button
           type="submit"
           disabled={salvando}
-          className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl flex items-center gap-2 transition"
+          className="w-full sm:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl flex items-center justify-center gap-2 transition"
         >
           {salvando ? (
             <>

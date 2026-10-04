@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, UserPlus, Mail, Rocket } from 'lucide-react';
+import { AlertTriangle, UserPlus, Mail, Rocket, Eye, EyeOff } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 import { trackCompleteRegistration } from '../../utils/pixel';
 
@@ -19,6 +19,7 @@ export const CriarConta: React.FC = () => {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [telefone, setTelefone] = useState('');
   const [emailLocked, setEmailLocked] = useState(false);
   const [conviteOficina, setConviteOficina] = useState<string | null>(null);
@@ -288,14 +289,25 @@ export const CriarConta: React.FC = () => {
 
               <div className="flex flex-col gap-1">
                 <label className="font-sans text-[13px] text-vapor-400 font-medium">Senha *</label>
-                <Input
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="min-h-[48px]"
-                />
+                <div className="relative flex items-center">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Mínimo 6 caracteres"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="min-h-[48px] pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 p-1.5 text-vapor-400 hover:text-amber-400 focus:outline-none transition-colors"
+                    title={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               {/* Quadro de Aceite de Termos e Privacidade (LGPD) */}

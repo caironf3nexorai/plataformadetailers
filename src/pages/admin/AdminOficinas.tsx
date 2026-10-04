@@ -19,7 +19,8 @@ import {
   LogIn,
   Award,
   Trash2,
-  UserX
+  UserX,
+  Save
 } from 'lucide-react';
 
 interface TenantItem {
@@ -30,6 +31,7 @@ interface TenantItem {
   cidade: string | null;
   uf: string | null;
   created_at: string;
+  nome_alterado_em?: string | null;
   total_membros: number;
   total_clientes: number;
   total_veiculos: number;
@@ -46,6 +48,7 @@ interface TenantDetail {
     user_id?: string;
     email: string;
     nome: string;
+    telefone?: string | null;
     role: string;
     status: string;
     ultimo_acesso: string | null;
@@ -83,6 +86,7 @@ export const AdminOficinas: React.FC = () => {
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState<TenantDetail | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // Estado para Modal de Alteração Manual de Plano
   const [modalPlanoOpen, setModalPlanoOpen] = useState(false);
@@ -107,6 +111,177 @@ export const AdminOficinas: React.FC = () => {
   const [parceiroRecorrente, setParceiroRecorrente] = useState(true);
   const [parceiroPixChave, setParceiroPixChave] = useState('');
   const [salvandoParceiro, setSalvandoParceiro] = useState(false);
+
+  // Estados para Modal de Alteração de Nome da Oficina
+  const [modalEditarOficina, setModalEditarOficina] = useState<{
+    id: string;
+    nome: string;
+    slug: string;
+    nome_alterado_em?: string | null;
+  } | null>(null);
+  const [novoNomeOficina, setNovoNomeOficina] = useState('');
+  const [ignorarCooldownOficina, setIgnorarCooldownOficina] = useState(false);
+  const [salvandoNomeOficina, setSalvandoNomeOficina] = useState(false);
+
+  const calcularSlugPreview = (nome: string, currentSlug: string) => {
+    const limpo = (nome || '').toLowerCase().trim();
+    if (!limpo) return '—';
+    const base = limpo
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'oficina';
+    const suffixMatch = currentSlug ? currentSlug.match(/-[a-f0-9]{6}$/) : null;
+    return suffixMatch ? `${base}${suffixMatch[0]}` : `${base}-xxxxxx`;
+  };
+
+  const handleAbrirModalEditarOficina = (
+    id: string,
+    nome: string,
+    slug: string,
+    nome_alterado_em?: string | null
+  ) => {
+    setModalEditarOficina({ id, nome, slug, nome_alterado_em });
+    setNovoNomeOficina(nome || '');
+    setIgnorarCooldownOficina(false);
+  };
+
+  const handleSalvarNomeOficina = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalEditarOficina) return;
+    const nomeLimpo = novoNomeOficina.trim();
+    if (!nomeLimpo || nomeLimpo.length < 2) {
+      showError('O nome da oficina deve ter pelo menos 2 caracteres.');
+      return;
+    }
+
+    setSalvandoNomeOficina(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_atualizar_nome_oficina', {
+        p_tenant_id: modalEditarOficina.id,
+        p_novo_nome: nomeLimpo,
+        p_ignorar_cooldown: ignorarCooldownOficina,
+      });
+
+      if (error) throw error;
+
+      const novoSlug = data?.slug || modalEditarOficina.slug;
+      const novaDataAlteracao = data?.nome_alterado_em || new Date().toISOString();
+
+      showSuccess(`Nome alterado para "${nomeLimpo}" e endereço atualizado para "/${novoSlug}" com sucesso!`);
+
+      // Atualizar lista de oficinas na memória
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === modalEditarOficina.id
+            ? {
+                ...t,
+                nome: nomeLimpo,
+                slug: novoSlug,
+                nome_alterado_em: novaDataAlteracao,
+              }
+            : t
+        )
+      );
+
+      // Se estiver com o modal de detalhes aberto para essa oficina, atualizar no detalhe também
+      if (detailData && detailData.tenant.id === modalEditarOficina.id) {
+        setDetailData({
+          ...detailData,
+          tenant: {
+            ...detailData.tenant,
+            nome: nomeLimpo,
+            slug: novoSlug,
+            nome_alterado_em: novaDataAlteracao,
+          },
+        });
+      }
+
+      setModalEditarOficina(null);
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao alterar nome da oficina:', err);
+      showError(err.message || 'Erro ao alterar nome da oficina');
+    } finally {
+      setSalvandoNomeOficina(false);
+    }
+  };
+
+  // Estados para Modal de Edição de Nome / Dados do Usuário
+  const [modalEditarUsuario, setModalEditarUsuario] = useState<{
+    user_id?: string;
+    email: string;
+    nome: string;
+    telefone?: string | null;
+  } | null>(null);
+  const [editNome, setEditNome] = useState('');
+  const [editTelefone, setEditTelefone] = useState('');
+  const [salvandoUsuario, setSalvandoUsuario] = useState(false);
+
+  const handleAbrirModalEditarUsuario = (m: { user_id?: string; email: string; nome: string; telefone?: string | null }) => {
+    setModalEditarUsuario(m);
+    setEditNome(m.nome || '');
+    setEditTelefone(m.telefone || '');
+  };
+
+  const handleSalvarEdicaoUsuario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalEditarUsuario) return;
+    if (!editNome.trim() || editNome.trim().length < 2) {
+      showError('O nome deve ter pelo menos 2 caracteres.');
+      return;
+    }
+
+    setSalvandoUsuario(true);
+    try {
+      let targetUserId = modalEditarUsuario.user_id;
+
+      if (!targetUserId) {
+        const { data: memberData } = await supabase
+          .from('tenant_members')
+          .select('user_id')
+          .eq('email', modalEditarUsuario.email.toLowerCase().trim())
+          .not('user_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
+
+        targetUserId = memberData?.user_id;
+      }
+
+      if (!targetUserId) {
+        showError('Este membro ainda não concluiu o cadastro inicial (convite pendente).');
+        setSalvandoUsuario(false);
+        return;
+      }
+
+      const { error } = await supabase.rpc('admin_atualizar_usuario_perfil', {
+        p_user_id: targetUserId,
+        p_nome: editNome.trim(),
+        p_telefone: editTelefone.trim() || null,
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Nome do usuário atualizado para "${editNome.trim()}" com sucesso!`);
+      
+      if (detailData) {
+        setDetailData({
+          ...detailData,
+          membros: detailData.membros.map((mb) =>
+            mb.email.toLowerCase() === modalEditarUsuario.email.toLowerCase()
+              ? { ...mb, nome: editNome.trim(), telefone: editTelefone.trim() || null }
+              : mb
+          ),
+        });
+      }
+
+      setModalEditarUsuario(null);
+    } catch (err: any) {
+      console.error('[AdminOficinas] Erro ao atualizar perfil do usuário:', err);
+      showError('Erro ao atualizar usuário', err);
+    } finally {
+      setSalvandoUsuario(false);
+    }
+  };
 
   // Estados para Modal de Exclusão de Oficina e Liberação de E-mail
   const [modalExcluirOpen, setModalExcluirOpen] = useState(false);
@@ -219,6 +394,7 @@ export const AdminOficinas: React.FC = () => {
   const handleOpenDetail = async (id: string) => {
     setSelectedTenantId(id);
     setDetailLoading(true);
+    setDetailError(null);
     try {
       const [{ data, error }, { data: adminsData }, { data: parceirosData }] = await Promise.all([
         supabase.rpc('admin_detalhe_tenant', { p_tenant_id: id }),
@@ -226,8 +402,59 @@ export const AdminOficinas: React.FC = () => {
         supabase.from('parceiros').select('email, codigo').eq('ativo', true),
       ]);
 
-      if (error) throw error;
-      setDetailData(data);
+      if (error) {
+        console.warn('[AdminOficinas] RPC admin_detalhe_tenant falhou, aplicando fallback local:', error.message);
+        
+        const tenantLocal = tenants.find((t) => t.id === id);
+        if (!tenantLocal) {
+          throw new Error(error.message || 'Oficina não encontrada.');
+        }
+
+        let fallbackMembros: any[] = [];
+        try {
+          const { data: membersRows } = await supabase
+            .from('tenant_members')
+            .select('id, user_id, email, role, status')
+            .eq('tenant_id', id);
+
+          if (membersRows && membersRows.length > 0) {
+            const userIds = membersRows.map((m: any) => m.user_id).filter(Boolean);
+            let profilesMap = new Map<string, { nome?: string; telefone?: string }>();
+            if (userIds.length > 0) {
+              const { data: profs } = await supabase
+                .from('profiles')
+                .select('id, nome, telefone')
+                .in('id', userIds);
+              (profs || []).forEach((p: any) => profilesMap.set(p.id, p));
+            }
+
+            fallbackMembros = membersRows.map((m: any) => {
+              const prof = m.user_id ? profilesMap.get(m.user_id) : null;
+              return {
+                id: m.id,
+                user_id: m.user_id,
+                email: m.email,
+                nome: prof?.nome || m.email,
+                telefone: prof?.telefone || null,
+                role: m.role,
+                status: m.status,
+                ultimo_acesso: null,
+              };
+            });
+          }
+        } catch {
+          // ignora se RLS na tabela impedir select direto
+        }
+
+        setDetailData({
+          tenant: tenantLocal,
+          membros: fallbackMembros,
+          historico_12m: [],
+          storage: [],
+        });
+      } else {
+        setDetailData(data);
+      }
 
       if (adminsData) {
         setPlatformAdminsEmails(adminsData.map((a: any) => (a.email || '').toLowerCase()));
@@ -240,7 +467,8 @@ export const AdminOficinas: React.FC = () => {
         setParceirosEmails(mapP);
       }
     } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao carregar detalhes:', err.message);
+      console.error('[AdminOficinas] Erro ao carregar detalhes:', err);
+      setDetailError(err.message || 'Erro ao carregar detalhes da oficina.');
     } finally {
       setDetailLoading(false);
     }
@@ -484,7 +712,17 @@ export const AdminOficinas: React.FC = () => {
                   return (
                     <tr key={t.id} className="hover:bg-slate-800/50 transition">
                       <td className="px-4 py-3.5">
-                        <div className="font-semibold text-white">{t.nome}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-white">{t.nome}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
+                            className="p-1 hover:bg-slate-800 text-slate-500 hover:text-amber-400 rounded transition cursor-pointer"
+                            title="Alterar Nome da Oficina"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                        </div>
                         <div className="text-xs text-slate-500 font-mono">/{t.slug}</div>
                       </td>
                       <td className="px-4 py-3.5">
@@ -523,8 +761,19 @@ export const AdminOficinas: React.FC = () => {
                       </td>
                       <td className="px-4 py-3.5 text-right space-x-2">
                         <button
+                          type="button"
+                          onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
+                          className="inline-flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 transition cursor-pointer"
+                          title="Alterar nome da oficina"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Nome</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={() => handleAcessarOficina(t.id)}
-                          className="inline-flex items-center space-x-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded text-xs font-medium border border-emerald-500/30 transition"
+                          className="inline-flex items-center space-x-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded text-xs font-medium border border-emerald-500/30 transition cursor-pointer"
                           title="Acessar painel desta oficina no App"
                         >
                           <LogIn className="w-3.5 h-3.5" />
@@ -572,7 +821,17 @@ export const AdminOficinas: React.FC = () => {
                 <div key={t.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-md">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="font-bold text-white text-base">{t.nome}</h3>
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="font-bold text-white text-base leading-tight truncate">{t.nome}</h3>
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
+                          className="p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition cursor-pointer shrink-0"
+                          title="Alterar Nome da Oficina"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <p className="text-xs text-slate-500 font-mono">/{t.slug}</p>
                     </div>
                     <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
@@ -615,10 +874,21 @@ export const AdminOficinas: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full pt-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full pt-1">
                       <button
+                        type="button"
+                        onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
+                        className="w-full bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 text-amber-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-amber-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                        title="Alterar nome da oficina"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Nome</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleAcessarOficina(t.id)}
-                        className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition"
+                        className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer"
                         title="Acessar painel desta oficina no App"
                       >
                         <LogIn className="w-3.5 h-3.5" />
@@ -626,14 +896,15 @@ export const AdminOficinas: React.FC = () => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
-                        className="w-full bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 text-amber-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-amber-500/30 flex items-center justify-center space-x-1.5 transition"
+                        className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 py-2 px-2.5 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center space-x-1.5 transition cursor-pointer"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
                         <span>Plano</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleOpenDetail(t.id)}
                         className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 py-2 px-2.5 rounded-lg text-xs font-semibold border border-slate-700 flex items-center justify-center space-x-1.5 transition cursor-pointer"
                       >
@@ -641,8 +912,9 @@ export const AdminOficinas: React.FC = () => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
-                        className="w-full bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-red-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                        className="w-full bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-red-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer col-span-2 sm:col-span-1"
                         title="Excluir oficina"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -685,15 +957,39 @@ export const AdminOficinas: React.FC = () => {
                 
                 {/* Basic info card */}
                 <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-                  <div className="flex justify-between items-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <span className="text-sm font-bold text-white block">{detailData.tenant.nome}</span>
-                      <span className="text-xs font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded mt-1 inline-block">
-                        Plano {detailData.tenant.plano}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-white block">{detailData.tenant.nome}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleAbrirModalEditarOficina(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.slug, detailData.tenant.nome_alterado_em)}
+                          className="p-1 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded-md transition cursor-pointer"
+                          title="Alterar Nome da Oficina"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <span className="text-xs font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded inline-block">
+                          Plano {detailData.tenant.plano}
+                        </span>
+                        <span className="text-xs text-slate-500 font-mono">/{detailData.tenant.slug}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
                       <button
+                        type="button"
+                        onClick={() => handleAbrirModalEditarOficina(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.slug, detailData.tenant.nome_alterado_em)}
+                        className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer"
+                        title="Alterar Nome da Oficina"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Alterar Nome</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleAcessarOficina(detailData.tenant.id)}
                         className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
                         title="Acessar painel desta oficina no App"
@@ -703,6 +999,7 @@ export const AdminOficinas: React.FC = () => {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => handleAbrirModalPlano(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.plano)}
                         className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
                       >
@@ -779,6 +1076,15 @@ export const AdminOficinas: React.FC = () => {
                                 </button>
                               )}
 
+                              <button
+                                onClick={() => handleAbrirModalEditarUsuario(m)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                                title="Editar Nome e Telefone deste usuário"
+                              >
+                                <Edit2 className="w-3 h-3 text-amber-400" />
+                                <span>Editar Nome</span>
+                              </button>
+
                               <div className="text-right pl-2 border-l border-slate-800">
                                 <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase">
                                   {m.role} ({m.status})
@@ -842,7 +1148,26 @@ export const AdminOficinas: React.FC = () => {
                 </div>
 
               </div>
-            ) : null}
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4 my-auto">
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-400">
+                  <AlertTriangle className="w-8 h-8" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-white">Não foi possível carregar os detalhes</h3>
+                  <p className="text-xs text-slate-400 max-w-sm">
+                    {detailError || 'Ocorreu uma instabilidade ao buscar os dados da oficina.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => selectedTenantId && handleOpenDetail(selectedTenantId)}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer shadow-lg shadow-amber-950/40"
+                >
+                  Tentar Novamente
+                </button>
+              </div>
+            )}
 
           </div>
         </div>,
@@ -1214,6 +1539,215 @@ export const AdminOficinas: React.FC = () => {
                 >
                   <UserX className="w-4 h-4" />
                   <span>{purgandoEmail ? 'Liberando...' : 'Liberar E-mail'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal para Editar Nome e Dados do Usuário */}
+      {modalEditarUsuario && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-amber-950/40 relative">
+            <button
+              onClick={() => setModalEditarUsuario(null)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-white transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+                <Edit2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white font-heading">
+                  Editar Nome do Usuário
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {modalEditarUsuario.email}
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSalvarEdicaoUsuario} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-slate-300">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  value={editNome}
+                  onChange={(e) => setEditNome(e.target.value)}
+                  placeholder="Nome do cliente/usuário"
+                  autoFocus
+                  required
+                  className="p-3 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-white font-medium outline-none transition"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-slate-300">
+                  Telefone / WhatsApp (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={editTelefone}
+                  onChange={(e) => setEditTelefone(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  className="p-3 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-white font-medium outline-none transition"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarUsuario(null)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={salvandoUsuario || !editNome.trim()}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-amber-950/50 flex items-center justify-center gap-2"
+                >
+                  {salvandoUsuario ? (
+                    'Salvando...'
+                  ) : (
+                    <>
+                      <Edit2 className="w-4 h-4" />
+                      <span>Salvar Nome</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Alteração de Nome da Oficina */}
+      {modalEditarOficina && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150 relative">
+            <button
+              onClick={() => setModalEditarOficina(null)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-white transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white font-heading">
+                  Alterar Nome da Oficina
+                </h3>
+                <p className="text-xs text-slate-400">
+                  ID: <span className="font-mono">{modalEditarOficina.id}</span>
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSalvarNomeOficina} className="flex flex-col gap-4">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1">
+                <div>Nome atual: <strong className="text-white">{modalEditarOficina.nome}</strong></div>
+                <div className="text-slate-400">
+                  Endereço público atual: <span className="text-amber-400 font-mono">/{modalEditarOficina.slug}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-slate-300">
+                  Novo Nome da Oficina *
+                </label>
+                <input
+                  type="text"
+                  value={novoNomeOficina}
+                  onChange={(e) => setNovoNomeOficina(e.target.value)}
+                  placeholder="Ex: Detail Car Estética Automotiva"
+                  autoFocus
+                  required
+                  className="p-3 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-white font-medium outline-none transition"
+                />
+              </div>
+
+              {/* Preview Dinâmico do Slug */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-1 text-xs">
+                <span className="text-slate-400 block text-[11px] font-mono uppercase">
+                  Novo Endereço Público (Sincronizado):
+                </span>
+                <span className="font-mono font-bold text-amber-400 text-xs break-all">
+                  /{calcularSlugPreview(novoNomeOficina, modalEditarOficina.slug)}
+                </span>
+                <span className="text-[11px] text-slate-500 block pt-0.5">
+                  Ao alterar o nome, o link público (/agendar/...) é recalculado automaticamente.
+                </span>
+              </div>
+
+              {/* Verificação do Intervalo de 15 Dias */}
+              {(() => {
+                const dataAlteracao = modalEditarOficina.nome_alterado_em ? new Date(modalEditarOficina.nome_alterado_em) : null;
+                const diasPassados = dataAlteracao ? (Date.now() - dataAlteracao.getTime()) / (1000 * 60 * 60 * 24) : 999;
+                const diasRestantes = Math.max(0, Math.ceil(15 - diasPassados));
+                const emCooldown = diasRestantes > 0;
+
+                return (
+                  <div className="space-y-2">
+                    {emCooldown && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
+                        <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-400" />
+                        <div>
+                          <strong>Aviso de Intervalo:</strong> O nome desta oficina foi alterado recentemente. Faltam{' '}
+                          <strong>{diasRestantes} dia(s)</strong> para o prazo regular de 15 dias.
+                        </div>
+                      </div>
+                    )}
+
+                    <label className="flex items-center gap-2.5 p-2.5 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition">
+                      <input
+                        type="checkbox"
+                        checked={ignorarCooldownOficina}
+                        onChange={(e) => setIgnorarCooldownOficina(e.target.checked)}
+                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span className="text-xs text-slate-300">
+                        Ignorar intervalo de 15 dias (Super Admin)
+                      </span>
+                    </label>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarOficina(null)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={salvandoNomeOficina || !novoNomeOficina.trim() || novoNomeOficina.trim() === modalEditarOficina.nome}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-amber-950/50 flex items-center justify-center gap-2"
+                >
+                  {salvandoNomeOficina ? (
+                    'Salvando...'
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Salvar Nome e Slug</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

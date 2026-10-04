@@ -99,13 +99,13 @@ export const AbaMetaMensal: React.FC = () => {
   };
 
   return (
-    <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 max-w-2xl">
+    <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 max-w-2xl">
       <div className="flex items-center gap-3">
-        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-500">
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-500 shrink-0">
           <Target size={24} />
         </div>
         <div className="flex flex-col">
-          <h3 className="font-display text-lg text-vapor-100 uppercase tracking-wide">
+          <h3 className="font-display text-base sm:text-lg text-vapor-100 uppercase tracking-wide">
             Meta Mensal do Estabelecimento
           </h3>
           <p className="font-sans text-xs text-vapor-400">
@@ -176,9 +176,9 @@ export const AbaMetaMensal: React.FC = () => {
         </div>
 
         {metaAtual && (
-          <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 flex items-center justify-between">
+          <div className="p-3 bg-graphite-900 rounded-lg border border-graphite-700 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span className="font-sans text-xs text-vapor-300">Meta Cadastrada para este Mês:</span>
-            <Badge tone="amber" className="font-mono text-xs text-amber-400">
+            <Badge tone="amber" className="font-mono text-xs text-amber-400 self-start sm:self-auto">
               {metaAtual.tipo === 'carros'
                 ? `${metaAtual.valor} veículos`
                 : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(metaAtual.valor)}
@@ -190,7 +190,7 @@ export const AbaMetaMensal: React.FC = () => {
           <Button
             type="submit"
             disabled={saving || loading || (!isDono && !isGerente)}
-            className="text-xs flex items-center gap-2"
+            className="text-xs flex items-center justify-center gap-2 w-full sm:w-auto min-h-[44px]"
           >
             <Save size={16} />
             <span>{saving ? 'Salvando Meta...' : 'Salvar Meta do Mês'}</span>

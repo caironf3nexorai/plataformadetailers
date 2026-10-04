@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, LogIn } from 'lucide-react';
+import { AlertTriangle, LogIn, Eye, EyeOff } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const Entrar: React.FC = () => {
@@ -18,6 +18,7 @@ export const Entrar: React.FC = () => {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(
     (location.state as any)?.errorMsg || null
   );
@@ -107,14 +108,25 @@ export const Entrar: React.FC = () => {
                   Esqueceu a senha?
                 </Link>
               </div>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="min-h-[48px]"
-              />
+              <div className="relative flex items-center">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="min-h-[48px] pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 p-1.5 text-vapor-400 hover:text-amber-400 focus:outline-none transition-colors"
+                  title={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             <Button

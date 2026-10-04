@@ -419,11 +419,11 @@ export const AbaHorarios: React.FC = () => {
           {horarios.map((h, idx) => (
             <div
               key={h.id || h.dia_semana}
-              className={`p-3.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${
+              className={`p-3.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
                 h.ativo ? 'bg-graphite-800 border-graphite-700' : 'bg-graphite-950/60 border-graphite-800 opacity-60'
               }`}
             >
-              <div className="flex items-center gap-3 min-w-[150px]">
+              <div className="flex items-center gap-3 min-w-[140px]">
                 <input
                   type="checkbox"
                   checked={h.ativo}
@@ -436,29 +436,29 @@ export const AbaHorarios: React.FC = () => {
               </div>
 
               {h.ativo ? (
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-sans text-[12px] text-vapor-400">Abre:</span>
+                    <span className="font-sans text-[12px] text-vapor-400 shrink-0">Abre:</span>
                     <input
                       type="time"
                       value={h.abre?.substring(0, 5) || '08:00'}
                       onChange={(e) => handleHorarioChange(idx, 'abre', e.target.value)}
-                      className="bg-graphite-900 border border-graphite-700 rounded px-2.5 py-1 font-mono text-[13px] text-vapor-100 outline-none focus:border-amber-500 min-h-[38px]"
+                      className="bg-graphite-900 border border-graphite-700 rounded px-2 py-1 font-mono text-[13px] text-vapor-100 outline-none focus:border-amber-500 min-h-[38px] w-full sm:w-auto"
                     />
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <span className="font-sans text-[12px] text-vapor-400">Fecha:</span>
+                    <span className="font-sans text-[12px] text-vapor-400 shrink-0">Fecha:</span>
                     <input
                       type="time"
                       value={h.fecha?.substring(0, 5) || '18:00'}
                       onChange={(e) => handleHorarioChange(idx, 'fecha', e.target.value)}
-                      className="bg-graphite-900 border border-graphite-700 rounded px-2.5 py-1 font-mono text-[13px] text-vapor-100 outline-none focus:border-amber-500 min-h-[38px]"
+                      className="bg-graphite-900 border border-graphite-700 rounded px-2 py-1 font-mono text-[13px] text-vapor-100 outline-none focus:border-amber-500 min-h-[38px] w-full sm:w-auto"
                     />
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-sans text-[12px] text-vapor-400">Boxes:</span>
+                  <div className="flex items-center gap-1.5 col-span-2 sm:col-span-1">
+                    <span className="font-sans text-[12px] text-vapor-400 shrink-0">Boxes:</span>
                     <CampoNumerico
                       integerOnly
                       value={h.capacidade}
@@ -484,7 +484,7 @@ export const AbaHorarios: React.FC = () => {
             variant="primary"
             disabled={savingHorarios}
             onClick={handleSaveHorarios}
-            className="flex items-center gap-2 font-bold bg-amber-500 text-graphite-950 hover:bg-amber-400"
+            className="flex items-center justify-center gap-2 font-bold bg-amber-500 text-graphite-950 hover:bg-amber-400 w-full sm:w-auto min-h-[44px]"
           >
             <CheckCircle2 size={16} />
             <span>{savingHorarios ? 'Salvando...' : 'Salvar Horários de Funcionamento'}</span>

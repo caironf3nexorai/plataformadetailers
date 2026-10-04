@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -22,19 +23,19 @@ import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
 import { AbaFiscal } from '../components/configuracoes/AbaFiscal';
 import { AbaWhatsApp } from '../components/configuracoes/AbaWhatsApp';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle } from 'lucide-react';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
 
 interface ConfiguracoesProps {
-  abaInicial?: 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal' | 'whatsapp';
+  abaInicial?: 'perfil' | 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal' | 'whatsapp';
 }
 
 export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { tenant, refetchTenantData } = useAuth();
+  const { tenant, refetchTenantData, profile, user, membership } = useAuth();
   const { isDono, podeGerirEquipe, podeGerirServicos } = usePermissao();
   const { planoAtual, nomePlano, limiteDe } = usePlano();
 
@@ -43,7 +44,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     return 'oficina';
   };
 
-  const [activeTab, setActiveTab] = useState<'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal' | 'whatsapp'>(getTabPadrao());
+  const [activeTab, setActiveTab] = useState<'perfil' | 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal' | 'whatsapp'>(getTabPadrao());
 
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
@@ -68,12 +69,76 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setActiveTab('whatsapp');
     } else if (['termos', 'garantia', 'garantias', 'minuta', 'minutas'].includes(abaParam)) {
       setActiveTab('termos');
+    } else if (['perfil', 'usuario', 'meuperfil', 'dados'].includes(abaParam)) {
+      setActiveTab('perfil');
     } else if (['oficina', 'horarios', 'equipe', 'categorias', 'checklists', 'agendamento', 'pdf', 'meta', 'feedbacks'].includes(abaParam)) {
       setActiveTab(abaParam as any);
     } else if (abaInicial) {
       setActiveTab(abaInicial);
     }
   }, [location.pathname, location.search, abaInicial, navigate]);
+
+  // Estados de Edição do Perfil Pessoal do Usuário Logado
+  const [meuNomeInput, setMeuNomeInput] = useState(profile?.nome || '');
+  const [meuTelefoneInput, setMeuTelefoneInput] = useState(profile?.telefone || '');
+  const [salvandoMeuPerfil, setSalvandoMeuPerfil] = useState(false);
+  const [meuPerfilError, setMeuPerfilError] = useState<string | null>(null);
+  const [meuPerfilSuccess, setMeuPerfilSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (profile) {
+      setMeuNomeInput(profile.nome || '');
+      setMeuTelefoneInput(profile.telefone || '');
+    }
+  }, [profile]);
+
+  const handleSalvarMeuPerfil = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMeuPerfilError(null);
+    setMeuPerfilSuccess(null);
+
+    const nomeLimpo = meuNomeInput.trim();
+    if (!nomeLimpo || nomeLimpo.length < 2) {
+      setMeuPerfilError('Seu nome completo deve ter pelo menos 2 caracteres.');
+      return;
+    }
+
+    setSalvandoMeuPerfil(true);
+    try {
+      // 1. Tenta via RPC atualizar_meu_perfil para sincronia atômica (profiles + auth.users)
+      const { error: rpcError } = await supabase.rpc('atualizar_meu_perfil', {
+        p_nome: nomeLimpo,
+        p_telefone: meuTelefoneInput.trim() || null,
+      });
+
+      if (rpcError) {
+        // Fallback direto via tabela profiles se a RPC ainda não tiver sido propagada
+        if (user) {
+          const { error: directError } = await supabase
+            .from('profiles')
+            .update({
+              nome: nomeLimpo,
+              telefone: meuTelefoneInput.trim() || null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', user.id);
+
+          if (directError) throw directError;
+        } else {
+          throw rpcError;
+        }
+      }
+
+      setMeuPerfilSuccess('Seus dados pessoais foram salvos com sucesso!');
+      await refetchTenantData();
+    } catch (err: any) {
+      console.error('[Salvar Meu Perfil Error]:', err);
+      setMeuPerfilError(err.message || 'Erro ao atualizar seu perfil.');
+    } finally {
+      setSalvandoMeuPerfil(false);
+    }
+  };
+
   const [uploadingCapa, setUploadingCapa] = useState(false);
   const [capaError, setCapaError] = useState<string | null>(null);
   // Estados da Logo da Oficina
@@ -168,11 +233,77 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     }
   };
 
-  // Estados de edição de Slug
-  const [slugInput, setSlugInput] = useState(tenant?.slug || '');
-  const [savingSlug, setSavingSlug] = useState(false);
-  const [slugError, setSlugError] = useState<string | null>(null);
-  const [slugSuccess, setSlugSuccess] = useState<string | null>(null);
+  // Estados e Funções de Alteração de Nome da Oficina (Regra de 15 dias, Unicidade e Sincronia de Slug)
+  const [modalEditarNomeOficina, setModalEditarNomeOficina] = useState(false);
+  const [novoNomeOficinaInput, setNovoNomeOficinaInput] = useState('');
+  const [salvandoNomeOficina, setSalvandoNomeOficina] = useState(false);
+  const [erroNomeOficina, setErroNomeOficina] = useState<string | null>(null);
+  const [sucessoNomeOficina, setSucessoNomeOficina] = useState<string | null>(null);
+
+  const calcularSlugPreview = (nome: string, currentSlug?: string | null) => {
+    const limpo = (nome || '').toLowerCase().trim();
+    if (!limpo) return '—';
+    const base = limpo
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'oficina';
+    const suffixMatch = currentSlug ? currentSlug.match(/-[a-f0-9]{6}$/) : null;
+    return suffixMatch ? `${base}${suffixMatch[0]}` : `${base}-xxxxxx`;
+  };
+
+  const dataUltimaAlteracao = tenant?.nome_alterado_em ? new Date(tenant.nome_alterado_em) : null;
+  const diasPassadosDesdeAlteracao = dataUltimaAlteracao
+    ? (Date.now() - dataUltimaAlteracao.getTime()) / (1000 * 60 * 60 * 24)
+    : 999;
+  const diasRestantesCooldown = Math.max(0, Math.ceil(15 - diasPassadosDesdeAlteracao));
+  const oficinaEmCooldown = diasRestantesCooldown > 0;
+
+  const handleAbrirModalNomeOficina = () => {
+    setNovoNomeOficinaInput(tenant?.nome || '');
+    setErroNomeOficina(null);
+    setSucessoNomeOficina(null);
+    setModalEditarNomeOficina(true);
+  };
+
+  const handleSalvarNovoNomeOficina = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroNomeOficina(null);
+    setSucessoNomeOficina(null);
+
+    const nomeLimpo = novoNomeOficinaInput.trim();
+    if (!nomeLimpo || nomeLimpo.length < 2) {
+      setErroNomeOficina('O nome da oficina deve ter pelo menos 2 caracteres.');
+      return;
+    }
+
+    if (nomeLimpo.toLowerCase() === (tenant?.nome || '').toLowerCase()) {
+      setErroNomeOficina('O novo nome é idêntico ao atual.');
+      return;
+    }
+
+    setSalvandoNomeOficina(true);
+    try {
+      const { data, error } = await supabase.rpc('atualizar_nome_oficina', {
+        p_novo_nome: nomeLimpo,
+      });
+
+      if (error) throw error;
+
+      const slugRetornado = data?.slug || '';
+      setSucessoNomeOficina(`Nome e endereço da oficina atualizados com sucesso! Novo link: /agendar/${slugRetornado}`);
+      await refetchTenantData();
+      setTimeout(() => {
+        setModalEditarNomeOficina(false);
+      }, 2000);
+    } catch (err: any) {
+      console.error('[Atualizar Nome Oficina Error]:', err);
+      setErroNomeOficina(err.message || 'Erro ao alterar o nome da oficina.');
+    } finally {
+      setSalvandoNomeOficina(false);
+    }
+  };
+
   const [downloadingQr, setDownloadingQr] = useState(false);
   const [showPlacaBalcaoModal, setShowPlacaBalcaoModal] = useState(false);
 
@@ -198,12 +329,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setDownloadingQr(false);
     }
   };
-
-  useEffect(() => {
-    if (tenant?.slug) {
-      setSlugInput(tenant.slug);
-    }
-  }, [tenant?.slug]);
 
   // Função auxiliar para verificar transparência (canal alfa) na imagem
   const checkImageHasAlpha = (file: File): Promise<boolean> => {
@@ -321,39 +446,6 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
     }
   };
 
-  const handleSaveSlug = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tenant) return;
-    setSlugError(null);
-    setSlugSuccess(null);
-
-    const novoSlugLimpo = slugInput.trim().toLowerCase();
-
-    if (novoSlugLimpo === tenant.slug) {
-      setSlugError('O novo endereço é idêntico ao atual.');
-      return;
-    }
-
-    setSavingSlug(true);
-
-    try {
-      const { error } = await supabase.rpc('atualizar_slug', {
-        p_tenant: tenant.id,
-        p_novo_slug: novoSlugLimpo
-      });
-
-      if (error) throw error;
-
-      setSlugSuccess('Endereço (slug) da oficina atualizado com sucesso!');
-      await refetchTenantData();
-    } catch (err: any) {
-      console.error('[Atualizar Slug Error]:', err);
-      setSlugError(err.message || 'Erro ao atualizar endereço da oficina.');
-    } finally {
-      setSavingSlug(false);
-    }
-  };
-
   const handleCapaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !tenant) return;
     const file = e.target.files[0];
@@ -433,6 +525,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       {/* Tabs Switcher com Gradiente de Fade, Chevrons e Menu Rápido Mobile */}
       <ScrollableTabs
         items={[
+          { id: 'perfil', label: 'Meu Perfil', icon: User },
           { id: 'oficina', label: 'Oficina', icon: Building2 },
           ...((isDono || podeGerirEquipe()) ? [{ id: 'horarios', label: 'Horários & Agenda', icon: Clock }] : []),
           ...(podeGerirEquipe() ? [{ id: 'equipe', label: 'Equipe', icon: Users }] : []),
@@ -461,41 +554,212 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       {activeTab === 'fiscal' && <AbaFiscal />}
       {activeTab === 'whatsapp' && <AbaWhatsApp />}
 
+      {activeTab === 'perfil' && (
+        <div className="flex flex-col lg:flex-row items-start gap-6">
+          <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-5 max-w-2xl flex-1 w-full shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-graphite-700 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shrink-0">
+                  <User size={20} />
+                </div>
+                <div>
+                  <h3 className="font-display text-[16px] sm:text-[18px] text-vapor-100 uppercase tracking-wide">
+                    Meu Perfil de Usuário
+                  </h3>
+                  <p className="font-sans text-[12px] text-vapor-400">
+                    Seus dados pessoais de identificação na plataforma NuvemWash
+                  </p>
+                </div>
+              </div>
+              <Badge tone="amber" className="self-start sm:self-auto">
+                {membership?.role === 'dono' ? 'Proprietário' : membership?.role === 'gerente' ? 'Gerente' : 'Membro'}
+              </Badge>
+            </div>
+
+            {meuPerfilError && (
+              <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded-lg text-flare-400 text-[13px] flex items-center gap-2">
+                <AlertTriangle size={16} className="shrink-0" />
+                <span>{meuPerfilError}</span>
+              </div>
+            )}
+
+            {meuPerfilSuccess && (
+              <div className="p-3 bg-mint-500/10 border border-mint-500/30 rounded-lg text-mint-400 text-[13px] flex items-center gap-2">
+                <Check size={16} className="shrink-0" />
+                <span>{meuPerfilSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSalvarMeuPerfil} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="font-sans text-[13px] text-vapor-300 font-medium">
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  value={meuNomeInput}
+                  onChange={(e) => setMeuNomeInput(e.target.value)}
+                  placeholder="Seu nome completo"
+                  required
+                  className="bg-graphite-950 border border-graphite-600 rounded-lg p-3 text-vapor-100 font-sans text-[14px] outline-none focus:border-amber-500 min-h-[48px]"
+                />
+                <span className="font-sans text-[11px] text-vapor-500">
+                  Este é o nome com o qual você assina orçamentos, vistorias e é reconhecido na equipe.
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-sans text-[13px] text-vapor-300 font-medium">
+                  WhatsApp / Telefone Pessoal
+                </label>
+                <input
+                  type="text"
+                  value={meuTelefoneInput}
+                  onChange={(e) => setMeuTelefoneInput(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  className="bg-graphite-950 border border-graphite-600 rounded-lg p-3 text-vapor-100 font-sans text-[14px] outline-none focus:border-amber-500 min-h-[48px]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-graphite-700/80">
+                <label className="font-sans text-[13px] text-vapor-400 font-medium flex items-center gap-1.5">
+                  <ShieldCheck size={15} className="text-vapor-500" />
+                  <span>E-mail da Conta (Acesso)</span>
+                </label>
+                <input
+                  type="email"
+                  value={user?.email || ''}
+                  disabled
+                  className="bg-graphite-900 border border-graphite-700 rounded-lg p-3 text-vapor-400 font-mono text-[13px] cursor-not-allowed select-all"
+                />
+                <span className="font-sans text-[11px] text-vapor-500">
+                  O e-mail é a sua chave única de acesso ao sistema.
+                </span>
+              </div>
+
+              <div className="flex justify-end pt-3">
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={salvandoMeuPerfil}
+                  className="min-h-[44px] px-6 font-semibold flex items-center justify-center gap-2 w-full sm:w-auto"
+                >
+                  <Save size={16} />
+                  <span>{salvandoMeuPerfil ? 'Salvando...' : 'Salvar Meus Dados'}</span>
+                </Button>
+              </div>
+            </form>
+          </Card>
+
+          {/* Card Informativo Lateral */}
+          <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-700 flex flex-col gap-4 max-w-md w-full shadow-lg">
+            <h4 className="font-display text-[15px] text-vapor-100 uppercase tracking-wide flex items-center gap-2">
+              <Building2 size={16} className="text-amber-500" />
+              <span>Vínculo com a Oficina</span>
+            </h4>
+            <div className="flex flex-col gap-3 text-[13px] text-vapor-300 font-sans">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400">Oficina Ativa:</span>
+                <strong className="text-vapor-100 text-left sm:text-right break-words min-w-0">{tenant?.nome || '—'}</strong>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400">Seu Papel:</span>
+                <span className="font-semibold text-amber-400 uppercase font-mono text-[12px] text-left sm:text-right">
+                  {membership?.role === 'dono' ? 'Proprietário' : membership?.role === 'gerente' ? 'Gerente' : 'Operador'}
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400">Status:</span>
+                <span className="text-mint-400 font-semibold uppercase text-[12px] text-left sm:text-right">
+                  {membership?.status || 'Ativo'}
+                </span>
+              </div>
+            </div>
+            <p className="text-[12px] text-vapor-400 leading-relaxed pt-2">
+              Caso você seja o proprietário da estética, você também pode alterar os dados legais da sua empresa na aba <strong>Oficina</strong>.
+            </p>
+          </Card>
+        </div>
+      )}
+
       {activeTab === 'oficina' && (
         <div className="flex flex-col lg:flex-row items-start gap-6">
           <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-4 max-w-2xl flex-1 w-full">
+            {/* Banner Rápido de Acesso ao Perfil */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3.5 bg-graphite-900 border border-graphite-700/80 rounded-lg">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <User size={16} className="text-amber-500 shrink-0" />
+                <span className="font-sans text-[13px] text-vapor-300 truncate">
+                  Logado como: <strong className="text-vapor-100">{profile?.nome || user?.email}</strong>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('perfil')}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold underline flex items-center gap-1 cursor-pointer shrink-0 self-start sm:self-auto"
+              >
+                <span>Editar meu nome</span>
+                <ExternalLink size={12} />
+              </button>
+            </div>
+
             <h3 className="font-display text-[18px] text-vapor-100 uppercase tracking-wide">
               Dados da Oficina
             </h3>
             <div className="flex flex-col gap-3 font-sans text-[14px] text-vapor-400">
-              <div className="flex justify-between py-2 border-b border-graphite-700">
-                <span>Nome:</span>
-                <strong className="text-vapor-100">{tenant?.nome || '—'}</strong>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-2">
+                <span className="text-vapor-400 shrink-0">Nome da Oficina:</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <strong className="text-vapor-100 text-left sm:text-right break-words min-w-0">{tenant?.nome || '—'}</strong>
+                  {isDono && (
+                    <button
+                      type="button"
+                      onClick={handleAbrirModalNomeOficina}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold transition cursor-pointer shrink-0"
+                      title={oficinaEmCooldown ? `Próxima alteração liberada em ${diasRestantesCooldown} dia(s)` : 'Alterar Nome da Oficina'}
+                    >
+                      <Edit2 size={12} />
+                      <span>Alterar Nome</span>
+                      {oficinaEmCooldown && (
+                        <span className="text-[10px] bg-amber-500/20 px-1 rounded font-mono">
+                          {diasRestantesCooldown}d
+                        </span>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
-                <span>Slug (Identificador):</span>
-                <span className="font-mono text-amber-500">{tenant?.slug || '—'}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400 shrink-0">Endereço Público (Slug):</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-amber-500 text-left sm:text-right break-all min-w-0">/{tenant?.slug || '—'}</span>
+                  {tenant?.nome_alterado_em && (
+                    <span className="text-[11px] text-vapor-500 font-mono" title={`Última alteração em ${new Date(tenant.nome_alterado_em).toLocaleDateString('pt-BR')}`}>
+                      • Atualizado em {new Date(tenant.nome_alterado_em).toLocaleDateString('pt-BR')}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
-                <span>Cidade / UF:</span>
-                <span className="text-vapor-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400 shrink-0">Cidade / UF:</span>
+                <span className="text-vapor-100 text-left sm:text-right break-words min-w-0">
                   {tenant?.cidade ? `${tenant.cidade} / ${tenant.uf || ''}` : '—'}
                 </span>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
-                <span>Telefone / WhatsApp:</span>
-                <span className="text-vapor-100">{tenant?.telefone || '—'}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400 shrink-0">Telefone / WhatsApp:</span>
+                <span className="text-vapor-100 text-left sm:text-right break-words min-w-0">{tenant?.telefone || '—'}</span>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
-                <span>Total de OSs Criadas:</span>
-                <span className="font-mono text-amber-400 font-bold">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                <span className="text-vapor-400 shrink-0">Total de OSs Criadas:</span>
+                <span className="font-mono text-amber-400 font-bold text-left sm:text-right">
                   {contadorOS ? `${contadorOS.proxima_os - 1} OS(s)` : '0 OS(s)'}
                 </span>
               </div>
               {contadorOS && contadorOS.ultimo_marco_exibido > 0 && (
-                <div className="flex justify-between py-2 border-b border-graphite-700">
-                  <span>Último Marco Atingido:</span>
-                  <span className="font-mono text-mint-400 font-bold">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+                  <span className="text-vapor-400 shrink-0">Último Marco Atingido:</span>
+                  <span className="font-mono text-mint-400 font-bold text-left sm:text-right">
                     🎉 {contadorOS.ultimo_marco_exibido} Atendimentos
                   </span>
                 </div>
@@ -741,21 +1005,21 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
               {tenant?.logo_path ? (
                 <div className="flex flex-col gap-2">
                   {/* Dual Preview: Fundo Claro vs Fundo Escuro */}
-                  <div className="grid grid-cols-2 gap-3 p-3 bg-graphite-900 rounded-lg border border-graphite-700">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-graphite-900 rounded-lg border border-graphite-700">
                     <div className="flex flex-col items-center gap-1.5 p-3 bg-white rounded border border-graphite-300">
-                      <span className="font-mono text-[10px] text-graphite-700 uppercase font-bold">Preview Fundo Claro (Papel/PDF)</span>
+                      <span className="font-mono text-[10px] text-graphite-700 uppercase font-bold text-center">Preview Fundo Claro (Papel/PDF)</span>
                       <img
                         src={getFotoPublicUrl(tenant.logo_path) || ''}
                         alt="Logo da oficina (Claro)"
-                        className="h-14 object-contain"
+                        className="h-14 object-contain max-w-full"
                       />
                     </div>
                     <div className="flex flex-col items-center gap-1.5 p-3 bg-graphite-950 rounded border border-graphite-800">
-                      <span className="font-mono text-[10px] text-vapor-400 uppercase font-bold">Preview Fundo Escuro (Tela)</span>
+                      <span className="font-mono text-[10px] text-vapor-400 uppercase font-bold text-center">Preview Fundo Escuro (Tela)</span>
                       <img
                         src={getFotoPublicUrl(tenant.logo_path) || ''}
                         alt="Logo da oficina (Escuro)"
-                        className="h-14 object-contain"
+                        className="h-14 object-contain max-w-full"
                       />
                     </div>
                   </div>
@@ -863,56 +1127,47 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
               Este é o link público do catálogo online da sua oficina. Use no Instagram, WhatsApp e cartões de visita.
             </p>
 
-            <form onSubmit={handleSaveSlug} className="flex flex-col gap-3">
-              <label className="font-sans text-[13px] text-vapor-300 font-medium">Endereço Público (Slug):</label>
+            <div className="flex flex-col gap-3">
+              <label className="font-sans text-[13px] text-vapor-300 font-medium">Link da Vitrine (Sincronizado):</label>
               
-              <div className="flex items-center bg-graphite-950 border border-graphite-600 rounded-lg p-2 font-mono text-[13px] overflow-hidden focus-within:border-amber-500 transition-colors">
-                <span className="text-vapor-500 shrink-0 select-none">{window.location.origin}/agendar/</span>
-                <input
-                  type="text"
-                  value={slugInput}
-                  onChange={(e) => setSlugInput(e.target.value)}
-                  placeholder="sua-oficina"
-                  disabled={!isDono || savingSlug}
-                  className="bg-transparent text-amber-400 font-bold outline-none flex-1 min-w-0"
-                />
+              <div className="flex flex-col sm:flex-row sm:items-center bg-graphite-950 border border-graphite-600 rounded-lg p-3 font-mono text-[13px] gap-1 sm:gap-2">
+                <span className="text-vapor-500 shrink-0 select-none text-xs sm:text-[13px]">{window.location.origin}/agendar/</span>
+                <span className="text-amber-400 font-bold break-all flex-1">{tenant?.slug || 'sua-oficina'}</span>
               </div>
 
-              <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded text-amber-400 text-[12px] flex items-start gap-2">
-                <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-400" />
-                <span>
-                  <strong>Aviso:</strong> Ao alterar o endereço, o link anterior deixará de funcionar imediatamente. Lembre-se de atualizar onde você já divulgou.
-                </span>
+              <div className="p-3 bg-graphite-900 border border-graphite-700 rounded-lg text-vapor-400 text-[12px] flex items-start gap-2.5">
+                <Building2 size={16} className="shrink-0 mt-0.5 text-amber-500" />
+                <div className="space-y-1">
+                  <div>
+                    O endereço público da vitrine é sincronizado com o <strong>nome registrado da sua oficina</strong> ({tenant?.nome || '—'}).
+                  </div>
+                  <div className="text-vapor-500 text-[11px]">
+                    {oficinaEmCooldown
+                      ? `Próxima alteração disponível em ${diasRestantesCooldown} dia(s).`
+                      : 'Alterações de nome e link são permitidas uma vez a cada 15 dias.'}
+                  </div>
+                </div>
               </div>
 
-              {slugError && (
-                <div className="p-2.5 bg-flare-400/10 border border-flare-400/30 rounded text-flare-400 text-[12px] flex items-center gap-2">
-                  <AlertTriangle size={14} className="shrink-0" />
-                  <span>{slugError}</span>
-                </div>
-              )}
-
-              {slugSuccess && (
-                <div className="p-2.5 bg-mint-500/10 border border-mint-500/30 rounded text-mint-400 text-[12px] flex items-center gap-2">
-                  <Check size={14} className="shrink-0" />
-                  <span>{slugSuccess}</span>
-                </div>
-              )}
-
-              {isDono && slugInput.trim().toLowerCase() !== (tenant?.slug || '') && (
+              {isDono && (
                 <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={savingSlug}
-                  className="w-full mt-1 flex items-center justify-center gap-2 font-semibold"
+                  type="button"
+                  variant="secondary"
+                  onClick={handleAbrirModalNomeOficina}
+                  className="w-full flex items-center justify-center gap-2 font-semibold border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
                 >
-                  <Save size={16} />
-                  <span>{savingSlug ? 'Salvando...' : 'Salvar Novo Endereço'}</span>
+                  <Edit2 size={15} />
+                  <span>Alterar Nome e Link da Oficina</span>
+                  {oficinaEmCooldown && (
+                    <span className="text-[10px] bg-amber-500/20 px-1.5 py-0.5 rounded font-mono">
+                      {diasRestantesCooldown}d restantes
+                    </span>
+                  )}
                 </Button>
               )}
-            </form>
+            </div>
 
-            <div className="pt-3 border-t border-graphite-700 flex flex-col sm:flex-row items-center gap-3">
+            <div className="pt-3 border-t border-graphite-700 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <CopyLinkButton slug={tenant?.slug} className="w-full sm:w-auto flex-1" />
               
               {tenant?.slug && (
@@ -996,27 +1251,27 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
             </div>
 
             <div className="flex flex-col gap-3 font-sans text-[14px]">
-              <div className="flex justify-between py-2 border-b border-graphite-700">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
                 <span className="text-vapor-400">Usuários permitidos:</span>
-                <strong className="text-vapor-100 font-mono">
+                <strong className="text-vapor-100 font-mono text-left sm:text-right">
                   {limiteDe('usuarios') !== null ? `${limiteDe('usuarios')} pessoa(s)` : 'Ilimitado'}
                 </strong>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
                 <span className="text-vapor-400">Serviços / Mês:</span>
-                <strong className="text-vapor-100 font-mono">
+                <strong className="text-vapor-100 font-mono text-left sm:text-right">
                   {limiteDe('servicos_mes') !== null ? `${limiteDe('servicos_mes')} por mês` : 'Ilimitado'}
                 </strong>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
                 <span className="text-vapor-400">Orçamentos / Mês:</span>
-                <strong className="text-vapor-100 font-mono">
+                <strong className="text-vapor-100 font-mono text-left sm:text-right">
                   {limiteDe('orcamentos_mes') !== null ? `${limiteDe('orcamentos_mes')} por mês` : 'Ilimitado'}
                 </strong>
               </div>
-              <div className="flex justify-between py-2 border-b border-graphite-700">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
                 <span className="text-vapor-400">Módulo de Estoque e Produtos:</span>
-                <strong className="text-vapor-100 font-mono">
+                <strong className="text-vapor-100 font-mono text-left sm:text-right">
                   {limiteDe('produtos') === 0 ? 'Não incluso no Free' : 'Incluso'}
                 </strong>
               </div>
@@ -1052,6 +1307,139 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           </Link>
         </div>
       </div>
+
+      {/* Modal de Alteração do Nome da Oficina para o Dono */}
+      {modalEditarNomeOficina && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-graphite-900 border border-graphite-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150 relative">
+            <button
+              onClick={() => setModalEditarNomeOficina(false)}
+              className="absolute top-4 right-4 text-vapor-400 hover:text-white transition cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+                <Building2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-vapor-100 font-heading">
+                  Alterar Nome da Oficina
+                </h3>
+                <p className="text-xs text-vapor-400">
+                  Atualização cadastral e link público
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSalvarNovoNomeOficina} className="flex flex-col gap-4">
+              <div className="p-3 bg-graphite-950 rounded-xl border border-graphite-800 text-xs text-vapor-300 space-y-1">
+                <div>Nome atual: <strong className="text-vapor-100">{tenant?.nome}</strong></div>
+                <div className="text-vapor-400">
+                  Link público atual: <span className="text-amber-400 font-mono">/agendar/{tenant?.slug}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-vapor-300">
+                  Novo Nome da Oficina *
+                </label>
+                <input
+                  type="text"
+                  value={novoNomeOficinaInput}
+                  onChange={(e) => setNovoNomeOficinaInput(e.target.value)}
+                  placeholder="Ex: Detail Car Estética Automotiva"
+                  autoFocus
+                  required
+                  disabled={oficinaEmCooldown || salvandoNomeOficina}
+                  className="p-3 bg-graphite-950 border border-graphite-700 focus:border-amber-500 rounded-xl text-xs text-vapor-100 font-medium outline-none transition disabled:opacity-50"
+                />
+              </div>
+
+              {/* Preview Dinâmico do Slug */}
+              <div className="p-3 bg-graphite-950/80 border border-graphite-800/80 rounded-xl space-y-1 text-xs">
+                <span className="text-vapor-400 block text-[11px] font-mono uppercase">
+                  Novo Link Público (Sincronizado):
+                </span>
+                <span className="font-mono font-bold text-amber-400 text-xs break-all">
+                  {window.location.origin}/agendar/{calcularSlugPreview(novoNomeOficinaInput, tenant?.slug)}
+                </span>
+                <span className="text-[11px] text-vapor-500 block pt-0.5">
+                  Ao salvar, o link da sua vitrine e QR Code mudam automaticamente para acompanhar o novo nome.
+                </span>
+              </div>
+
+              {/* Regra de Intervalo de 15 Dias */}
+              {oficinaEmCooldown ? (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
+                  <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-400" />
+                  <div>
+                    <strong>Intervalo Obrigatório:</strong> O nome da oficina só pode ser alterado a cada 15 dias.
+                    {dataUltimaAlteracao && (
+                      <div className="text-vapor-400 text-[11px] pt-1">
+                        Última alteração: {dataUltimaAlteracao.toLocaleDateString('pt-BR')} às {dataUltimaAlteracao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+                        <br />
+                        Próxima alteração liberada em <strong>{diasRestantesCooldown} dia(s)</strong>.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-graphite-950/50 border border-graphite-800 rounded text-vapor-400 text-[11px] flex items-center gap-1.5 font-mono">
+                  <Clock size={13} className="text-amber-500 shrink-0" />
+                  <span>Atenção: Após salvar, uma nova alteração só será permitida após 15 dias.</span>
+                </div>
+              )}
+
+              {erroNomeOficina && (
+                <div className="p-2.5 bg-flare-400/10 border border-flare-400/30 rounded text-flare-400 text-[12px] flex items-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{erroNomeOficina}</span>
+                </div>
+              )}
+
+              {sucessoNomeOficina && (
+                <div className="p-2.5 bg-mint-500/10 border border-mint-500/30 rounded text-mint-400 text-[12px] flex items-center gap-2">
+                  <Check size={14} className="shrink-0" />
+                  <span>{sucessoNomeOficina}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarNomeOficina(false)}
+                  className="flex-1 py-2.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={
+                    oficinaEmCooldown ||
+                    salvandoNomeOficina ||
+                    !novoNomeOficinaInput.trim() ||
+                    novoNomeOficinaInput.trim().toLowerCase() === (tenant?.nome || '').toLowerCase()
+                  }
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg flex items-center justify-center gap-2"
+                >
+                  {salvandoNomeOficina ? (
+                    'Salvando...'
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      <span>Salvar Nome</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {tenant && tenant.slug && (
         <ModalPlacaBalcao

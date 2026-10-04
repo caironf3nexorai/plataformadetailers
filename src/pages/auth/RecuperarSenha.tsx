@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, CheckCircle2, KeyRound, Lock, ArrowRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, KeyRound, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const RecuperarSenha: React.FC = () => {
@@ -19,6 +19,8 @@ export const RecuperarSenha: React.FC = () => {
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
+  const [showNovaSenha, setShowNovaSenha] = useState(false);
+  const [showConfirmarSenha, setShowConfirmarSenha] = useState(false);
   const [senhaRedefinidaComSucesso, setSenhaRedefinidaComSucesso] = useState(false);
 
   // Detecta se o usuário acessou a tela através do link de redefinição enviado por e-mail
@@ -150,26 +152,48 @@ export const RecuperarSenha: React.FC = () => {
             <form onSubmit={handleUpdatePassword} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
                 <label className="font-sans text-[13px] text-vapor-400 font-medium">Nova Senha *</label>
-                <Input
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={novaSenha}
-                  onChange={(e) => setNovaSenha(e.target.value)}
-                  required
-                  className="min-h-[48px]"
-                />
+                <div className="relative flex items-center">
+                  <Input
+                    type={showNovaSenha ? 'text' : 'password'}
+                    placeholder="Mínimo 6 caracteres"
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                    required
+                    className="min-h-[48px] pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNovaSenha(!showNovaSenha)}
+                    className="absolute right-3 p-1.5 text-vapor-400 hover:text-amber-400 focus:outline-none transition-colors"
+                    title={showNovaSenha ? 'Ocultar senha' : 'Visualizar senha'}
+                    tabIndex={-1}
+                  >
+                    {showNovaSenha ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col gap-1">
                 <label className="font-sans text-[13px] text-vapor-400 font-medium">Confirmar Nova Senha *</label>
-                <Input
-                  type="password"
-                  placeholder="Repita a nova senha"
-                  value={confirmarSenha}
-                  onChange={(e) => setConfirmarSenha(e.target.value)}
-                  required
-                  className="min-h-[48px]"
-                />
+                <div className="relative flex items-center">
+                  <Input
+                    type={showConfirmarSenha ? 'text' : 'password'}
+                    placeholder="Repita a nova senha"
+                    value={confirmarSenha}
+                    onChange={(e) => setConfirmarSenha(e.target.value)}
+                    required
+                    className="min-h-[48px] pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmarSenha(!showConfirmarSenha)}
+                    className="absolute right-3 p-1.5 text-vapor-400 hover:text-amber-400 focus:outline-none transition-colors"
+                    title={showConfirmarSenha ? 'Ocultar senha' : 'Visualizar senha'}
+                    tabIndex={-1}
+                  >
+                    {showConfirmarSenha ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
 
               <Button

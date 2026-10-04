@@ -75,11 +75,11 @@ export const AbaFeedbacks: React.FC = () => {
   };
 
   return (
-    <Card className="p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-6">
+    <Card className="p-4 sm:p-6 bg-graphite-900 border-graphite-800 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-display text-lg font-bold text-vapor-100 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-amber-500" />
+          <h3 className="font-display text-base sm:text-lg font-bold text-vapor-100 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-amber-500 shrink-0" />
             Meus Feedbacks e Chamados
           </h3>
           <p className="text-xs text-vapor-400 mt-0.5">
@@ -99,10 +99,10 @@ export const AbaFeedbacks: React.FC = () => {
           {feedbacks.map((item) => (
             <div
               key={item.id}
-              className="p-4 rounded-lg bg-graphite-950 border border-graphite-800 flex flex-col gap-3"
+              className="p-4 rounded-lg bg-graphite-950 border border-graphite-800 flex flex-col gap-3 min-w-0"
             >
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {getTipoIcon(item.tipo)}
                   <span className="font-bold text-xs text-vapor-100 capitalize">{item.tipo}</span>
                   {getStatusBadge(item.status)}
@@ -117,13 +117,13 @@ export const AbaFeedbacks: React.FC = () => {
                 </span>
               </div>
 
-              <p className="text-xs text-vapor-200 font-sans whitespace-pre-wrap">"{item.mensagem}"</p>
+              <p className="text-xs text-vapor-200 font-sans whitespace-pre-wrap break-words">"{item.mensagem}"</p>
 
               {item.resposta_admin && (
-                <div className="p-3 rounded bg-graphite-900 border border-amber-500/30 text-xs space-y-1">
-                  <div className="flex items-center justify-between">
+                <div className="p-3 rounded bg-graphite-900 border border-amber-500/30 text-xs space-y-1 min-w-0">
+                  <div className="flex items-center justify-between flex-wrap gap-1">
                     <span className="font-bold text-amber-400 flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5 text-amber-400" /> Resposta da Plataforma:
+                      <CheckCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" /> Resposta da Plataforma:
                     </span>
                     {item.respondido_em && (
                       <span className="font-mono text-[10px] text-vapor-400">
@@ -131,7 +131,7 @@ export const AbaFeedbacks: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <p className="text-vapor-200 italic font-sans">"{item.resposta_admin}"</p>
+                  <p className="text-vapor-200 italic font-sans break-words">"{item.resposta_admin}"</p>
                 </div>
               )}
             </div>

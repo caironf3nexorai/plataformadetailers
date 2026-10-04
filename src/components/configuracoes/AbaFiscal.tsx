@@ -293,8 +293,8 @@ export const AbaFiscal: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
+          <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+            <div className="text-left sm:text-right">
               <div className="font-mono text-2xl font-black text-vapor-100">
                 {resumo?.emitidas_mes ?? 0} <span className="text-sm font-normal text-vapor-400">/ {resumo?.limite_mensal === 0 ? '0' : resumo?.limite_mensal || '—'}</span>
               </div>
@@ -309,7 +309,7 @@ export const AbaFiscal: React.FC = () => {
               variant="secondary"
               onClick={carregarDados}
               disabled={loading}
-              className="p-2.5 h-10 w-10 text-vapor-300"
+              className="p-2.5 h-10 w-10 text-vapor-300 shrink-0"
               title="Atualizar cota"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -337,7 +337,7 @@ export const AbaFiscal: React.FC = () => {
           </div>
 
           {resumo?.limite_mensal === 0 && (
-            <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-300">
+            <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-300">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
@@ -346,7 +346,7 @@ export const AbaFiscal: React.FC = () => {
               </div>
               <a
                 href="/configuracoes?aba=plano"
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shrink-0 transition"
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg shrink-0 transition w-full sm:w-auto text-center"
               >
                 Fazer Upgrade
               </a>
@@ -356,11 +356,11 @@ export const AbaFiscal: React.FC = () => {
       </Card>
 
       {/* 2. FORMULÁRIO DE CONFIGURAÇÃO FISCAL */}
-      <Card className="p-6 bg-graphite-800 border-graphite-600 shadow-lg">
-        <div className="flex items-center justify-between border-b border-graphite-700 pb-4 mb-5">
+      <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-graphite-700 pb-4 mb-5">
           <div className="flex items-center gap-2">
-            <Landmark className="w-5 h-5 text-amber-400" />
-            <h3 className="font-display text-[16px] text-vapor-100 font-bold uppercase tracking-wider">
+            <Landmark className="w-5 h-5 text-amber-400 shrink-0" />
+            <h3 className="font-display text-[15px] sm:text-[16px] text-vapor-100 font-bold uppercase tracking-wider">
               Dados Cadastrais e Tributários da Oficina
             </h3>
           </div>
@@ -571,7 +571,7 @@ export const AbaFiscal: React.FC = () => {
                           htmlFor="input-certificado-pfx"
                           className="flex items-center justify-between w-full bg-graphite-950 border border-dashed border-graphite-600 hover:border-amber-500/80 rounded-xl px-3.5 py-2.5 cursor-pointer text-xs text-vapor-300 transition-colors"
                         >
-                          <span className="truncate max-w-[200px] text-vapor-200">
+                          <span className="truncate flex-1 min-w-0 text-vapor-200">
                             {certificadoArquivo ? certificadoArquivo.name : 'Selecionar arquivo .pfx'}
                           </span>
                           <UploadCloud className="w-4 h-4 text-amber-400 shrink-0 ml-2" />
@@ -679,7 +679,7 @@ export const AbaFiscal: React.FC = () => {
               type="submit"
               variant="primary"
               disabled={saving}
-              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-amber-500/20"
+              className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 w-full sm:w-auto"
             >
               <Save size={16} />
               <span>{saving ? 'Salvando...' : 'Salvar Dados Fiscais'}</span>
@@ -689,11 +689,11 @@ export const AbaFiscal: React.FC = () => {
       </Card>
 
       {/* 3. HISTÓRICO DE NOTAS FISCAIS EMITIDAS */}
-      <Card className="p-6 bg-graphite-800 border-graphite-600 shadow-lg">
-        <div className="flex items-center justify-between border-b border-graphite-700 pb-4 mb-4">
+      <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-graphite-700 pb-4 mb-4">
           <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-amber-400" />
-            <h3 className="font-display text-[16px] text-vapor-100 font-bold uppercase tracking-wider">
+            <FileText className="w-5 h-5 text-amber-400 shrink-0" />
+            <h3 className="font-display text-[15px] sm:text-[16px] text-vapor-100 font-bold uppercase tracking-wider">
               Notas Fiscais Emitidas ({notas.length})
             </h3>
           </div>
@@ -711,8 +711,8 @@ export const AbaFiscal: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-sans text-vapor-300">
+          <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <table className="w-full min-w-[620px] text-left text-xs font-sans text-vapor-300">
               <thead className="bg-graphite-900/60 uppercase font-mono text-[10px] text-vapor-400 border-b border-graphite-700">
                 <tr>
                   <th className="py-2.5 px-3">Número / Série</th>

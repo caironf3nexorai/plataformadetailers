@@ -190,13 +190,13 @@ export const AbaCategorias: React.FC = () => {
           {categorias.map((cat, idx) => (
             <Card
               key={cat.id}
-              className={`p-4 bg-graphite-800 border-graphite-600 flex items-center justify-between gap-4 transition-all ${
+              className={`p-4 bg-graphite-800 border-graphite-600 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
                 !cat.ativo ? 'opacity-50' : ''
               }`}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 {/* Botões de Reordenação */}
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-1 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleMove(idx, 'up')}
@@ -215,20 +215,20 @@ export const AbaCategorias: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="font-sans text-[15px] font-bold text-vapor-100">{cat.nome}</span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-sans text-[15px] font-bold text-vapor-100 break-words">{cat.nome}</span>
                     <Badge tone={cat.ativo ? 'mint' : 'glass'}>
                       {cat.ativo ? 'ATIVA' : 'INATIVA'}
                     </Badge>
                   </div>
                   {cat.descricao && (
-                    <span className="font-sans text-[12px] text-vapor-400 mt-0.5">{cat.descricao}</span>
+                    <span className="font-sans text-[12px] text-vapor-400 mt-0.5 break-words">{cat.descricao}</span>
                   )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                 <button
                   type="button"
                   onClick={() => handleOpenEditModal(cat)}

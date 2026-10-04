@@ -205,9 +205,9 @@ export const AbaAssinatura: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-6 shadow-xl">
-        <div className="flex items-center justify-between border-b border-graphite-700 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-graphite-700 pb-4 gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 font-bold">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 font-bold shrink-0">
               <ShieldCheck size={22} />
             </div>
             <div>
@@ -220,7 +220,7 @@ export const AbaAssinatura: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {jaCancelada && (
               <Badge tone="flare">NÃO RENOVA</Badge>
             )}
@@ -338,7 +338,7 @@ export const AbaAssinatura: React.FC = () => {
                 setCheckoutModalOpen(true);
               }}
               variant="primary"
-              className="text-xs font-bold shrink-0 shadow-lg shadow-amber-500/10"
+              className="text-xs font-bold shrink-0 shadow-lg shadow-amber-500/10 w-full sm:w-auto"
             >
               {planoSigla === 'FREE' ? 'Assinar Anual (12x no Cartão ou PIX)' : 'Migrar para Plano Anual'}
             </Button>
@@ -379,7 +379,7 @@ export const AbaAssinatura: React.FC = () => {
                 setCheckoutModalOpen(true);
               }}
               variant="primary"
-              className="text-xs font-bold shrink-0 shadow-md shadow-amber-500/20"
+              className="text-xs font-bold shrink-0 shadow-md shadow-amber-500/20 w-full sm:w-auto"
             >
               <CreditCard size={14} className="mr-1.5" />
               Assinar Agora (Anual ou Mensal)
@@ -418,12 +418,12 @@ export const AbaAssinatura: React.FC = () => {
 
         {/* Ações da Assinatura */}
         <div className="pt-4 border-t border-graphite-700 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Button
               type="button"
               variant="secondary"
               onClick={() => navigate('/planos')}
-              className="text-xs flex items-center gap-2"
+              className="text-xs flex items-center gap-2 flex-1 sm:flex-none justify-center"
             >
               <RefreshCw size={14} />
               Trocar de Plano / Comparar
@@ -434,7 +434,7 @@ export const AbaAssinatura: React.FC = () => {
                 href={assinatura.url_pagamento_asaas}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3.5 py-2 rounded-lg bg-graphite-900 hover:bg-graphite-700 text-amber-400 border border-amber-500/30 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                className="px-3.5 py-2 rounded-lg bg-graphite-900 hover:bg-graphite-700 text-amber-400 border border-amber-500/30 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors flex-1 sm:flex-none"
               >
                 Atualizar Cartão / Fatura
                 <ExternalLink size={13} />
@@ -448,7 +448,7 @@ export const AbaAssinatura: React.FC = () => {
               type="button"
               onClick={handleCancelarAssinatura}
               disabled={cancelando}
-              className="px-3.5 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-3.5 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer w-full sm:w-auto"
             >
               <XCircle size={14} />
               {cancelando ? 'Cancelando...' : 'Cancelar Assinatura'}

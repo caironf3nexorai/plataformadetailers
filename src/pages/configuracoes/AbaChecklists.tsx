@@ -222,7 +222,7 @@ export const AbaChecklists: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-[18px] font-bold text-vapor-100 uppercase tracking-wide">
             Modelos de Checklist
@@ -237,7 +237,7 @@ export const AbaChecklists: React.FC = () => {
             type="button"
             variant="primary"
             onClick={() => setModalNovoOpen(true)}
-            className="min-h-[44px]"
+            className="min-h-[44px] w-full sm:w-auto"
           >
             <Plus size={18} />
             <span>Novo Modelo</span>
@@ -258,10 +258,10 @@ export const AbaChecklists: React.FC = () => {
           const qtdItens = modelo.itens?.length || 0;
           return (
             <Card key={modelo.id} className="p-5 bg-graphite-800 border-graphite-600 flex flex-col justify-between gap-4">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-[16px] text-vapor-100">{modelo.nome}</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded bg-graphite-700 text-vapor-300 font-mono">
+              <div className="flex flex-col gap-2 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[16px] text-vapor-100 break-words">{modelo.nome}</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-graphite-700 text-vapor-300 font-mono shrink-0">
                     {qtdItens} itens
                   </span>
                 </div>
@@ -358,7 +358,7 @@ export const AbaChecklists: React.FC = () => {
                   onChange={(e) => setNovaObservacao(e.target.value)}
                   className="min-h-[44px]"
                 />
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <label className="flex items-center gap-2 cursor-pointer text-[13px] text-vapor-300">
                     <input
                       type="checkbox"
@@ -369,7 +369,7 @@ export const AbaChecklists: React.FC = () => {
                     <span>Item obrigatório para finalização</span>
                   </label>
 
-                  <Button type="submit" variant="primary" disabled={savingItem} className="min-h-[36px] px-3 text-[13px]">
+                  <Button type="submit" variant="primary" disabled={savingItem} className="min-h-[36px] px-3 text-[13px] w-full sm:w-auto">
                     <Plus size={16} />
                     <span>Adicionar</span>
                   </Button>
@@ -422,14 +422,14 @@ export const AbaChecklists: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex flex-col flex-1">
-                        <span className="text-[14px] text-vapor-100 font-medium">{item.descricao}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="text-[14px] text-vapor-100 font-medium break-words">{item.descricao}</span>
                         {item.observacao && (
-                          <span className="text-[12px] text-vapor-400 font-normal mt-0.5">{item.observacao}</span>
+                          <span className="text-[12px] text-vapor-400 font-normal mt-0.5 break-words">{item.observacao}</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                         <button
                           type="button"
                           onClick={() => handleToggleObrigatorioItem(item)}

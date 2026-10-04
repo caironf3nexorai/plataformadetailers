@@ -226,7 +226,7 @@ export const AbaEquipe: React.FC = () => {
   return (
     <div className="flex flex-col gap-6">
       {/* Sub-abas: Ranking & Gamificação vs Membros & Cargos */}
-      <div className="flex items-center gap-2 border-b border-graphite-800 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-graphite-800 pb-3">
         <button
           type="button"
           onClick={() => setSubAba('ranking')}
@@ -275,7 +275,7 @@ export const AbaEquipe: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
           <span className="font-mono text-[13px] text-vapor-400">
             Usuários:{' '}
             <strong className="text-amber-500 font-semibold">{activeAndInvitedCount}</strong>
@@ -320,9 +320,9 @@ export const AbaEquipe: React.FC = () => {
 
             return (
               <Card key={m.id} className="p-5 bg-graphite-800 border-graphite-600 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-sans text-[15px] font-bold text-vapor-100">
+                <div className="flex flex-col gap-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <span className="font-sans text-[15px] font-bold text-vapor-100 break-all">
                       {m.email}
                     </span>
                     <Badge tone={m.role === 'dono' ? 'amber' : m.role === 'gerente' ? 'glass' : 'vapor'}>
@@ -335,21 +335,21 @@ export const AbaEquipe: React.FC = () => {
 
                   {/* Comissão Vigente ou Mensagem Plano Free */}
                   {isDonoNoFree ? (
-                    <p className="font-sans text-[13px] text-vapor-400 italic mt-1">
+                    <p className="font-sans text-[13px] text-vapor-400 italic mt-1 break-words">
                       Comissão faz sentido quando você tem equipe. Disponível no plano Pro.
                     </p>
                   ) : (
-                    <div className="flex items-center gap-2 mt-1 text-[13px] font-mono text-vapor-400">
-                      <span className="text-vapor-400">Comissão atual:</span>
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-[13px] font-mono text-vapor-400 min-w-0">
+                      <span className="text-vapor-400 shrink-0">Comissão atual:</span>
                       {!regraVigente || regraVigente.tipo === 'nenhuma' ? (
-                        <span className="text-vapor-400 italic">Sem comissão — apenas salário ou pró-labore</span>
+                        <span className="text-vapor-400 italic break-words">Sem comissão — apenas salário ou pró-labore</span>
                       ) : regraVigente.tipo === 'percentual' ? (
-                        <span className="text-amber-500 font-semibold flex items-center gap-1">
-                          <Percent size={14} /> {regraVigente.valor}% (vigente desde {regraVigente.vigencia_inicio})
+                        <span className="text-amber-500 font-semibold flex items-center gap-1 break-words">
+                          <Percent size={14} className="shrink-0" /> {regraVigente.valor}% (vigente desde {regraVigente.vigencia_inicio})
                         </span>
                       ) : (
-                        <span className="text-amber-500 font-semibold flex items-center gap-1">
-                          <DollarSign size={14} /> R$ {Number(regraVigente.valor).toFixed(2)} por serviço (desde {regraVigente.vigencia_inicio})
+                        <span className="text-amber-500 font-semibold flex items-center gap-1 break-words">
+                          <DollarSign size={14} className="shrink-0" /> R$ {Number(regraVigente.valor).toFixed(2)} por serviço (desde {regraVigente.vigencia_inicio})
                         </span>
                       )}
                     </div>
@@ -358,7 +358,7 @@ export const AbaEquipe: React.FC = () => {
 
                 {/* Ações do Membro */}
                 {!isDonoNoFree && (
-                  <div className="flex items-center gap-2 self-end md:self-center">
+                  <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
                     <Button
                       type="button"
                       variant="secondary"

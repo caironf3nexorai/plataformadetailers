@@ -306,20 +306,24 @@ export const SidebarNav: React.FC = () => {
 
       {/* Footer com usuário e logout */}
       <div className="p-4 border-t border-graphite-600 flex items-center justify-between gap-2 bg-graphite-800/80">
-        <div className="flex flex-col truncate">
-          <span className="font-sans text-[13px] font-semibold text-vapor-100 truncate">
+        <Link
+          to="/configuracoes?aba=perfil"
+          title="Clique para editar seu perfil e nome"
+          className="flex flex-col truncate group hover:opacity-90 transition-opacity min-w-0"
+        >
+          <span className="font-sans text-[13px] font-semibold text-vapor-100 group-hover:text-amber-400 transition-colors truncate">
             {profile?.nome || 'Usuário'}
           </span>
           <span className="font-sans text-[11px] text-vapor-400 truncate">
             {membership?.email || ''}
           </span>
-        </div>
+        </Link>
 
         <button
           type="button"
           onClick={() => signOut()}
           title="Sair da conta"
-          className="p-2 text-vapor-400 hover:text-flare-400 hover:bg-graphite-700 rounded transition-colors"
+          className="p-2 text-vapor-400 hover:text-flare-400 hover:bg-graphite-700 rounded transition-colors shrink-0"
         >
           <LogOut size={18} />
         </button>

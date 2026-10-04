@@ -248,8 +248,8 @@ export const AbaWhatsApp: React.FC = () => {
   return (
     <div className="flex flex-col gap-6 max-w-5xl">
       {/* 1. CARD PRINCIPAL: STATUS DO WHATSAPP DA OFICINA */}
-      <Card className="p-6 bg-graphite-800 border-graphite-600 shadow-xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
           <div className="flex items-start gap-4">
             <div className={`p-3.5 rounded-2xl shrink-0 ${
               instanceStatus === 'conectado' 
@@ -259,9 +259,9 @@ export const AbaWhatsApp: React.FC = () => {
               <Smartphone className="w-8 h-8" />
             </div>
 
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h3 className="font-display text-[18px] text-vapor-100 font-bold uppercase tracking-wider">
+            <div className="space-y-1 min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-display text-[16px] sm:text-[18px] text-vapor-100 font-bold uppercase tracking-wider">
                   WhatsApp Automático da Oficina
                 </h3>
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase border ${
@@ -277,20 +277,20 @@ export const AbaWhatsApp: React.FC = () => {
                 <strong> diretamente do número da sua estética</strong> sem você precisar mandar um por um.
               </p>
               {instanceStatus === 'conectado' && numeroConectado && (
-                <div className="text-xs font-mono text-emerald-400 pt-1 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Instância ativa conectada: <strong>{numeroConectado}</strong>
+                <div className="text-xs font-mono text-emerald-400 pt-1 flex items-center gap-1.5 flex-wrap">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>Instância ativa conectada: <strong>{numeroConectado}</strong></span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             {instanceStatus === 'conectado' ? (
               <Button
                 variant="danger"
                 onClick={handleDesconectar}
-                className="text-xs px-3.5 py-2"
+                className="text-xs px-3.5 py-2 flex-1 sm:flex-initial justify-center"
               >
                 Desconectar Número
               </Button>
@@ -299,7 +299,7 @@ export const AbaWhatsApp: React.FC = () => {
                 variant="primary"
                 onClick={handleGerarQRCode}
                 disabled={carregandoQr}
-                className="text-xs px-4 py-2.5 bg-[#25D366] hover:bg-[#20ba59] text-black font-bold flex items-center gap-2"
+                className="text-xs px-4 py-2.5 bg-[#25D366] hover:bg-[#20ba59] text-black font-bold flex items-center justify-center gap-2 flex-1 sm:flex-initial"
               >
                 {carregandoQr ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -314,7 +314,7 @@ export const AbaWhatsApp: React.FC = () => {
               variant="secondary"
               onClick={carregarDados}
               disabled={loading}
-              className="p-2.5 h-10 w-10 text-vapor-300"
+              className="p-2.5 h-10 w-10 text-vapor-300 shrink-0"
               title="Atualizar dados"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -553,7 +553,7 @@ export const AbaWhatsApp: React.FC = () => {
               type="submit"
               variant="primary"
               disabled={salvando}
-              className="px-6 py-2.5 text-xs font-bold flex items-center gap-2"
+              className="px-6 py-2.5 text-xs font-bold flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               <Save className="w-4 h-4" />
               {salvando ? 'Salvando...' : 'Salvar Regras de Automação'}
@@ -563,14 +563,14 @@ export const AbaWhatsApp: React.FC = () => {
       </form>
 
       {/* 4. CONFIGURAÇÃO AVANÇADA DA VPS / EVOLUTION API (ACORDEÃO) */}
-      <Card className="p-5 bg-graphite-800 border-graphite-600 shadow-md">
+      <Card className="p-4 sm:p-5 bg-graphite-800 border-graphite-600 shadow-md">
         <button
           type="button"
           onClick={() => setShowConfigAvancada(!showConfigAvancada)}
           className="w-full flex items-center justify-between text-left"
         >
           <div className="flex items-center gap-2.5">
-            <Server className="w-5 h-5 text-vapor-400" />
+            <Server className="w-5 h-5 text-vapor-400 shrink-0" />
             <div>
               <div className="font-display text-sm font-bold text-vapor-100 uppercase tracking-wider">
                 Configurações da VPS / Gateway WhatsApp
@@ -580,7 +580,7 @@ export const AbaWhatsApp: React.FC = () => {
               </div>
             </div>
           </div>
-          {showConfigAvancada ? <ChevronUp className="w-4 h-4 text-vapor-400" /> : <ChevronDown className="w-4 h-4 text-vapor-400" />}
+          {showConfigAvancada ? <ChevronUp className="w-4 h-4 text-vapor-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-vapor-400 shrink-0" />}
         </button>
 
         {showConfigAvancada && (
@@ -632,11 +632,11 @@ export const AbaWhatsApp: React.FC = () => {
       </Card>
 
       {/* 5. FILA DE DISPARO E HISTÓRICO DE MENSAGENS */}
-      <Card className="p-6 bg-graphite-800 border-graphite-600 shadow-xl space-y-4">
+      <Card className="p-4 sm:p-6 bg-graphite-800 border-graphite-600 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-graphite-700 gap-3">
           <div>
-            <h4 className="font-display text-[16px] text-vapor-100 font-bold uppercase tracking-wider flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-emerald-400" />
+            <h4 className="font-display text-[15px] sm:text-[16px] text-vapor-100 font-bold uppercase tracking-wider flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-emerald-400 shrink-0" />
               Fila de Disparos & Histórico Recente
             </h4>
             <p className="text-xs text-vapor-400 font-sans">
@@ -644,13 +644,13 @@ export const AbaWhatsApp: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Button
               variant="secondary"
               size="sm"
               onClick={handleVarreduraManual}
               disabled={varrendo}
-              className="text-xs flex items-center gap-1.5"
+              className="text-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
               title="Varre o banco agora procurando agendamentos de amanhã e manutenções"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${varrendo ? 'animate-spin' : ''}`} />
@@ -662,7 +662,7 @@ export const AbaWhatsApp: React.FC = () => {
               size="sm"
               onClick={handleDispararFilaAgora}
               disabled={disparando || !resumo || resumo.total_pendentes === 0}
-              className="text-xs bg-emerald-600 hover:bg-emerald-500 font-bold flex items-center gap-1.5"
+              className="text-xs bg-emerald-600 hover:bg-emerald-500 font-bold flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
             >
               <Send className={`w-3.5 h-3.5 ${disparando ? 'animate-pulse' : ''}`} />
               Disparar Fila Agora ({resumo?.total_pendentes ?? 0})
@@ -676,8 +676,8 @@ export const AbaWhatsApp: React.FC = () => {
             Nenhuma mensagem na fila ainda. Clique em <strong>"Varredura Manual"</strong> para testar a busca de agendamentos e retornos.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left font-sans text-xs">
+          <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+            <table className="w-full min-w-[580px] text-left font-sans text-xs">
               <thead>
                 <tr className="border-b border-graphite-700 text-vapor-400 font-mono text-[11px] uppercase">
                   <th className="py-2.5 px-3">Cliente</th>

@@ -355,7 +355,7 @@ export const AbaTermosGarantia: React.FC = () => {
             variant="primary"
             onClick={handleSalvarResponsabilidade}
             disabled={salvandoResponsabilidade}
-            className="text-xs font-bold h-9 px-4 shrink-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md self-start md:self-auto hover:opacity-95"
+            className="text-xs font-bold h-9 px-4 shrink-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md w-full sm:w-auto hover:opacity-95"
           >
             <Save size={14} />
             <span>{salvandoResponsabilidade ? 'Salvando...' : 'Salvar Termo Fixo'}</span>
@@ -448,7 +448,7 @@ export const AbaTermosGarantia: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
           <Button
             type="button"
             variant="secondary"
@@ -460,7 +460,7 @@ export const AbaTermosGarantia: React.FC = () => {
               setPadrao(true);
               setModalOpen(true);
             }}
-            className="text-xs font-bold h-9 px-3 flex items-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25"
+            className="text-xs font-bold h-9 px-3 flex items-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/40 hover:bg-amber-500/25 flex-1 sm:flex-none justify-center"
             title="Criar termo oficial de garantia validado pelo advogado"
           >
             <Scale size={14} />
@@ -471,7 +471,7 @@ export const AbaTermosGarantia: React.FC = () => {
             type="button"
             variant="secondary"
             onClick={() => setModalBibliotecaOpen(true)}
-            className="text-xs font-semibold h-9 px-3 flex items-center gap-1.5 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10"
+            className="text-xs font-semibold h-9 px-3 flex items-center gap-1.5 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 flex-1 sm:flex-none justify-center"
             title="Explorar biblioteca de termos da plataforma"
           >
             <BookOpen size={14} />
@@ -482,7 +482,7 @@ export const AbaTermosGarantia: React.FC = () => {
             type="button"
             variant="primary"
             onClick={() => handleNovoTermo('polimento')}
-            className="min-h-[36px] px-4 font-bold text-xs flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md"
+            className="min-h-[36px] px-4 font-bold text-xs flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 shadow-md w-full sm:w-auto justify-center"
           >
             <Plus size={16} />
             <span>Novo Termo</span>
@@ -495,7 +495,7 @@ export const AbaTermosGarantia: React.FC = () => {
         <span className="font-sans text-xs uppercase font-semibold text-vapor-400 tracking-wider">
           Modelos Recomendados por Especialidade:
         </span>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
           {TIPOS_TERMOS_GARANTIA.map((t) => {
             const jaExiste = termos.some((item) => item.tipo === t.tipo);
             return (
@@ -584,11 +584,11 @@ export const AbaTermosGarantia: React.FC = () => {
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex flex-col">
-                      <span className="font-mono text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="font-mono text-[11px] font-bold text-amber-400 uppercase tracking-wider truncate">
                         {rotuloTipo}
                       </span>
-                      <h3 className="font-sans text-sm font-bold text-vapor-100">{termo.titulo}</h3>
+                      <h3 className="font-sans text-sm font-bold text-vapor-100 break-words">{termo.titulo}</h3>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -611,7 +611,7 @@ export const AbaTermosGarantia: React.FC = () => {
                     </div>
                   </div>
 
-                  <p className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line line-clamp-4 bg-graphite-950/60 p-2.5 rounded-lg border border-graphite-800/80">
+                  <p className="font-sans text-xs text-vapor-300 leading-relaxed whitespace-pre-line line-clamp-4 bg-graphite-950/60 p-2.5 rounded-lg border border-graphite-800/80 break-words">
                     {termo.conteudo}
                   </p>
                 </div>
@@ -687,7 +687,7 @@ export const AbaTermosGarantia: React.FC = () => {
           </div>
 
           {/* Botão de Sugestão / Template Rápido */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
               Texto Legal do Termo e Condições:
             </label>
@@ -697,7 +697,7 @@ export const AbaTermosGarantia: React.FC = () => {
                 const def = TIPOS_TERMOS_GARANTIA.find((t) => t.tipo === tipo);
                 if (def) handleUsarTemplate(def);
               }}
-              className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold"
+              className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold self-start sm:self-auto"
             >
               <Sparkles size={13} />
               <span>Usar Texto Padrão Recomendado</span>
@@ -723,13 +723,13 @@ export const AbaTermosGarantia: React.FC = () => {
             <span>Definir como termo padrão sugerido em orçamentos</span>
           </label>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-graphite-800">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-graphite-800">
             <Button
               type="button"
               variant="secondary"
               onClick={() => setModalOpen(false)}
               disabled={saving}
-              className="text-xs h-10 px-4"
+              className="text-xs h-10 px-4 w-full sm:w-auto justify-center"
             >
               Cancelar
             </Button>
@@ -737,7 +737,7 @@ export const AbaTermosGarantia: React.FC = () => {
               type="submit"
               variant="primary"
               disabled={saving}
-              className="text-xs font-bold h-10 px-5 flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950"
+              className="text-xs font-bold h-10 px-5 flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-graphite-950 w-full sm:w-auto"
             >
               <Save size={15} />
               <span>{saving ? 'Salvando...' : 'Salvar Termo'}</span>
