@@ -11,7 +11,7 @@ import { formatarData, formatarDataHora, formatarDataIsoSP, montarTimestampLocal
 import { formatarInformacaoTransbordo } from '../utils/transbordoUtils';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
 import { SeletorHorarioPublico, type SlotHorarioPublico } from '../components/publico/SeletorHorarioPublico';
-import { montarLinkWhatsapp } from '../utils/whatsapp';
+import { montarLinkWhatsapp, formatarTelefoneWhatsapp } from '../utils/whatsapp';
 
 interface TenantInfo {
   id: string;
@@ -837,7 +837,7 @@ export function FluxoAgendamentoOnline() {
                 <p><strong>Valor Total Estimado:</strong> R$ {formatValorMoeda(resultado.preco_estimado_total)}</p>
               </div>
 
-              {resultado.sinal?.ativo && resultado.sinal?.valor > 0 ? (
+              {(resultado.sinal?.ativo || resultado.sinal?.exigido) && Number(resultado.sinal?.valor || 0) > 0 ? (
                 <div className="border-t border-slate-800 pt-3 space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-amber-400 font-semibold">Sinal Solicitado:</span>
@@ -891,7 +891,7 @@ export function FluxoAgendamentoOnline() {
 
             {/* Botão para Falar com a Oficina via WhatsApp */}
             <a
-              href={`https://wa.me/${tenant.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
+              href={`https://wa.me/${formatarTelefoneWhatsapp(tenant.telefone) || tenant.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
                 `Olá! Fiz um agendamento online (OS #${resultado.numero_os}) para ${formatarData(dataSelecionada)} às ${horarioSelecionado}.`
               )}`}
               target="_blank"

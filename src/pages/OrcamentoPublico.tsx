@@ -28,6 +28,7 @@ import { formatarData, formatarDataHora, montarTimestampLocal } from '../utils/d
 import { formatarInformacaoTransbordo } from '../utils/transbordoUtils';
 import { formatarMoeda, formatarCodigoProposta } from '../utils/formatters';
 import { formatarDuracao } from '../utils/agenda';
+import { formatarTelefoneWhatsapp } from '../utils/whatsapp';
 import { getFotoPublicUrl } from '../utils/imagens';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../utils/pdfOrcamento';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
@@ -741,7 +742,7 @@ export const OrcamentoPublico: React.FC = () => {
 
             {/* BOTÃO WHATSAPP DE CONTATO / ENVIO DE COMPROVANTE */}
             <a
-              href={`https://wa.me/${data.oficina.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
+              href={`https://wa.me/${formatarTelefoneWhatsapp(data.oficina.telefone) || data.oficina.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
                 `Olá! Efetuei o agendamento da proposta (OS #${data.agendamento.numero_os}) para ${formatarDataHora(data.agendamento.inicio)}.`
               )}`}
               target="_blank"

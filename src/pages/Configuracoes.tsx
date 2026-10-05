@@ -23,7 +23,7 @@ import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
 import { AbaFiscal } from '../components/configuracoes/AbaFiscal';
 import { AbaWhatsApp } from '../components/configuracoes/AbaWhatsApp';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X } from 'lucide-react';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X, Mail, Phone, MapPin } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
@@ -91,6 +91,120 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setMeuTelefoneInput(profile.telefone || '');
     }
   }, [profile]);
+
+  // Estados de Edição de Dados de Contato e Localização da Oficina
+  const [modalEditarContatoOficina, setModalEditarContatoOficina] = useState(false);
+  const [oficinaTelefoneInput, setOficinaTelefoneInput] = useState(tenant?.telefone || '');
+  const [oficinaCidadeInput, setOficinaCidadeInput] = useState(tenant?.cidade || '');
+  const [oficinaUfInput, setOficinaUfInput] = useState(tenant?.uf || '');
+  const [salvandoContatoOficina, setSalvandoContatoOficina] = useState(false);
+  const [erroContatoOficina, setErroContatoOficina] = useState<string | null>(null);
+  const [sucessoContatoOficina, setSucessoContatoOficina] = useState<string | null>(null);
+
+  // Estados de Alteração de E-mail de Acesso
+  const [modalAlterarEmailOpen, setModalAlterarEmailOpen] = useState(false);
+  const [novoEmailInput, setNovoEmailInput] = useState('');
+  const [salvandoNovoEmail, setSalvandoNovoEmail] = useState(false);
+  const [erroAlterarEmail, setErroAlterarEmail] = useState<string | null>(null);
+  const [sucessoAlterarEmail, setSucessoAlterarEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tenant) {
+      setOficinaTelefoneInput(tenant.telefone || '');
+      setOficinaCidadeInput(tenant.cidade || '');
+      setOficinaUfInput(tenant.uf || '');
+    }
+  }, [tenant]);
+
+  const handleAbrirModalContatoOficina = () => {
+    if (!tenant) return;
+    setOficinaTelefoneInput(tenant.telefone || '');
+    setOficinaCidadeInput(tenant.cidade || '');
+    setOficinaUfInput(tenant.uf || '');
+    setErroContatoOficina(null);
+    setSucessoContatoOficina(null);
+    setModalEditarContatoOficina(true);
+  };
+
+  const handleSalvarContatoOficina = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenant) return;
+    setErroContatoOficina(null);
+    setSucessoContatoOficina(null);
+
+    const telDigits = oficinaTelefoneInput.replace(/\D/g, '');
+    if (telDigits && telDigits.length < 10) {
+      setErroContatoOficina('Informe um telefone com DDD válido (pelo menos 10 dígitos).');
+      return;
+    }
+
+    setSalvandoContatoOficina(true);
+    try {
+      // 1. Tenta via RPC atualizar_dados_oficina
+      const { error: rpcErr } = await supabase.rpc('atualizar_dados_oficina', {
+        p_telefone: telDigits || null,
+        p_cidade: oficinaCidadeInput.trim() || null,
+        p_uf: oficinaUfInput.trim().toUpperCase() || null,
+      });
+
+      if (rpcErr) {
+        // Fallback update direto na tabela tenants
+        const { error: updateErr } = await supabase
+          .from('tenants')
+          .update({
+            telefone: telDigits || null,
+            cidade: oficinaCidadeInput.trim() || null,
+            uf: oficinaUfInput.trim().toUpperCase() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', tenant.id);
+
+        if (updateErr) throw updateErr;
+      }
+
+      setSucessoContatoOficina('Dados de contato e localização salvos com sucesso!');
+      await refetchTenantData();
+      setTimeout(() => {
+        setModalEditarContatoOficina(false);
+        setSucessoContatoOficina(null);
+      }, 1000);
+    } catch (err: any) {
+      setErroContatoOficina(err.message || 'Erro ao salvar dados de contato.');
+    } finally {
+      setSalvandoContatoOficina(false);
+    }
+  };
+
+  const handleSolicitarTrocaEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErroAlterarEmail(null);
+    setSucessoAlterarEmail(null);
+
+    const emailLimpo = novoEmailInput.trim().toLowerCase();
+    if (!emailLimpo || !emailLimpo.includes('@') || !emailLimpo.includes('.')) {
+      setErroAlterarEmail('Por favor, informe um endereço de e-mail válido.');
+      return;
+    }
+
+    if (emailLimpo === (user?.email || '').toLowerCase()) {
+      setErroAlterarEmail('O novo e-mail informado é idêntico ao e-mail atual.');
+      return;
+    }
+
+    setSalvandoNovoEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: emailLimpo });
+      if (error) throw error;
+
+      setSucessoAlterarEmail(
+        `Enviamos uma mensagem de confirmação para "${emailLimpo}". Acesse sua caixa de entrada e clique no link de validação para concluir a troca do e-mail com segurança!`
+      );
+    } catch (err: any) {
+      setErroAlterarEmail(err.message || 'Erro ao solicitar alteração de e-mail.');
+    } finally {
+      setSalvandoNovoEmail(false);
+    }
+  };
 
   const handleSalvarMeuPerfil = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -622,10 +736,25 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
               </div>
 
               <div className="flex flex-col gap-1.5 pt-2 border-t border-graphite-700/80">
-                <label className="font-sans text-[13px] text-vapor-400 font-medium flex items-center gap-1.5">
-                  <ShieldCheck size={15} className="text-vapor-500" />
-                  <span>E-mail da Conta (Acesso)</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-sans text-[13px] text-vapor-400 font-medium flex items-center gap-1.5">
+                    <ShieldCheck size={15} className="text-vapor-500" />
+                    <span>E-mail da Conta (Acesso)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNovoEmailInput(user?.email || '');
+                      setModalAlterarEmailOpen(true);
+                      setErroAlterarEmail(null);
+                      setSucessoAlterarEmail(null);
+                    }}
+                    className="text-amber-400 hover:text-amber-300 text-xs font-semibold underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Mail size={12} />
+                    <span>Alterar E-mail</span>
+                  </button>
+                </div>
                 <input
                   type="email"
                   value={user?.email || ''}
@@ -748,7 +877,20 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
                 <span className="text-vapor-400 shrink-0">Telefone / WhatsApp:</span>
-                <span className="text-vapor-100 text-left sm:text-right break-words min-w-0">{tenant?.telefone || '—'}</span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="text-vapor-100 text-left sm:text-right break-words min-w-0">{tenant?.telefone || '—'}</span>
+                  {isDono && (
+                    <button
+                      type="button"
+                      onClick={handleAbrirModalContatoOficina}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold transition cursor-pointer shrink-0"
+                      title="Editar Contato e Localização da Oficina"
+                    >
+                      <Edit2 size={12} />
+                      <span>Editar Contato</span>
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
                 <span className="text-vapor-400 shrink-0">Total de OSs Criadas:</span>
@@ -1434,6 +1576,220 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                     </>
                   )}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL: Editar Dados de Contato e Localização da Oficina */}
+      {modalEditarContatoOficina && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-graphite-900 border border-graphite-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setModalEditarContatoOficina(false)}
+              className="absolute top-4 right-4 text-vapor-400 hover:text-vapor-100 transition p-1 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+                <Phone size={22} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-vapor-100 font-heading">
+                  Contato e Localização
+                </h3>
+                <p className="text-xs text-vapor-400">
+                  Atualize o telefone/WhatsApp e endereço da oficina
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSalvarContatoOficina} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-vapor-300 flex items-center gap-1.5">
+                  <Phone size={13} className="text-amber-500" />
+                  <span>Telefone / WhatsApp da Oficina *</span>
+                </label>
+                <input
+                  type="text"
+                  value={oficinaTelefoneInput}
+                  onChange={(e) => setOficinaTelefoneInput(e.target.value)}
+                  placeholder="Ex: 22 99730-0676"
+                  required
+                  disabled={salvandoContatoOficina}
+                  className="p-3 bg-graphite-950 border border-graphite-700 focus:border-amber-500 rounded-xl text-xs text-vapor-100 font-medium outline-none transition disabled:opacity-50"
+                />
+                <span className="text-[11px] text-vapor-500">
+                  Informe com DDD (ex: 22 99730-0676). Este número recebe os comprovantes do agendamento online.
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2 flex flex-col gap-1.5">
+                  <label className="text-xs font-mono font-bold text-vapor-300 flex items-center gap-1.5">
+                    <MapPin size={13} className="text-amber-500" />
+                    <span>Cidade</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={oficinaCidadeInput}
+                    onChange={(e) => setOficinaCidadeInput(e.target.value)}
+                    placeholder="Ex: Campos dos Goytacazes"
+                    disabled={salvandoContatoOficina}
+                    className="p-3 bg-graphite-950 border border-graphite-700 focus:border-amber-500 rounded-xl text-xs text-vapor-100 font-medium outline-none transition disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-mono font-bold text-vapor-300">
+                    UF (Estado)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={oficinaUfInput}
+                    onChange={(e) => setOficinaUfInput(e.target.value.toUpperCase())}
+                    placeholder="RJ"
+                    disabled={salvandoContatoOficina}
+                    className="p-3 bg-graphite-950 border border-graphite-700 focus:border-amber-500 rounded-xl text-xs text-vapor-100 font-medium uppercase font-mono text-center outline-none transition disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              {erroContatoOficina && (
+                <div className="p-2.5 bg-flare-400/10 border border-flare-400/30 rounded text-flare-400 text-[12px] flex items-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{erroContatoOficina}</span>
+                </div>
+              )}
+
+              {sucessoContatoOficina && (
+                <div className="p-2.5 bg-mint-500/10 border border-mint-500/30 rounded text-mint-400 text-[12px] flex items-center gap-2">
+                  <Check size={14} className="shrink-0" />
+                  <span>{sucessoContatoOficina}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarContatoOficina(false)}
+                  className="flex-1 py-2.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={salvandoContatoOficina || !oficinaTelefoneInput.trim()}
+                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg flex items-center justify-center gap-2"
+                >
+                  {salvandoContatoOficina ? 'Salvando...' : (
+                    <>
+                      <Save size={16} />
+                      <span>Salvar Contato</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL: Solicitar Alteração de E-mail de Acesso */}
+      {modalAlterarEmailOpen && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-graphite-900 border border-graphite-700 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setModalAlterarEmailOpen(false)}
+              className="absolute top-4 right-4 text-vapor-400 hover:text-vapor-100 transition p-1 cursor-pointer"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+                <Mail size={22} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-vapor-100 font-heading">
+                  Alterar E-mail de Login
+                </h3>
+                <p className="text-xs text-vapor-400">
+                  Atualização do endereço de acesso à plataforma
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSolicitarTrocaEmail} className="flex flex-col gap-4">
+              <div className="p-3 bg-graphite-950 rounded-xl border border-graphite-800 text-xs text-vapor-300">
+                E-mail atual: <strong className="text-vapor-100 font-mono">{user?.email}</strong>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-vapor-300">
+                  Novo E-mail de Acesso *
+                </label>
+                <input
+                  type="email"
+                  value={novoEmailInput}
+                  onChange={(e) => setNovoEmailInput(e.target.value)}
+                  placeholder="seu-novo-email@empresa.com"
+                  required
+                  autoFocus
+                  disabled={salvandoNovoEmail}
+                  className="p-3 bg-graphite-950 border border-graphite-700 focus:border-amber-500 rounded-xl text-xs text-vapor-100 font-medium outline-none transition disabled:opacity-50"
+                />
+                <span className="text-[11px] text-vapor-500">
+                  Um e-mail de confirmação será enviado para este novo endereço para validar a alteração.
+                </span>
+              </div>
+
+              {erroAlterarEmail && (
+                <div className="p-2.5 bg-flare-400/10 border border-flare-400/30 rounded text-flare-400 text-[12px] flex items-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{erroAlterarEmail}</span>
+                </div>
+              )}
+
+              {sucessoAlterarEmail && (
+                <div className="p-3 bg-mint-500/10 border border-mint-500/30 rounded text-mint-400 text-[12px] flex items-start gap-2 leading-relaxed">
+                  <Check size={16} className="shrink-0 mt-0.5" />
+                  <span>{sucessoAlterarEmail}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalAlterarEmailOpen(false)}
+                  className="flex-1 py-2.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Fechar
+                </button>
+
+                {!sucessoAlterarEmail && (
+                  <button
+                    type="submit"
+                    disabled={salvandoNovoEmail || !novoEmailInput.trim()}
+                    className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg flex items-center justify-center gap-2"
+                  >
+                    {salvandoNovoEmail ? 'Enviando...' : (
+                      <>
+                        <Save size={16} />
+                        <span>Solicitar Troca</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </form>
           </div>
