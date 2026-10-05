@@ -201,18 +201,47 @@ export const usePlano = () => {
     return (FALLBACK_LIMITS[planoAtual] || {})[recursoKey] ?? null;
   };
 
-  // Verificar se o uso atual está próximo ou atingiu o limite do plano
+  // Verificar uso em relação ao limite local
   const verificarUso = (recursoKey: string, usoAtual: number) => {
     const limite = limiteDe(recursoKey);
-    if (limite === null || limite === undefined || limite <= 0) {
-      return { atingiu: false, proximo: false, porcentagem: 0, limite: null };
+    if (limite === null) {
+      return { limite: null, uso: usoAtual, atingiu: false, porcentagem: 0, quaseCheio: false, proximo: false };
     }
-
-    const porcentagem = Math.round((usoAtual / limite) * 100);
     const atingiu = usoAtual >= limite;
-    const proximo = porcentagem >= 80 && !atingiu;
+    const porcentagem = Math.min(100, Math.round((usoAtual / limite) * 100));
+    const quaseCheio = porcentagem >= 80;
+    const proximo = quaseCheio;
+    return { limite, uso: usoAtual, atingiu, porcentagem, quaseCheio, proximo };
+  };
 
-    return { atingiu, proximo, porcentagem, limite };
+  // Consultar se o recurso atingiu o limite ao vivo no banco de dados (tempo real)
+  const consultarLimiteAoVivo = async (recursoKey: string) => {
+    try {
+      const { data, error } = await supabase.rpc('validar_limite_recurso', {
+        p_tenant_id: tenant?.id,
+        p_recurso: recursoKey,
+      });
+      if (error) throw error;
+      return {
+        permitido: Boolean(data?.permitido),
+        atingiu: Boolean(data?.atingiu),
+        limite: (data?.limite ?? null) as number | null,
+        uso: Number(data?.uso || 0),
+        mensagem: String(data?.mensagem || ''),
+        plano: String(data?.plano || planoAtual),
+      };
+    } catch (err) {
+      console.warn('[usePlano] Erro ao validar limite ao vivo:', err);
+      const limite = limiteDe(recursoKey);
+      return {
+        permitido: true,
+        atingiu: false,
+        limite,
+        uso: 0,
+        mensagem: '',
+        plano: planoAtual,
+      };
+    }
   };
 
   return {
@@ -223,6 +252,7 @@ export const usePlano = () => {
     temFeature,
     limiteDe,
     verificarUso,
+    consultarLimiteAoVivo,
     carregandoPermissoes,
     refetchPermissoes: carregarPermissoesDoPlano,
   };

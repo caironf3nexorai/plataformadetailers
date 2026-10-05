@@ -22,16 +22,13 @@ export const AbaAssinatura: React.FC = () => {
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 6700,
-    studio: 14700,
   });
   const [precosAnuaisCentavos, setPrecosAnuaisCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 68400,
-    studio: 149900,
   });
 
-  const formatarPrecoMensal = (centavos: number) => {
+  const formatarPrecoMensal = (centavos?: number) => {
+    if (centavos === undefined || centavos === null) return '...';
     const reais = centavos / 100;
     return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
@@ -45,8 +42,8 @@ export const AbaAssinatura: React.FC = () => {
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: 'R$ 67,00',
-    precoAnual: 'R$ 684,00 / ano',
+    preco: formatarPrecoMensal(precosCentavos['pro']),
+    precoAnual: precosAnuaisCentavos['pro'] ? `${formatarPrecoMensal(precosAnuaisCentavos['pro'])} / ano` : undefined,
     cicloInicial: 'anual',
   });
 
@@ -248,8 +245,8 @@ export const AbaAssinatura: React.FC = () => {
               {planoSigla === 'FREE'
                 ? 'R$ 0,00 / mês'
                 : cicloAssinatura === 'anual'
-                ? `${formatarPrecoMensal(precosAnuaisCentavos[planoSigla.toLowerCase()] ?? 68400)} / ano`
-                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? 6700)} / mês`}
+                ? `${formatarPrecoMensal(precosAnuaisCentavos[planoSigla.toLowerCase()] ?? (precosCentavos[planoSigla.toLowerCase()] ? precosCentavos[planoSigla.toLowerCase()] * 10 : assinatura?.valor_centavos))} / ano`
+                : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? assinatura?.valor_centavos)} / mês`}
             </span>
           </div>
 
@@ -317,7 +314,7 @@ export const AbaAssinatura: React.FC = () => {
                 <span className="text-xs text-vapor-400 mt-0.5">
                   Assine 12 meses por apenas{' '}
                   <strong className="text-amber-400 font-bold font-mono">
-                    {formatarPrecoMensal(precosAnuaisCentavos['pro'] ?? 68400)} / ano
+                    {formatarPrecoMensal(precosAnuaisCentavos['pro'] ?? (precosCentavos['pro'] ? precosCentavos['pro'] * 10 : assinatura?.valor_centavos))} / ano
                   </strong>{' '}
                   (em até 12x no cartão de crédito ou à vista no PIX).
                 </span>
@@ -326,13 +323,13 @@ export const AbaAssinatura: React.FC = () => {
 
             <Button
               onClick={() => {
-                const centavosProM = precosCentavos['pro'] ?? 6700;
-                const centavosProA = precosAnuaisCentavos['pro'] ?? 68400;
+                const centavosProM = precosCentavos['pro'] ?? assinatura?.valor_centavos;
+                const centavosProA = precosAnuaisCentavos['pro'] ?? (centavosProM ? centavosProM * 10 : undefined);
                 setSelectedPlano({
                   codigo: 'pro',
                   nome: 'Pro',
                   preco: formatarPrecoMensal(centavosProM),
-                  precoAnual: `${formatarPrecoMensal(centavosProA)} / ano`,
+                  precoAnual: centavosProA ? `${formatarPrecoMensal(centavosProA)} / ano` : undefined,
                   cicloInicial: 'anual',
                 });
                 setCheckoutModalOpen(true);
@@ -367,13 +364,13 @@ export const AbaAssinatura: React.FC = () => {
 
             <Button
               onClick={() => {
-                const centavosProM = precosCentavos['pro'] ?? 6700;
-                const centavosProA = precosAnuaisCentavos['pro'] ?? 68400;
+                const centavosProM = precosCentavos['pro'] ?? assinatura?.valor_centavos;
+                const centavosProA = precosAnuaisCentavos['pro'] ?? (centavosProM ? centavosProM * 10 : undefined);
                 setSelectedPlano({
                   codigo: 'pro',
                   nome: 'Pro',
                   preco: formatarPrecoMensal(centavosProM),
-                  precoAnual: `${formatarPrecoMensal(centavosProA)} / ano`,
+                  precoAnual: centavosProA ? `${formatarPrecoMensal(centavosProA)} / ano` : undefined,
                   cicloInicial: 'anual',
                 });
                 setCheckoutModalOpen(true);

@@ -84,6 +84,8 @@ const LoginParceiro = lazyWithRetry(() => import('./pages/parceiro/LoginParceiro
 const PainelParceiro = lazyWithRetry(() => import('./pages/parceiro/PainelParceiro').then(m => ({ default: m.PainelParceiro })));
 
 
+import { GlobalErrorBoundary } from './components/ui/GlobalErrorBoundary';
+
 const PaginaCarregando = () => (
   <div className="flex-1 flex flex-col items-center justify-center min-h-[400px] gap-3 text-vapor-400 py-12">
     <div className="w-8 h-8 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
@@ -97,8 +99,9 @@ function App() {
       <ToastProvider>
         <NotificacoesProvider>
           <AnalyticsTracker />
-          <Suspense fallback={<PaginaCarregando />}>
-            <Routes>
+          <GlobalErrorBoundary>
+            <Suspense fallback={<PaginaCarregando />}>
+              <Routes>
             {/* Rotas Públicas */}
             <Route path="/termos-de-uso" element={<TermosUso />} />
             <Route path="/termos-uso" element={<TermosUso />} />
@@ -218,7 +221,8 @@ function App() {
             </Route>
             </Routes>
           </Suspense>
-        </NotificacoesProvider>
+        </GlobalErrorBoundary>
+      </NotificacoesProvider>
       </ToastProvider>
     </AuthProvider>
   );

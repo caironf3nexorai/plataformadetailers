@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { CampoNumerico } from '../../components/ui/CampoNumerico';
 import { Modal } from '../../components/ui/Modal';
+import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { Badge } from '../../components/ui/Badge';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
@@ -24,6 +25,7 @@ import {
   Calendar,
   Palette,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react';
 import { GarantiasClienteVeiculo, type GarantiaItem } from '../../components/clientes/GarantiasClienteVeiculo';
 
@@ -194,6 +196,34 @@ export const DetalheVeiculo: React.FC = () => {
     }
   };
 
+  // Exclusão / Inativação Segura de Veículo
+  const [showConfirmExcluirVeiculo, setShowConfirmExcluirVeiculo] = useState(false);
+  const [excluindoVeiculo, setExcluindoVeiculo] = useState(false);
+
+  const handleExcluirVeiculo = async () => {
+    if (!veiculo || isOperador) return;
+    setExcluindoVeiculo(true);
+    try {
+      const { error } = await supabase.rpc('inativar_ou_excluir_veiculo', {
+        p_veiculo_id: veiculo.id,
+      });
+
+      if (error) throw error;
+
+      setShowConfirmExcluirVeiculo(false);
+      if (clienteAtual?.id) {
+        navigate(`/clientes/${clienteAtual.id}`);
+      } else {
+        navigate('/clientes');
+      }
+    } catch (err: any) {
+      console.error('[DetalheVeiculo] Erro ao excluir veículo:', err);
+      alert('Erro ao excluir veículo: ' + (err.message || 'Erro inesperado.'));
+    } finally {
+      setExcluindoVeiculo(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -209,24 +239,39 @@ export const DetalheVeiculo: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => {
-            if (window.history.state && window.history.state.idx > 0) {
-              navigate(-1);
-            } else {
-              navigate('/clientes');
-            }
-          }}
-          className="min-h-[40px] px-3"
-          title="Voltar para a página anterior"
-        >
-          <ArrowLeft size={18} />
-          Voltar
-        </Button>
-        <PageHeader title={`Veículo ${veiculo.placa}`} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              if (window.history.state && window.history.state.idx > 0) {
+                navigate(-1);
+              } else {
+                navigate('/clientes');
+              }
+            }}
+            className="min-h-[40px] px-3"
+            title="Voltar para a página anterior"
+          >
+            <ArrowLeft size={18} />
+            Voltar
+          </Button>
+          <PageHeader title={`Veículo ${veiculo.placa}`} />
+        </div>
+
+        {!isOperador && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setShowConfirmExcluirVeiculo(true)}
+            className="flex items-center gap-2 text-flare-400 hover:text-flare-300 border-flare-500/30 hover:bg-flare-500/10 text-xs font-bold uppercase tracking-wider"
+            title="Inativar ou excluir veículo"
+          >
+            <Trash2 size={16} />
+            <span>Inativar / Excluir Veículo</span>
+          </Button>
+        )}
       </div>
 
       {/* Header com Destaque de Placa e Proprietário Atual */}
@@ -576,6 +621,17 @@ export const DetalheVeiculo: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Modal de Confirmação de Exclusão / Inativação do Veículo */}
+      <ModalConfirmacao
+        isOpen={showConfirmExcluirVeiculo}
+        onClose={() => setShowConfirmExcluirVeiculo(false)}
+        onConfirm={handleExcluirVeiculo}
+        title="Inativar ou Excluir Veículo"
+        mensagem={`Deseja realmente remover o veículo de placa ${veiculo.placa}? Caso ele possua histórico de agendamentos, ordens de serviço ou vistorias, será inativado para manter todos os registros históricos protegidos. Se não houver vínculos, será excluído definitivamente.`}
+        textoConfirmar={excluindoVeiculo ? 'Removendo...' : 'Confirmar Remoção'}
+        variant="danger"
+      />
     </div>
   );
 };

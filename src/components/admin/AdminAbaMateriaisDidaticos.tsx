@@ -769,6 +769,7 @@ export const AdminAbaMateriaisDidaticos: React.FC<AdminAbaMateriaisDidaticosProp
           material={previewMaterial}
           tenantNome="Detailers Admin (Visualização)"
           usuarioDocumento="ADMINISTRADOR"
+          isPreview={true}
           onClose={() => setPreviewMaterial(null)}
         />
       )}

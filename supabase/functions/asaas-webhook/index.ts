@@ -97,7 +97,11 @@ serve(async (req) => {
         });
 
         // AUTOMAÇÃO DO PARCEIRO: Se esta oficina veio de um parceiro comercial, gera e aprova a comissão automaticamente
-        const valorPagoCentavos = payment?.value ? Math.round(payment.value * 100) : (planoContratado === 'studio' ? 14700 : 6700);
+        let valorPagoCentavos = payment?.value ? Math.round(payment.value * 100) : 0;
+        if (!valorPagoCentavos) {
+          const { data: pRow } = await supabase.from('plans').select('preco_centavos').eq('codigo', planoContratado).maybeSingle();
+          valorPagoCentavos = pRow?.preco_centavos || 0;
+        }
         await supabase.rpc('processar_pagamento_asaas_parceiro', {
           p_tenant_id: tenantId,
           p_valor_centavos: valorPagoCentavos,

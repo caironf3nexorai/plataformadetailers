@@ -16,23 +16,21 @@ export const PaginaPlanos: React.FC = () => {
   const [ciclo, setCiclo] = useState<'mensal' | 'anual'>('anual');
   const [precosCentavos, setPrecosCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 6700,
-    studio: 14700,
   });
   const [precosAnuaisCentavos, setPrecosAnuaisCentavos] = useState<Record<string, number>>({
     free: 0,
-    pro: 68400,
-    studio: 149900,
   });
 
-  const formatarPrecoCard = (centavos: number) => {
+  const formatarPrecoCard = (centavos?: number) => {
+    if (centavos === undefined || centavos === null) return '...';
     const reais = centavos / 100;
     if (reais === 0) return 'R$ 0';
     if (reais % 1 === 0) return `R$ ${reais}`;
     return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const formatarPrecoMensal = (centavos: number) => {
+  const formatarPrecoMensal = (centavos?: number) => {
+    if (centavos === undefined || centavos === null) return '...';
     const reais = centavos / 100;
     return reais.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
@@ -113,8 +111,8 @@ export const PaginaPlanos: React.FC = () => {
   }>({
     codigo: 'pro',
     nome: 'Pro',
-    preco: formatarPrecoMensal(precosCentavos['pro'] ?? 6700),
-    precoAnual: `${formatarPrecoMensal(precosAnuaisCentavos['pro'] ?? 68400)} / ano`,
+    preco: formatarPrecoMensal(precosCentavos['pro']),
+    precoAnual: precosAnuaisCentavos['pro'] ? `${formatarPrecoMensal(precosAnuaisCentavos['pro'])} / ano` : undefined,
     ciclo: 'anual',
   });
 
@@ -162,8 +160,8 @@ export const PaginaPlanos: React.FC = () => {
       codigo: 'pro',
       nome: 'Pro',
       descricao: 'Ideal para oficinas em crescimento que buscam mais clientes e lucro real.',
-      preco: formatarPrecoCard(precosCentavos['pro'] ?? 100),
-      precoMensal: formatarPrecoMensal(precosCentavos['pro'] ?? 100),
+      preco: formatarPrecoCard(precosCentavos['pro']),
+      precoMensal: formatarPrecoMensal(precosCentavos['pro']),
       periodo: '/mês',
       destaque: true,
       limites: [
@@ -194,8 +192,8 @@ export const PaginaPlanos: React.FC = () => {
       codigo: 'studio',
       nome: 'Studio',
       descricao: 'Para operações consolidadas, equipes robustas e múltiplos boxes.',
-      preco: formatarPrecoCard(precosCentavos['studio'] ?? 14700),
-      precoMensal: formatarPrecoMensal(precosCentavos['studio'] ?? 14700),
+      preco: formatarPrecoCard(precosCentavos['studio']),
+      precoMensal: formatarPrecoMensal(precosCentavos['studio']),
       periodo: '/mês',
       destaque: false,
       limites: [

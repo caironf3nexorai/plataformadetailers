@@ -171,31 +171,14 @@ export const DetalheCliente: React.FC = () => {
     setDesativandoCliente(true);
 
     try {
-      // 1. Tentar deletar definitivamente do banco
-      const { error: delError } = await supabase
-        .from('clientes')
-        .delete()
-        .eq('id', cliente.id);
+      const { error } = await supabase.rpc('inativar_ou_excluir_cliente', {
+        p_cliente_id: cliente.id,
+      });
 
-      if (!delError) {
-        setShowConfirmDesativar(false);
-        navigate('/clientes');
-        return;
-      }
+      if (error) throw error;
 
-      // 2. Se houver vínculos históricos (agendamentos, orçamentos, títulos), faz soft-delete (ativo = false)
-      console.warn('[DetalheCliente] Exclusão física bloqueada por registros vinculados. Desativando cliente...', delError);
-      const { error: updError } = await supabase
-        .from('clientes')
-        .update({ ativo: false, updated_at: new Date().toISOString() })
-        .eq('id', cliente.id);
-
-      if (!updError) {
-        setShowConfirmDesativar(false);
-        navigate('/clientes');
-      } else {
-        throw updError;
-      }
+      setShowConfirmDesativar(false);
+      navigate('/clientes');
     } catch (err: any) {
       console.error('Erro ao excluir/desativar cliente:', err);
       setFeedbackMsg({ type: 'error', text: 'Não foi possível excluir o cliente: ' + (err.message || 'Erro desconhecido') });

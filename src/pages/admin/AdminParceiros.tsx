@@ -405,7 +405,6 @@ export const AdminParceiros: React.FC = () => {
       const { error } = await supabase.rpc('admin_registrar_pagamento_manual_competencia', {
         p_tenant_id: idParaUsar.trim(),
         p_competencia: competenciaInput,
-        p_valor_pago_centavos: 6700,
       });
 
       if (error) throw error;

@@ -26,6 +26,7 @@ import {
   Sparkles,
   Receipt,
   MessageCircle,
+  Ban,
 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
@@ -87,6 +88,36 @@ export const VisualizarAtendimento: React.FC = () => {
   const [modalTermoRiscoOpen, setModalTermoRiscoOpen] = useState(false);
   const [recebimentos, setRecebimentos] = useState<any[]>([]);
   const [configFiscal, setConfigFiscal] = useState<any | null>(null);
+
+  // Estado de Cancelamento Seguro do Atendimento
+  const [showModalCancelar, setShowModalCancelar] = useState(false);
+  const [motivoCancelamento, setMotivoCancelamento] = useState('');
+  const [cancelandoAtendimento, setCancelandoAtendimento] = useState(false);
+
+  const handleCancelarAtendimento = async () => {
+    const agendId = agendamento?.id || execucao?.agendamento_id;
+    if (!agendId) return;
+    setCancelandoAtendimento(true);
+    try {
+      const { error } = await supabase.rpc('cancelar_atendimento', {
+        p_atendimento_id: agendId,
+        p_motivo: motivoCancelamento.trim() || null,
+      });
+
+      if (error) throw error;
+
+      setShowModalCancelar(false);
+      setAgendamento((prev: any) => prev ? { ...prev, status: 'cancelado' } : prev);
+      if (execucao) {
+        setExecucao((prev: any) => prev ? { ...prev, status: 'cancelado' } : prev);
+      }
+    } catch (err: any) {
+      console.error('[VisualizarAtendimento] Erro ao cancelar atendimento:', err);
+      alert('Erro ao cancelar atendimento: ' + (err.message || 'Erro inesperado.'));
+    } finally {
+      setCancelandoAtendimento(false);
+    }
+  };
 
   const handleGerarPDFOS = async (acao: 'download' | 'print' = 'download') => {
     if (!agendamento || !tenant) return;
@@ -942,6 +973,21 @@ export const VisualizarAtendimento: React.FC = () => {
             </Button>
           ) : null}
 
+          {/* Botão Cancelar Atendimento */}
+          {statusAtual !== 'cancelado' && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowModalCancelar(true)}
+              className="flex items-center gap-1.5 text-[12px] bg-flare-500/10 text-flare-400 border border-flare-500/30 hover:bg-flare-500/20 shrink-0 font-bold"
+              title="Cancelar este atendimento e liberar o horário"
+            >
+              <Ban size={16} />
+              <span className="hidden sm:inline">Cancelar Atendimento</span>
+              <span className="sm:hidden">Cancelar</span>
+            </Button>
+          )}
+
           {/* Botão de Enviar Lembrete de Agendamento no WhatsApp */}
           {agendamento?.cliente?.telefone && (agendamento?.status === 'agendado' || agendamento?.status === 'confirmado') && (
             <Button
@@ -1759,6 +1805,54 @@ export const VisualizarAtendimento: React.FC = () => {
           }}
         />
       )}
+
+      {/* Modal de Cancelamento Seguro de Atendimento */}
+      <Modal
+        isOpen={showModalCancelar}
+        onClose={() => setShowModalCancelar(false)}
+        title="Cancelar Atendimento"
+        subtitle="Esta ação cancelará o agendamento e liberará o horário na agenda."
+        icon={<Ban size={20} className="text-flare-400" />}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-vapor-300 leading-relaxed">
+            Deseja realmente cancelar este atendimento? O status passará para <strong className="text-flare-400">Cancelado</strong> e qualquer recebimento previsto não liquidado será anulado. Todas as fotos e vistorias anteriores permanecerão salvas com segurança no histórico.
+          </p>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-vapor-400">
+              Motivo do Cancelamento (opcional):
+            </label>
+            <textarea
+              value={motivoCancelamento}
+              onChange={(e) => setMotivoCancelamento(e.target.value)}
+              placeholder="Ex: Cliente solicitou cancelamento por imprevisto, desistência de serviço, etc."
+              rows={3}
+              className="w-full bg-graphite-950 border border-graphite-700 rounded-lg p-2.5 text-sm text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500/60"
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-graphite-800">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowModalCancelar(false)}
+              disabled={cancelandoAtendimento}
+            >
+              Voltar
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleCancelarAtendimento}
+              disabled={cancelandoAtendimento}
+              className="bg-flare-600 hover:bg-flare-500 text-white font-bold"
+            >
+              {cancelandoAtendimento ? 'Cancelando...' : 'Confirmar Cancelamento'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

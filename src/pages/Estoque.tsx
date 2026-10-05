@@ -14,19 +14,22 @@ import {
   Sliders,
   Lock,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import type { Produto } from '../types/estoque';
 import { formatarCustoUnitario } from '../utils/formatters';
 import { ModalProduto } from '../components/estoque/ModalProduto';
 import { ModalEntradaEstoque } from '../components/estoque/ModalEntradaEstoque';
 import { ModalAjusteEstoque } from '../components/estoque/ModalAjusteEstoque';
+import { ModalConfirmacao } from '../components/ui/ModalConfirmacao';
+import { ModalLimiteAtingido } from '../components/planos/ModalLimiteAtingido';
 import { AvisoRecursoForaDoPlano } from '../components/planos/AvisoRecursoForaDoPlano';
 import { BloqueioRecursoPlano } from '../components/planos/BloqueioRecursoPlano';
 import { usePlano } from '../hooks/usePlano';
 
 export const Estoque: React.FC = () => {
   const { tenant, membership } = useAuth();
-  const { temFeature, carregandoPermissoes } = usePlano();
+  const { temFeature, carregandoPermissoes, consultarLimiteAoVivo, nomePlano } = usePlano();
   const podeGerenciar = membership?.role === 'dono' || membership?.role === 'gerente';
 
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -43,6 +46,18 @@ export const Estoque: React.FC = () => {
 
   const [modalAjusteOpen, setModalAjusteOpen] = useState(false);
   const [produtoAjuste, setProdutoAjuste] = useState<Produto | null>(null);
+
+  // Exclusão / Inativação Segura de Produto
+  const [produtoParaExcluir, setProdutoParaExcluir] = useState<Produto | null>(null);
+  const [deletandoProduto, setDeletandoProduto] = useState(false);
+
+  // Modal de Limite Rígido do Plano
+  const [limiteModalInfo, setLimiteModalInfo] = useState<{
+    isOpen: boolean;
+    uso?: number | null;
+    limite?: number | null;
+    mensagem?: string;
+  }>({ isOpen: false });
 
   const loadProdutos = async () => {
     if (!tenant || !podeGerenciar) {
@@ -141,6 +156,22 @@ export const Estoque: React.FC = () => {
     );
   }
 
+  // Abrir modal de criação com verificação de limite ao vivo
+  const handleAbrirNovoProduto = async () => {
+    setProdutoEditando(null);
+    const res = await consultarLimiteAoVivo('produtos');
+    if (res.atingiu) {
+      setLimiteModalInfo({
+        isOpen: true,
+        uso: res.uso,
+        limite: res.limite,
+        mensagem: res.mensagem,
+      });
+      return;
+    }
+    setModalProdutoOpen(true);
+  };
+
   // Handlers para cadastrar/editar
   const handleSaveProduto = async (data: {
     nome: string;
@@ -154,10 +185,25 @@ export const Estoque: React.FC = () => {
   }) => {
     if (!tenant) return;
 
-    if (produtoEditando) {
-      const { error } = await supabase
-        .from('produtos')
-        .update({
+    try {
+      if (produtoEditando) {
+        const { error } = await supabase
+          .from('produtos')
+          .update({
+            nome: data.nome,
+            marca: data.marca || null,
+            categoria: data.categoria,
+            unidade_uso: data.unidade_uso,
+            tamanho_compra: data.tamanho_compra,
+            preco_compra: data.preco_compra,
+            estoque_minimo: data.estoque_minimo,
+          })
+          .eq('id', produtoEditando.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('produtos').insert({
+          tenant_id: tenant.id,
           nome: data.nome,
           marca: data.marca || null,
           categoria: data.categoria,
@@ -165,27 +211,49 @@ export const Estoque: React.FC = () => {
           tamanho_compra: data.tamanho_compra,
           preco_compra: data.preco_compra,
           estoque_minimo: data.estoque_minimo,
-        })
-        .eq('id', produtoEditando.id);
+          estoque_atual: data.estoque_atual || 0,
+        });
 
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('produtos').insert({
-        tenant_id: tenant.id,
-        nome: data.nome,
-        marca: data.marca || null,
-        categoria: data.categoria,
-        unidade_uso: data.unidade_uso,
-        tamanho_compra: data.tamanho_compra,
-        preco_compra: data.preco_compra,
-        estoque_minimo: data.estoque_minimo,
-        estoque_atual: data.estoque_atual || 0,
+        if (error) throw error;
+      }
+
+      await loadProdutos();
+    } catch (err: any) {
+      console.error('[Estoque] Erro ao salvar produto:', err);
+      if (err?.message?.includes('LIMITE_PLANO_ATINGIDO')) {
+        setModalProdutoOpen(false);
+        const res = await consultarLimiteAoVivo('produtos');
+        setLimiteModalInfo({
+          isOpen: true,
+          uso: res.uso,
+          limite: res.limite,
+          mensagem: err.message.replace(/^.*?LIMITE_PLANO_ATINGIDO:\s*/, ''),
+        });
+        return;
+      }
+      throw err;
+    }
+  };
+
+  // Exclusão / Inativação Segura de Produto
+  const handleExcluirProduto = async () => {
+    if (!produtoParaExcluir) return;
+    setDeletandoProduto(true);
+    try {
+      const { error } = await supabase.rpc('inativar_ou_excluir_produto', {
+        p_produto_id: produtoParaExcluir.id,
       });
 
       if (error) throw error;
-    }
 
-    await loadProdutos();
+      setProdutoParaExcluir(null);
+      await loadProdutos();
+    } catch (err: any) {
+      console.error('[Estoque] Erro ao excluir produto:', err);
+      alert('Erro ao excluir produto: ' + (err.message || 'Erro inesperado.'));
+    } finally {
+      setDeletandoProduto(false);
+    }
   };
 
   const handleEntradaEstoque = async (data: {
@@ -244,10 +312,7 @@ export const Estoque: React.FC = () => {
         action={
           <Button
             variant="primary"
-            onClick={() => {
-              setProdutoEditando(null);
-              setModalProdutoOpen(true);
-            }}
+            onClick={handleAbrirNovoProduto}
             className="flex items-center gap-2"
           >
             <Plus size={18} />
@@ -406,6 +471,13 @@ export const Estoque: React.FC = () => {
                           >
                             <Edit2 size={16} />
                           </button>
+                          <button
+                            title="Excluir ou Inativar Produto"
+                            onClick={() => setProdutoParaExcluir(produto)}
+                            className="p-1.5 rounded hover:bg-rose-500/20 text-rose-400/80 hover:text-rose-400 transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
                       </div>
 
@@ -489,6 +561,28 @@ export const Estoque: React.FC = () => {
         onClose={() => setModalAjusteOpen(false)}
         produto={produtoAjuste}
         onConfirm={handleAjusteEstoque}
+      />
+
+      {/* Modal de Confirmação de Exclusão / Inativação Segura */}
+      <ModalConfirmacao
+        isOpen={!!produtoParaExcluir}
+        onClose={() => setProdutoParaExcluir(null)}
+        onConfirm={handleExcluirProduto}
+        title="Remover Produto do Estoque"
+        mensagem={`Deseja realmente remover o produto "${produtoParaExcluir?.nome}"? Se houver histórico de movimentações, o produto será inativado para proteger o balanço de custos e histórico de serviços. Caso contrário, será excluído definitivamente.`}
+        textoConfirmar={deletandoProduto ? 'Processando...' : 'Confirmar Remoção'}
+        variant="danger"
+      />
+
+      {/* Modal de Limite Rígido do Plano */}
+      <ModalLimiteAtingido
+        isOpen={limiteModalInfo.isOpen}
+        onClose={() => setLimiteModalInfo({ isOpen: false })}
+        recurso="produtos"
+        uso={limiteModalInfo.uso}
+        limite={limiteModalInfo.limite}
+        planoNome={nomePlano}
+        mensagemPersonalizada={limiteModalInfo.mensagem}
       />
     </div>
   );

@@ -9,6 +9,8 @@ import { useNavigate } from 'react-router-dom';
 import { formatTelefone, formatPlaca } from '../../utils/formatters';
 import { AlertTriangle, Car, Check, UserCheck, FileText, Calendar } from 'lucide-react';
 import { AlertaErro } from '../ui/AlertaErro';
+import { ModalLimiteAtingido } from '../planos/ModalLimiteAtingido';
+import { usePlano } from '../../hooks/usePlano';
 
 export type ProximaAcaoPosCadastro = 'nenhuma' | 'orcamento' | 'agendamento';
 
@@ -33,8 +35,18 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
 }) => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
+  const { consultarLimiteAoVivo, nomePlano } = usePlano();
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+
+  // Modal de Limite Atingido do Plano
+  const [limiteModalInfo, setLimiteModalInfo] = useState<{
+    isOpen: boolean;
+    uso?: number | null;
+    limite?: number | null;
+    mensagem?: string;
+  } | null>(null);
+
   const [proximaAcao, setProximaAcao] = useState<ProximaAcaoPosCadastro>(() => {
     if (iniciarComOrcamento) return 'orcamento';
     if (iniciarComAgendamento) return 'agendamento';
@@ -58,6 +70,18 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+
+    // Checagem proativa de limite de clientes
+    consultarLimiteAoVivo('clientes').then((res) => {
+      if (res.atingiu) {
+        setLimiteModalInfo({
+          isOpen: true,
+          uso: res.uso,
+          limite: res.limite,
+          mensagem: res.mensagem,
+        });
+      }
+    });
 
     // Reset estados
     setNome('');
@@ -167,6 +191,17 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
 
       if (error) {
         console.error('[CadastroRapido Error]:', error);
+        if (error.message?.includes('LIMITE_PLANO_ATINGIDO')) {
+          setLoading(false);
+          const res = await consultarLimiteAoVivo('clientes');
+          setLimiteModalInfo({
+            isOpen: true,
+            uso: res.uso,
+            limite: res.limite,
+            mensagem: error.message.replace(/^.*?LIMITE_PLANO_ATINGIDO:\s*/, ''),
+          });
+          return;
+        }
         setErrorMsg(error.message || 'Erro ao realizar cadastro.');
         setLoading(false);
       } else {
@@ -227,10 +262,11 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Cadastro Rápido de Balcão"
+    <>
+      <Modal
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Cadastro Rápido de Balcão"
       icon={<UserCheck className="text-amber-500" size={22} />}
       maxWidth="lg"
     >
@@ -466,5 +502,22 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         </div>
       </form>
     </Modal>
+
+    {/* Modal de Limite Rígido de Clientes */}
+    {limiteModalInfo?.isOpen && (
+      <ModalLimiteAtingido
+        isOpen={limiteModalInfo.isOpen}
+        onClose={() => {
+          setLimiteModalInfo(null);
+          onClose();
+        }}
+        recurso="clientes"
+        uso={limiteModalInfo.uso}
+        limite={limiteModalInfo.limite}
+        planoNome={nomePlano}
+        mensagemPersonalizada={limiteModalInfo.mensagem}
+      />
+    )}
+    </>
   );
 };

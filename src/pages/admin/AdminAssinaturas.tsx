@@ -44,10 +44,21 @@ export const AdminAssinaturas: React.FC = () => {
   const [novoPlano, setNovoPlano] = useState<'free' | 'pro' | 'studio'>('pro');
   const [motivoAudit, setMotivoAudit] = useState('');
   const [salvandoAlteracao, setSalvandoAlteracao] = useState(false);
+  const [planosCadastrados, setPlanosCadastrados] = useState<{ codigo: string; nome: string; preco_centavos: number }[]>([]);
 
   const carregarDados = async () => {
     setLoading(true);
     try {
+      // 0. Carregar planos ativos do banco de dados em tempo real
+      const { data: pData } = await supabase
+        .from('plans')
+        .select('codigo, nome, preco_centavos')
+        .eq('ativo', true)
+        .order('preco_centavos', { ascending: true });
+      if (pData && pData.length > 0) {
+        setPlanosCadastrados(pData);
+      }
+
       // 1. Obter métricas gerais (MRR conta APENAS assinaturas ativas)
       const { data: dataMetricas, error: errMetricas } = await supabase.rpc('admin_obter_metricas_assinaturas');
       if (errMetricas) throw errMetricas;
@@ -338,9 +349,19 @@ export const AdminAssinaturas: React.FC = () => {
                   onChange={(e) => setNovoPlano(e.target.value as any)}
                   className="p-2.5 bg-graphite-950 border border-graphite-700 rounded-lg text-xs text-vapor-100 focus:border-amber-500 outline-none"
                 >
-                  <option value="free">FREE (R$ 0/mês)</option>
-                  <option value="pro">PRO (R$ 67/mês)</option>
-                  <option value="studio">STUDIO (R$ 147/mês)</option>
+                  {planosCadastrados.length > 0 ? (
+                    planosCadastrados.map((p) => (
+                      <option key={p.codigo} value={p.codigo}>
+                        {p.nome.toUpperCase()} (R$ {(p.preco_centavos / 100).toFixed(2).replace('.', ',')}/mês)
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="free">FREE</option>
+                      <option value="pro">PRO</option>
+                      <option value="studio">STUDIO</option>
+                    </>
+                  )}
                 </select>
               </div>
 

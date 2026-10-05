@@ -17,7 +17,8 @@ import {
   AlertTriangle,
   BookOpen,
   Filter,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Trash2
 } from 'lucide-react';
 import { parseVideoUrl, getEmbedUrl } from '../../utils/videoExtractor';
 import { AdminAbaMateriaisDidaticos } from '../../components/admin/AdminAbaMateriaisDidaticos';
@@ -77,9 +78,13 @@ export const AdminTreinamentos: React.FC = () => {
   // Video Preview
   const [previewVideo, setPreviewVideo] = useState<AdminTreinamentoItem | null>(null);
 
+  // Modal de Exclusão Segura
+  const [treinamentoParaExcluir, setTreinamentoParaExcluir] = useState<AdminTreinamentoItem | null>(null);
+  const [deletandoTreinamento, setDeletandoTreinamento] = useState(false);
+
   // Previne rolagem de fundo enquanto modais estiverem abertos
   useEffect(() => {
-    if (showModal || previewVideo) {
+    if (showModal || previewVideo || treinamentoParaExcluir) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -87,7 +92,7 @@ export const AdminTreinamentos: React.FC = () => {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showModal, previewVideo]);
+  }, [showModal, previewVideo, treinamentoParaExcluir]);
 
   const fetchTreinamentos = async () => {
     setLoading(true);
@@ -220,6 +225,25 @@ export const AdminTreinamentos: React.FC = () => {
         ? prev.filter(p => p !== planoCodigo)
         : [...prev, planoCodigo]
     );
+  };
+
+  const handleExcluirTreinamento = async () => {
+    if (isReadOnly || !treinamentoParaExcluir) return;
+    setDeletandoTreinamento(true);
+    try {
+      const { error } = await supabase.rpc('admin_excluir_treinamento', {
+        p_treinamento_id: treinamentoParaExcluir.id
+      });
+      if (error) throw error;
+      setMsg({ type: 'success', text: `Treinamento "${treinamentoParaExcluir.titulo}" excluído com sucesso!` });
+      setTreinamentoParaExcluir(null);
+      await fetchTreinamentos();
+    } catch (err: any) {
+      console.error('[AdminTreinamentos] Erro ao excluir treinamento:', err);
+      setMsg({ type: 'error', text: 'Erro ao excluir treinamento: ' + (err.message || 'Erro inesperado.') });
+    } finally {
+      setDeletandoTreinamento(false);
+    }
   };
 
   return (
@@ -462,6 +486,14 @@ export const AdminTreinamentos: React.FC = () => {
                           <Edit3 className="w-3.5 h-3.5" />
                           <span>Editar</span>
                         </button>
+                        <button
+                          onClick={() => setTreinamentoParaExcluir(item)}
+                          disabled={isReadOnly}
+                          className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-xs font-medium flex items-center transition border border-rose-500/30 disabled:opacity-30"
+                          title="Excluir Treinamento"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -605,6 +637,14 @@ export const AdminTreinamentos: React.FC = () => {
                               title="Editar Treinamento"
                             >
                               <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setTreinamentoParaExcluir(item)}
+                              disabled={isReadOnly}
+                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition border border-rose-500/30 disabled:opacity-30"
+                              title="Excluir Treinamento"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -827,6 +867,64 @@ export const AdminTreinamentos: React.FC = () => {
                 allowFullScreen
                 className="w-full h-full border-0"
               />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Confirmação de Exclusão */}
+      {treinamentoParaExcluir && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative my-auto">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white font-heading">Excluir Aula em Vídeo?</h3>
+                <p className="text-xs text-slate-400">Esta ação não poderá ser revertida.</p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <div className="text-slate-300">
+                <span className="text-slate-500">Título:</span>{' '}
+                <strong className="text-white">{treinamentoParaExcluir.titulo}</strong>
+              </div>
+              <div className="text-slate-300">
+                <span className="text-slate-500">Categoria:</span>{' '}
+                <span className="text-amber-400">{treinamentoParaExcluir.categoria}</span>
+              </div>
+              <div className="text-slate-400 text-[11px] pt-1 border-t border-slate-800/80">
+                O vídeo será removido permanentemente da Academia do Detailer e deixará de aparecer para todas as oficinas assinantes.
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setTreinamentoParaExcluir(null)}
+                disabled={deletandoTreinamento}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleExcluirTreinamento}
+                disabled={deletandoTreinamento}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition shadow-lg shadow-rose-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {deletandoTreinamento ? (
+                  <span>Excluindo...</span>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Confirmar Exclusão</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>,

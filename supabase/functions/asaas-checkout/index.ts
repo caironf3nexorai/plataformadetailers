@@ -130,11 +130,15 @@ serve(async (req) => {
       .eq('codigo', plano)
       .maybeSingle();
 
+    if (!planRow) {
+      throw new Error(`Plano '${plano}' não encontrado na tabela de planos.`);
+    }
+
     let precoCentavos: number;
     if (isAnual) {
-      precoCentavos = planRow?.preco_anual_centavos ?? (planRow?.preco_centavos ? planRow.preco_centavos * 10 : (plano === 'pro' ? 68400 : 149900));
+      precoCentavos = planRow.preco_anual_centavos ?? (planRow.preco_centavos * 10);
     } else {
-      precoCentavos = planRow?.preco_centavos ?? (plano === 'pro' ? 6700 : 14700);
+      precoCentavos = planRow.preco_centavos;
     }
 
     let valorReais = Number((precoCentavos / 100).toFixed(2));

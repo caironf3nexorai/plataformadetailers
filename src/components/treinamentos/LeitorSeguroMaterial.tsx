@@ -231,6 +231,7 @@ interface LeitorSeguroMaterialProps {
   material: AcademiaMaterial;
   tenantNome?: string;
   usuarioDocumento?: string;
+  isPreview?: boolean;
   onClose: () => void;
 }
 
@@ -238,6 +239,7 @@ export const LeitorSeguroMaterial: React.FC<LeitorSeguroMaterialProps> = ({
   material,
   tenantNome = 'Oficina Detailer',
   usuarioDocumento = '',
+  isPreview = false,
   onClose
 }) => {
   const [loading, setLoading] = useState(true);
@@ -311,10 +313,12 @@ export const LeitorSeguroMaterial: React.FC<LeitorSeguroMaterialProps> = ({
       setErrorMsg(null);
 
       try {
-        supabase.rpc('registrar_acesso_material', {
-          p_material_id: material.id,
-          p_tipo: 'visualizacao'
-        }).then(undefined, () => {});
+        if (!isPreview) {
+          supabase.rpc('registrar_acesso_material', {
+            p_material_id: material.id,
+            p_tipo: 'visualizacao'
+          }).then(undefined, () => {});
+        }
 
         const { data, error } = await supabase.storage
           .from('academia-materiais')
@@ -477,10 +481,12 @@ export const LeitorSeguroMaterial: React.FC<LeitorSeguroMaterialProps> = ({
     if (!material.permitir_download) return;
 
     try {
-      supabase.rpc('registrar_acesso_material', {
-        p_material_id: material.id,
-        p_tipo: 'download'
-      }).then(undefined, () => {});
+      if (!isPreview) {
+        supabase.rpc('registrar_acesso_material', {
+          p_material_id: material.id,
+          p_tipo: 'download'
+        }).then(undefined, () => {});
+      }
 
       const { data, error } = await supabase.storage
         .from('academia-materiais')

@@ -704,7 +704,6 @@ export const AdminPlanos: React.FC = () => {
                           <div className="space-y-1.5">
                             {catalogo.filter(c => c.grupo === grupo).map((feat) => {
                               const isEnabled = item.features[feat.chave] ?? false;
-                              const limConf = item.limites[feat.chave] || { valor: '', ilimitado: true };
 
                               return (
                                 <div key={feat.chave} className={`p-2.5 rounded-lg border transition ${
@@ -728,7 +727,7 @@ export const AdminPlanos: React.FC = () => {
                                         const newFeat = { ...item.features, [feat.chave]: !isEnabled };
                                         setEditState({ ...editState, [plano.codigo]: { ...item, features: newFeat } });
                                       }}
-                                      className={`px-2 py-1 rounded text-[10px] font-bold border transition flex items-center space-x-1 ${
+                                      className={`px-2 py-1 rounded text-[10px] font-bold border transition flex items-center space-x-1 cursor-pointer ${
                                         isEnabled
                                           ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
                                           : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
@@ -747,46 +746,6 @@ export const AdminPlanos: React.FC = () => {
                                       )}
                                     </button>
                                   </div>
-
-                                  {/* Se estiver habilitado, permite definir limite de quantidade de uso */}
-                                  {isEnabled && (
-                                    <div className="mt-2 pt-2 border-t border-slate-900 flex items-center justify-between text-[11px]">
-                                      <span className="text-slate-400 text-[10px]">Qtd / Operações:</span>
-                                      <div className="flex items-center space-x-2">
-                                        {!limConf.ilimitado && (
-                                          <CampoNumerico
-                                            integerOnly
-                                            disabled={isReadOnly}
-                                            value={limConf.valor}
-                                            onChange={(val) => {
-                                              const newLim = { ...item.limites };
-                                              newLim[feat.chave] = { ...limConf, valor: val ? String(val) : '' };
-                                              setEditState({ ...editState, [plano.codigo]: { ...item, limites: newLim } });
-                                            }}
-                                            align="right"
-                                            placeholder="Ex: 50"
-                                            wrapperClassName="w-16 min-h-[26px]"
-                                          />
-                                        )}
-                                        <button
-                                          type="button"
-                                          disabled={isReadOnly}
-                                          onClick={() => {
-                                            const newLim = { ...item.limites };
-                                            newLim[feat.chave] = { ...limConf, ilimitado: !limConf.ilimitado };
-                                            setEditState({ ...editState, [plano.codigo]: { ...item, limites: newLim } });
-                                          }}
-                                          className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border transition ${
-                                            limConf.ilimitado
-                                              ? 'bg-slate-900 text-amber-400 border-amber-500/30'
-                                              : 'bg-slate-900 text-slate-400 border-slate-700'
-                                          }`}
-                                        >
-                                          {limConf.ilimitado ? 'Ilimitado' : 'Qtd'}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
                                 </div>
                               );
                             })}

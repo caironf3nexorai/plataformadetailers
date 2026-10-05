@@ -180,10 +180,15 @@ export const Hoje: React.FC = () => {
           servico:servicos(id, nome)
         `)
         .eq('tenant_id', tenant.id)
+        .neq('status', 'cancelado')
+        .neq('status', 'nao_compareceu')
         .or('status.eq.aguardando_confirmacao,sinal_status.eq.pendente')
         .order('created_at', { ascending: false });
 
-      setAgendamentosPendentes((pendentesData as any[]) || []);
+      const filtrados = ((pendentesData as any[]) || []).filter(
+        (ag) => ag.status !== 'cancelado' && ag.status !== 'nao_compareceu'
+      );
+      setAgendamentosPendentes(filtrados);
 
 
 
@@ -350,9 +355,11 @@ export const Hoje: React.FC = () => {
         p_motivo: 'Recusado pelo estabelecimento'
       });
       if (error) throw error;
+      showSuccess('Agendamento online recusado.');
       await fetchHojeData();
     } catch (err: any) {
       console.error('[Hoje] Erro ao recusar agendamento:', err);
+      showError(err.message || 'Erro ao recusar agendamento.');
     }
   };
 

@@ -94,6 +94,7 @@ export const AdminOficinas: React.FC = () => {
   const [novoPlano, setNovoPlano] = useState<'free' | 'pro' | 'studio'>('pro');
   const [motivoAudit, setMotivoAudit] = useState('');
   const [salvandoPlano, setSalvandoPlano] = useState(false);
+  const [planosCadastrados, setPlanosCadastrados] = useState<{ codigo: string; nome: string; preco_centavos: number }[]>([]);
 
   // Estados para Gestão de Membros (Promover Admin / Tornar Parceiro)
   const [platformAdminsEmails, setPlatformAdminsEmails] = useState<string[]>([]);
@@ -380,6 +381,16 @@ export const AdminOficinas: React.FC = () => {
 
       if (error) throw error;
       setTenants(data || []);
+
+      // Carregar planos ativos do banco de dados em tempo real
+      const { data: pData } = await supabase
+        .from('plans')
+        .select('codigo, nome, preco_centavos')
+        .eq('ativo', true)
+        .order('preco_centavos', { ascending: true });
+      if (pData && pData.length > 0) {
+        setPlanosCadastrados(pData);
+      }
     } catch (err: any) {
       console.error('[AdminOficinas] Erro ao carregar oficinas:', err.message);
     } finally {
@@ -1200,9 +1211,19 @@ export const AdminOficinas: React.FC = () => {
                   onChange={(e) => setNovoPlano(e.target.value as any)}
                   className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-amber-500 outline-none cursor-pointer"
                 >
-                  <option value="free">FREE (R$ 0/mês)</option>
-                  <option value="pro">PRO (R$ 67/mês)</option>
-                  <option value="studio">STUDIO (R$ 147/mês)</option>
+                  {planosCadastrados.length > 0 ? (
+                    planosCadastrados.map((p) => (
+                      <option key={p.codigo} value={p.codigo}>
+                        {p.nome.toUpperCase()} (R$ {(p.preco_centavos / 100).toFixed(2).replace('.', ',')}/mês)
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="free">FREE</option>
+                      <option value="pro">PRO</option>
+                      <option value="studio">STUDIO</option>
+                    </>
+                  )}
                 </select>
               </div>
 

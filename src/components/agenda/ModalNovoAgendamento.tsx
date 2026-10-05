@@ -22,6 +22,8 @@ import { SeletorServicos } from '../servicos/SeletorServicos';
 import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
 import { AvisoPernoite } from '../compartilhado/AvisoPernoite';
 import { montarTimestampLocal, formatarDataIsoSP } from '../../utils/datas';
+import { ModalLimiteAtingido } from '../planos/ModalLimiteAtingido';
+import { usePlano } from '../../hooks/usePlano';
 
 function obterMotivoPredominante(slots: HorarioDisponivel[]): string {
   const contagem: Record<string, number> = {};
@@ -67,8 +69,32 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
   initialVeiculoId,
 }) => {
   const { tenant, membership } = useAuth();
+  const { consultarLimiteAoVivo, nomePlano } = usePlano();
   const isGestor = membership?.role === 'dono' || membership?.role === 'gerente';
   const [step, setStep] = useState<number>(1);
+
+  // Modal de Limite Atingido
+  const [limiteModalInfo, setLimiteModalInfo] = useState<{
+    isOpen: boolean;
+    uso?: number | null;
+    limite?: number | null;
+    mensagem?: string;
+  } | null>(null);
+
+  // Verificação proativa de limite ao vivo ao abrir o modal
+  useEffect(() => {
+    if (!isOpen) return;
+    consultarLimiteAoVivo('agendamentos').then((res) => {
+      if (res.atingiu) {
+        setLimiteModalInfo({
+          isOpen: true,
+          uso: res.uso,
+          limite: res.limite,
+          mensagem: res.mensagem,
+        });
+      }
+    });
+  }, [isOpen]);
 
   // Form State
   const [clienteSearch, setClienteSearch] = useState('');
@@ -525,6 +551,16 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[ModalNovoAgendamento] erro criar:', err);
+      if (err?.message?.includes('LIMITE_PLANO_ATINGIDO')) {
+        const res = await consultarLimiteAoVivo('agendamentos');
+        setLimiteModalInfo({
+          isOpen: true,
+          uso: res.uso,
+          limite: res.limite,
+          mensagem: err.message.replace(/^.*?LIMITE_PLANO_ATINGIDO:\s*/, ''),
+        });
+        return;
+      }
       setErrorMessage(err.message || 'Erro ao criar agendamento.');
     } finally {
       setSubmitting(false);
@@ -1111,6 +1147,22 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
       categoriaVeiculoId={selectedCategoria?.id}
       categoriaVeiculoNome={selectedCategoria?.nome}
     />
+
+    {/* Modal de Limite Rígido de Agendamentos */}
+    {limiteModalInfo?.isOpen && (
+      <ModalLimiteAtingido
+        isOpen={limiteModalInfo.isOpen}
+        onClose={() => {
+          setLimiteModalInfo(null);
+          onClose();
+        }}
+        recurso="agendamentos"
+        uso={limiteModalInfo.uso}
+        limite={limiteModalInfo.limite}
+        planoNome={nomePlano}
+        mensagemPersonalizada={limiteModalInfo.mensagem}
+      />
+    )}
     </>
   );
 };
