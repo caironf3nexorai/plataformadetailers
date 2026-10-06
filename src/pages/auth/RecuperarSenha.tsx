@@ -17,6 +17,17 @@ export const RecuperarSenha: React.FC = () => {
 
   // Estados para modo de redefinição de senha
   const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [validatingToken, setValidatingToken] = useState(() => {
+    const search = window.location.search;
+    const hash = window.location.hash;
+    return (
+      search.includes('code=') ||
+      search.includes('token=') ||
+      search.includes('type=recovery') ||
+      hash.includes('type=recovery') ||
+      hash.includes('access_token=')
+    );
+  });
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
   const [showNovaSenha, setShowNovaSenha] = useState(false);
@@ -25,21 +36,113 @@ export const RecuperarSenha: React.FC = () => {
 
   // Detecta se o usuário acessou a tela através do link de redefinição enviado por e-mail
   useEffect(() => {
-    // 1. Escuta o evento PASSWORD_RECOVERY do Supabase Auth
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+    let active = true;
+
+    // 1. Escuta o evento PASSWORD_RECOVERY ou sessão recuperada do Supabase Auth
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!active) return;
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
+        setValidatingToken(false);
+      }
+      // Quando PKCE ou login por token conclui a autenticação de recuperação
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+        const search = window.location.search;
+        const hash = window.location.hash;
+        if (
+          search.includes('code=') ||
+          search.includes('type=recovery') ||
+          hash.includes('type=recovery') ||
+          hash.includes('access_token=')
+        ) {
+          setIsRecoveryMode(true);
+          setValidatingToken(false);
+        }
       }
     });
 
-    // 2. Fallback: analisa se a URL contém hash ou parâmetros de recovery
-    const hash = window.location.hash;
-    const search = window.location.search;
-    if (hash.includes('type=recovery') || search.includes('type=recovery')) {
-      setIsRecoveryMode(true);
+    // 2. Análise de parâmetros da URL (Query e Hash)
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashClean = window.location.hash.replace(/^#/, '');
+    const hashParams = new URLSearchParams(hashClean);
+
+    // 2.1 Verifica se houve erro retornado pelo Supabase (ex: link expirado ou já utilizado)
+    const errDesc = searchParams.get('error_description') || hashParams.get('error_description');
+    const errCode = searchParams.get('error_code') || hashParams.get('error_code') || searchParams.get('error') || hashParams.get('error');
+    if (errDesc || errCode) {
+      setValidatingToken(false);
+      setIsRecoveryMode(false);
+      const decoded = decodeURIComponent(errDesc || errCode || '').replace(/\+/g, ' ');
+      setErrorMsg(
+        decoded.toLowerCase().includes('expired') || decoded.toLowerCase().includes('otp')
+          ? 'O link de recuperação é inválido ou já expirou. Por favor, solicite um novo abaixo.'
+          : `Não foi possível validar o link: ${decoded}`
+      );
+      return () => {
+        active = false;
+        authListener?.subscription.unsubscribe();
+      };
     }
 
+    // 2.2 Fluxo PKCE: Se a URL contiver o código de autorização (?code=...)
+    const code = searchParams.get('code');
+    if (code) {
+      setValidatingToken(true);
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (!active) return;
+        if (!error && data?.session) {
+          setIsRecoveryMode(true);
+          setValidatingToken(false);
+          // Limpa o code da URL para manter a barra de endereços limpa
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
+
+        // Se exchangeCodeForSession falhar (por exemplo, se detectSessionInUrl já consumiu o code)
+        supabase.auth.getSession().then(({ data: sessData }) => {
+          if (!active) return;
+          if (sessData?.session) {
+            setIsRecoveryMode(true);
+            setValidatingToken(false);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else {
+            console.error('[RecuperarSenha] Erro ao trocar code PKCE:', error);
+            setValidatingToken(false);
+            setIsRecoveryMode(false);
+            setErrorMsg('O link de recuperação é inválido ou já expirou. Por favor, solicite um novo abaixo.');
+          }
+        });
+      });
+      return () => {
+        active = false;
+        authListener?.subscription.unsubscribe();
+      };
+    }
+
+    // 2.3 Fluxo Clássico (Hash com type=recovery)
+    if (
+      window.location.hash.includes('type=recovery') ||
+      window.location.search.includes('type=recovery') ||
+      hashParams.get('type') === 'recovery' ||
+      searchParams.get('type') === 'recovery'
+    ) {
+      setIsRecoveryMode(true);
+      setValidatingToken(false);
+    }
+
+    // 2.4 Fallback: checa se já existe sessão ativa ao abrir com parâmetros de recuperação
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!active) return;
+      if (session && (window.location.hash.includes('recovery') || window.location.search.includes('recovery'))) {
+        setIsRecoveryMode(true);
+        setValidatingToken(false);
+      } else if (!searchParams.get('code') && !window.location.hash.includes('recovery')) {
+        setValidatingToken(false);
+      }
+    });
+
     return () => {
+      active = false;
       authListener?.subscription.unsubscribe();
     };
   }, []);
@@ -112,10 +215,16 @@ export const RecuperarSenha: React.FC = () => {
         <div className="text-center flex flex-col items-center gap-3">
           <LogoNuvemWash size="lg" className="mb-1" />
           <h1 className="font-display text-[24px] sm:text-[28px] text-vapor-100 uppercase tracking-wide">
-            {isRecoveryMode ? 'Criar Nova Senha' : 'Recuperar Senha'}
+            {validatingToken
+              ? 'Verificando Link...'
+              : isRecoveryMode
+              ? 'Criar Nova Senha'
+              : 'Recuperar Senha'}
           </h1>
           <p className="font-sans text-[14px] text-vapor-400">
-            {isRecoveryMode
+            {validatingToken
+              ? 'Validando autorização de segurança...'
+              : isRecoveryMode
               ? 'Digite sua nova senha de acesso abaixo'
               : 'Enviaremos um link de redefinição para o seu e-mail'}
           </p>
@@ -129,8 +238,16 @@ export const RecuperarSenha: React.FC = () => {
             </div>
           )}
 
-          {/* SUCESSO AO REDEFINIR A NOVA SENHA */}
-          {senhaRedefinidaComSucesso ? (
+          {/* INDICADOR DE CARREGAMENTO / TROCA DE CÓDIGO */}
+          {validatingToken ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-3 text-vapor-400">
+              <div className="w-8 h-8 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+              <span className="font-sans text-[14px] text-vapor-200 font-medium">Validando link de recuperação...</span>
+              <p className="font-sans text-xs text-vapor-400 text-center">
+                Aguarde um momento enquanto liberamos a tela para você criar sua nova senha.
+              </p>
+            </div>
+          ) : senhaRedefinidaComSucesso ? (
             <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded flex flex-col items-center text-center gap-3 text-emerald-400">
               <CheckCircle2 size={36} />
               <span className="font-sans text-[16px] font-bold">Senha alterada com sucesso!</span>
