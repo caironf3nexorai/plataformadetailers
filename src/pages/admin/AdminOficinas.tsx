@@ -20,8 +20,10 @@ import {
   Award,
   Trash2,
   UserX,
-  Save
+  Save,
+  MessageCircle,
 } from 'lucide-react';
+import { formatTelefone, cleanTelefone } from '../../utils/formatters';
 
 interface TenantItem {
   id: string;
@@ -30,6 +32,7 @@ interface TenantItem {
   plano: 'free' | 'pro' | 'studio';
   cidade: string | null;
   uf: string | null;
+  telefone?: string | null;
   created_at: string;
   nome_alterado_em?: string | null;
   total_membros: number;
@@ -380,7 +383,30 @@ export const AdminOficinas: React.FC = () => {
       });
 
       if (error) throw error;
-      setTenants(data || []);
+      
+      const tenantsList: TenantItem[] = (data || []).map((item: any) => ({ ...item }));
+      
+      // Enriquecer com telefone da oficina (para contato direto WhatsApp)
+      if (tenantsList.length > 0) {
+        try {
+          const tenantIds = tenantsList.map((t) => t.id);
+          const { data: phonesData } = await supabase
+            .from('tenants')
+            .select('id, telefone')
+            .in('id', tenantIds);
+
+          if (phonesData && phonesData.length > 0) {
+            const phoneMap = new Map(phonesData.map((p: any) => [p.id, p.telefone]));
+            tenantsList.forEach((t) => {
+              t.telefone = phoneMap.get(t.id) || null;
+            });
+          }
+        } catch {
+          // Fallback silencioso caso não consiga consultar a coluna
+        }
+      }
+
+      setTenants(tenantsList);
 
       // Carregar planos ativos do banco de dados em tempo real
       const { data: pData } = await supabase
@@ -464,7 +490,14 @@ export const AdminOficinas: React.FC = () => {
           storage: [],
         });
       } else {
-        setDetailData(data);
+        const tenantLocal = tenants.find((t) => t.id === id);
+        setDetailData({
+          ...data,
+          tenant: {
+            ...data.tenant,
+            telefone: tenantLocal?.telefone || data.tenant?.telefone || null,
+          },
+        });
       }
 
       if (adminsData) {
@@ -746,7 +779,22 @@ export const AdminOficinas: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-slate-300">
-                        {t.cidade ? `${t.cidade} - ${t.uf || ''}` : <span className="text-slate-600">Não informado</span>}
+                        <div>{t.cidade ? `${t.cidade} - ${t.uf || ''}` : <span className="text-slate-600">Não informado</span>}</div>
+                        {t.telefone ? (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="text-xs font-mono text-slate-400">{formatTelefone(t.telefone)}</span>
+                            <a
+                              href={`https://wa.me/55${cleanTelefone(t.telefone)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[11px] transition"
+                              title="Abrir WhatsApp da Oficina"
+                            >
+                              <MessageCircle className="w-3 h-3" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3.5 text-center font-mono text-slate-200">
                         {t.total_membros}
@@ -844,6 +892,24 @@ export const AdminOficinas: React.FC = () => {
                         </button>
                       </div>
                       <p className="text-xs text-slate-500 font-mono">/{t.slug}</p>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        {t.cidade ? `${t.cidade} - ${t.uf || ''}` : 'Local não informado'}
+                      </div>
+                      {t.telefone && (
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="text-[11px] font-mono text-slate-400">{formatTelefone(t.telefone)}</span>
+                          <a
+                            href={`https://wa.me/55${cleanTelefone(t.telefone)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] transition"
+                            title="Abrir WhatsApp da Oficina"
+                          >
+                            <MessageCircle className="w-3 h-3" />
+                            <span>WhatsApp</span>
+                          </a>
+                        </div>
+                      )}
                     </div>
                     <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
                       t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
@@ -1022,6 +1088,21 @@ export const AdminOficinas: React.FC = () => {
                   <p className="text-xs text-slate-400 pt-1">
                     Cidade: {detailData.tenant.cidade ? `${detailData.tenant.cidade} - ${detailData.tenant.uf}` : 'Não cadastrada'}
                   </p>
+                  {detailData.tenant.telefone && (
+                    <div className="flex items-center gap-2 pt-1 text-xs text-slate-400">
+                      <span>Telefone da Oficina: <strong className="font-mono text-slate-200">{formatTelefone(detailData.tenant.telefone)}</strong></span>
+                      <a
+                        href={`https://wa.me/55${cleanTelefone(detailData.tenant.telefone)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[11px] transition"
+                        title="Conversar com a Oficina no WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>Chamar no WhatsApp</span>
+                      </a>
+                    </div>
+                  )}
                   <p className="text-xs text-slate-400">
                     Cadastrada em: {new Date(detailData.tenant.created_at).toLocaleDateString('pt-BR')}
                   </p>
@@ -1058,6 +1139,21 @@ export const AdminOficinas: React.FC = () => {
                                 )}
                               </div>
                               <div className="text-slate-400 font-mono text-[11px] mt-0.5">{m.email}</div>
+                              {m.telefone && (
+                                <div className="mt-1 flex items-center gap-2">
+                                  <span className="text-slate-400 font-mono text-[11px]">{formatTelefone(m.telefone)}</span>
+                                  <a
+                                    href={`https://wa.me/55${cleanTelefone(m.telefone)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] transition"
+                                    title="Conversar com este membro no WhatsApp"
+                                  >
+                                    <MessageCircle className="w-3 h-3" />
+                                    <span>WhatsApp</span>
+                                  </a>
+                                </div>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-2 flex-wrap self-end md:self-center">
