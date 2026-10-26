@@ -112,15 +112,24 @@ export function cabecalhoDocumento(
     ? [212, 212, 216] as [number, number, number]
     : hexToRgb(dados.pdfCorTextoCabecalho, [255, 255, 255]);
 
-  // Nome da Oficina e Razão Social (se disponível)
+  // Nome da Oficina e Razão Social (evitando repetição caso o usuário preencha o mesmo nome em ambos)
   doc.setTextColor(corPrimariaRgb[0], corPrimariaRgb[1], corPrimariaRgb[2]);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12.5);
-  const nomeDisplay = dados.oficinaRazaoSocial
-    ? `${dados.oficinaNome.toUpperCase()} (${dados.oficinaRazaoSocial})`
-    : dados.oficinaNome.toUpperCase();
+  doc.setFontSize(11);
 
-  doc.text(nomeDisplay, textStartX, 10);
+  const nomeOficinaLimpo = (dados.oficinaNome || '').trim();
+  const razaoSocialLimpa = (dados.oficinaRazaoSocial || '').trim();
+  const mesmaEmpresa = !razaoSocialLimpa || razaoSocialLimpa.toLowerCase() === nomeOficinaLimpo.toLowerCase();
+
+  const nomeDisplay = mesmaEmpresa
+    ? nomeOficinaLimpo.toUpperCase()
+    : `${nomeOficinaLimpo.toUpperCase()} (${razaoSocialLimpa})`;
+
+  // Limite de largura para o nome não colidir com o bloco da OS / Data à direita (largura disponível ~90mm a 105mm)
+  const maxLarguraTexto = (pageWidth - 15 - 55) - textStartX;
+  const linhasNome = doc.splitTextToSize(nomeDisplay, maxLarguraTexto);
+  // Se quebrar em mais de 1 linha, exibe a primeira linha e trunca elegantemente se necessário
+  doc.text(linhasNome[0] || nomeDisplay, textStartX, 10);
 
   // Subtítulo do Cabeçalho (Customizado nos planos Pro/Studio)
   doc.setTextColor(corTextoCabecalhoRgb[0], corTextoCabecalhoRgb[1], corTextoCabecalhoRgb[2]);
@@ -136,12 +145,14 @@ export function cabecalhoDocumento(
     .filter(Boolean)
     .join(' • ');
 
-  doc.text(infoLinha || 'NuvemWash', textStartX, 16);
+  const linhasInfo = doc.splitTextToSize(infoLinha || 'NuvemWash', maxLarguraTexto + 10);
+  doc.text(linhasInfo[0] || infoLinha || 'NuvemWash', textStartX, 16);
 
   // Título do Documento
   doc.setFontSize(8);
   doc.setTextColor(corTextoCabecalhoRgb[0], corTextoCabecalhoRgb[1], corTextoCabecalhoRgb[2]);
-  doc.text(dados.documentoTitulo.toUpperCase(), textStartX, 23);
+  const linhasTitulo = doc.splitTextToSize(dados.documentoTitulo.toUpperCase(), maxLarguraTexto + 10);
+  doc.text(linhasTitulo[0] || dados.documentoTitulo.toUpperCase(), textStartX, 23);
 
   // Lado direito: OS, Data e Status
   doc.setFontSize(8.5);
