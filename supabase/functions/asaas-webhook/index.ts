@@ -113,17 +113,35 @@ serve(async (req) => {
             p_tenant_id: tenantId,
           });
 
-          if (promoRes?.deve_restaurar === true && promoRes?.valor_normal_centavos) {
-            const valorNormalReais = Number((promoRes.valor_normal_centavos / 100).toFixed(2));
-
-            // Buscar asaas_subscription_id da assinatura deste tenant
+          if (promoRes?.deve_restaurar === true) {
+            // Buscar assinatura local para obter plano e ciclo
             const { data: assLocal } = await supabase
               .from('assinaturas')
-              .select('asaas_subscription_id')
+              .select('asaas_subscription_id, plano, ciclo')
               .eq('tenant_id', tenantId)
               .maybeSingle();
 
             if (assLocal?.asaas_subscription_id) {
+              // ✅ SEMPRE usa o preço ATUAL do plano na tabela plans (dinâmico)
+              // Se o plano mudou de R$57 para R$69 durante a promoção, usará R$69.
+              // O valor armazenado (promo_valor_normal_centavos) só entra como fallback.
+              let valorRestaurarCentavos: number = promoRes.valor_normal_centavos ?? 0;
+
+              const isAnualLocal = assLocal.ciclo === 'anual';
+              const { data: planAtual } = await supabase
+                .from('plans')
+                .select('preco_centavos, preco_anual_centavos')
+                .eq('codigo', assLocal.plano)
+                .maybeSingle();
+
+              if (planAtual) {
+                // Preço atual do plano (pode ter mudado desde o checkout)
+                valorRestaurarCentavos = isAnualLocal
+                  ? (planAtual.preco_anual_centavos ?? planAtual.preco_centavos * 10)
+                  : planAtual.preco_centavos;
+              }
+
+              const valorNormalReais = Number((valorRestaurarCentavos / 100).toFixed(2));
               const ASAAS_API_URL = Deno.env.get('ASAAS_API_URL') || 'https://api.asaas.com/v3';
               const ASAAS_API_KEY = Deno.env.get('ASAAS_API_KEY') || '';
 
@@ -145,9 +163,18 @@ serve(async (req) => {
               const restoreData = await resRestore.json();
               console.log(
                 `[asaas-webhook] Promoção encerrada (cupom: ${promoRes.cupom_codigo ?? 'N/A'}) para tenant ${tenantId}.`,
-                `Preço restaurado para R$ ${valorNormalReais}. Asaas ok: ${resRestore.ok}`,
-                resRestore.ok ? '' : JSON.stringify(restoreData)
+                `Preço restaurado para R$ ${valorNormalReais} (preço atual do plano ${assLocal.plano}).`,
+                resRestore.ok ? 'OK' : JSON.stringify(restoreData)
               );
+
+              // Atualizar valor_centavos na assinatura local para refletir o preço restaurado
+              await supabase
+                .from('assinaturas')
+                .update({
+                  valor_centavos: valorRestaurarCentavos,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('tenant_id', tenantId);
 
               // Auditoria da reversão promocional
               await supabase.from('admin_auditoria').insert({
@@ -155,8 +182,17 @@ serve(async (req) => {
                 acao: 'promo_revertida_automatica',
                 entidade: 'assinaturas',
                 entidade_id: tenantId,
-                valor_anterior: { cupom: promoRes.cupom_codigo, valor_promo: valorPagoCentavos },
-                valor_novo: { valor_normal_centavos: promoRes.valor_normal_centavos, asaas_ok: resRestore.ok },
+                valor_anterior: {
+                  cupom: promoRes.cupom_codigo,
+                  valor_promo_centavos: valorPagoCentavos,
+                  valor_normal_gravado_centavos: promoRes.valor_normal_centavos,
+                },
+                valor_novo: {
+                  valor_restaurado_centavos: valorRestaurarCentavos,
+                  valor_restaurado_reais: valorNormalReais,
+                  fonte: planAtual ? 'plans_atual' : 'snapshot_checkout',
+                  asaas_ok: resRestore.ok,
+                },
               });
             }
           }
