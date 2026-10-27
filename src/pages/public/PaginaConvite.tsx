@@ -3,10 +3,20 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Gift, CheckCircle2, ArrowRight } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
+import { Convite } from '../auth/Convite';
 
 export const PaginaConvite: React.FC = () => {
   const { codigo } = useParams<{ codigo: string }>();
   const navigate = useNavigate();
+
+  // Tokens de convite de equipe são UUIDs. Se for UUID, delega para a tela de aceite de membro de equipe
+  const isUUID = (val: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+  if (codigo && isUUID(codigo)) {
+    return <Convite />;
+  }
+
   const [loading, setLoading] = useState(true);
   const [indicadorNome, setIndicadorNome] = useState<string | null>(null);
 

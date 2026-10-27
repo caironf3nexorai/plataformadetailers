@@ -10,7 +10,8 @@ import { AlertTriangle, CheckCircle2, UserCheck } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 
 export const Convite: React.FC = () => {
-  const { token } = useParams<{ token: string }>();
+  const { token: paramToken, codigo: paramCodigo } = useParams<{ token?: string; codigo?: string }>();
+  const token = paramToken || paramCodigo;
   const navigate = useNavigate();
   const { user, refetchTenantData } = useAuth();
 
