@@ -133,12 +133,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     carregarDadosUsuario();
   }, [isOpen, cicloInicial]);
 
-  const getValorNumerico = () => {
+  const getValorNumerico = (cicloAlvo?: 'mensal' | 'anual') => {
     if (cupomAplicado?.valor_final) {
       return Number(cupomAplicado.valor_final);
     }
-    const raw = ciclo === 'anual' ? (precoAnual || precoMensal) : precoMensal;
-    const num = parseFloat((raw || '').replace(/[^\d,.-]/g, '').replace(',', '.'));
+    const c = cicloAlvo || ciclo;
+    const raw = c === 'anual' ? (precoAnual || precoMensal) : precoMensal;
+    const limpo = (raw || '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.');
+    const num = parseFloat(limpo);
     return isNaN(num) ? 0 : num;
   };
 
@@ -148,11 +150,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       trackInitiateCheckout({
         content_name: `Plano ${planoNome} (${cicloInicial})`,
         content_category: 'Assinatura',
-        value: getValorNumerico(),
+        value: getValorNumerico(cicloInicial),
         currency: 'BRL',
       });
     }
-  }, [isOpen]);
+  }, [isOpen, cicloInicial, planoNome]);
 
   // Polling em tempo real: detecta confirmação do pagamento no banco via webhook do Asaas
   useEffect(() => {
