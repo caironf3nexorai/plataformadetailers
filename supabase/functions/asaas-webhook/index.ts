@@ -106,6 +106,64 @@ serve(async (req) => {
           p_tenant_id: tenantId,
           p_valor_centavos: valorPagoCentavos,
         });
+
+        // AUTOMAÇÃO PROMOCIONAL: decrementar meses restantes de promoção e restaurar preço ao término
+        try {
+          const { data: promoRes } = await supabase.rpc('decrementar_promo_assinatura', {
+            p_tenant_id: tenantId,
+          });
+
+          if (promoRes?.deve_restaurar === true && promoRes?.valor_normal_centavos) {
+            const valorNormalReais = Number((promoRes.valor_normal_centavos / 100).toFixed(2));
+
+            // Buscar asaas_subscription_id da assinatura deste tenant
+            const { data: assLocal } = await supabase
+              .from('assinaturas')
+              .select('asaas_subscription_id')
+              .eq('tenant_id', tenantId)
+              .maybeSingle();
+
+            if (assLocal?.asaas_subscription_id) {
+              const ASAAS_API_URL = Deno.env.get('ASAAS_API_URL') || 'https://api.asaas.com/v3';
+              const ASAAS_API_KEY = Deno.env.get('ASAAS_API_KEY') || '';
+
+              const resRestore = await fetch(
+                `${ASAAS_API_URL}/subscriptions/${assLocal.asaas_subscription_id}`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'access_token': ASAAS_API_KEY,
+                  },
+                  body: JSON.stringify({
+                    value: valorNormalReais,
+                    updatePendingPayments: false, // Não alterar cobrança atual, apenas as futuras
+                  }),
+                }
+              );
+
+              const restoreData = await resRestore.json();
+              console.log(
+                `[asaas-webhook] Promoção encerrada (cupom: ${promoRes.cupom_codigo ?? 'N/A'}) para tenant ${tenantId}.`,
+                `Preço restaurado para R$ ${valorNormalReais}. Asaas ok: ${resRestore.ok}`,
+                resRestore.ok ? '' : JSON.stringify(restoreData)
+              );
+
+              // Auditoria da reversão promocional
+              await supabase.from('admin_auditoria').insert({
+                admin_user_id: '00000000-0000-0000-0000-000000000000',
+                acao: 'promo_revertida_automatica',
+                entidade: 'assinaturas',
+                entidade_id: tenantId,
+                valor_anterior: { cupom: promoRes.cupom_codigo, valor_promo: valorPagoCentavos },
+                valor_novo: { valor_normal_centavos: promoRes.valor_normal_centavos, asaas_ok: resRestore.ok },
+              });
+            }
+          }
+        } catch (errPromo) {
+          // Não crítico: logar e continuar sem quebrar o webhook
+          console.warn('[asaas-webhook] Erro ao processar reversão promocional:', errPromo);
+        }
       }
     } else if (event === 'PAYMENT_OVERDUE') {
       if (tenantId) {

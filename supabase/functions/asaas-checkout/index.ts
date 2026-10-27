@@ -533,6 +533,33 @@ serve(async (req) => {
       } catch (errRegCupom) {
         console.warn('Aviso ao registrar uso de cupom via RPC:', errRegCupom);
       }
+
+      // 5.1 Se o cupom tem duracao_meses > 1, iniciar rastreamento de promoção
+      //     para reversão automática de preço ao final do período
+      const cupomDuracaoMeses: number = cupomAplicado.duracao_meses ?? 1;
+      if (cupomDuracaoMeses > 1) {
+        try {
+          // Valor normal do plano (sem desconto) que será restaurado após a promoção
+          const valorNormalCentavos = isAnual
+            ? (planRow.preco_anual_centavos ?? planRow.preco_centavos * 10)
+            : planRow.preco_centavos;
+
+          await supabase.rpc('iniciar_promocao_assinatura', {
+            p_tenant_id: tenantId,
+            p_meses: cupomDuracaoMeses,
+            p_valor_normal_centavos: valorNormalCentavos,
+            p_cupom_id: cupomAplicado.id,
+            p_cupom_codigo: cupomAplicado.codigo,
+          });
+
+          console.log(
+            `[Checkout Asaas] Promoção iniciada: ${cupomDuracaoMeses} meses a R$ ${valorReais}.`,
+            `Preço normal (R$ ${(valorNormalCentavos / 100).toFixed(2)}) será restaurado automaticamente.`
+          );
+        } catch (errPromo) {
+          console.warn('Aviso ao iniciar rastreamento de promoção:', errPromo);
+        }
+      }
     }
 
     return new Response(
