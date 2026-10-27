@@ -79,7 +79,13 @@ export const NovaOficina: React.FC = () => {
       // Obter código de convite, parceiro ou campanha do localStorage ou URL
       const searchParams = new URLSearchParams(window.location.search);
       const parceiroCodigo = searchParams.get('parceiro') || searchParams.get('ref') || searchParams.get('cupom') || localStorage.getItem('parceiro_codigo');
-      const conviteCodigo = searchParams.get('convite') || searchParams.get('indicacao') || localStorage.getItem('convite_codigo');
+
+      // Tokens de convite de EQUIPE são UUIDs longos — não devem ser usados como código de indicação
+      const isUUID = (val: string) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+      const rawConvite = searchParams.get('indicacao') || localStorage.getItem('convite_codigo');
+      const conviteCodigo = rawConvite && !isUUID(rawConvite) ? rawConvite : null;
+
       const campanhaCodigo = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
 
       // Chamada RPC para criação atômica da oficina e do membro dono com convite/parceiro/campanha

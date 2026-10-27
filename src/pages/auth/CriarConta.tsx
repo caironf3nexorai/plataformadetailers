@@ -60,7 +60,22 @@ export const CriarConta: React.FC = () => {
     }
 
     // 2. Indicação de Oficina (Indique e Ganhe)
-    const codIndicacao = searchParams.get('indicacao') || (!searchParams.get('parceiro') ? searchParams.get('convite') : null);
+    // ⚠️ O parâmetro ?convite= é compartilhado entre:
+    //   - Convites de EQUIPE: token UUID longo (ex: "550e8400-e29b-41d4-a716-446655440000")
+    //   - Códigos de INDICAÇÃO: código curto alfanumérico (ex: "OFICINA123")
+    // Só salva como indicação se o valor NÃO parecer um UUID (convite de equipe)
+    const isUUID = (val: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
+    const codIndicacao = searchParams.get('indicacao')
+      || (!searchParams.get('parceiro')
+        ? (() => {
+            const c = searchParams.get('convite');
+            // Não tratar token de convite de equipe (UUID) como código de indicação
+            return c && !isUUID(c) ? c : null;
+          })()
+        : null);
+
     if (codIndicacao && codIndicacao.trim()) {
       localStorage.setItem('convite_codigo', codIndicacao.trim().toUpperCase());
     }
