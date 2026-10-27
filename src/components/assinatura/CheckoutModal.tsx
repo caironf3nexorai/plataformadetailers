@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatTelefone, formatCpfCnpj } from '../../utils/formatters';
+import { trackInitiateCheckout, trackPurchase } from '../../utils/pixel';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -132,6 +133,27 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     carregarDadosUsuario();
   }, [isOpen, cicloInicial]);
 
+  const getValorNumerico = () => {
+    if (cupomAplicado?.valor_final) {
+      return Number(cupomAplicado.valor_final);
+    }
+    const raw = ciclo === 'anual' ? (precoAnual || precoMensal) : precoMensal;
+    const num = parseFloat((raw || '').replace(/[^\d,.-]/g, '').replace(',', '.'));
+    return isNaN(num) ? 0 : num;
+  };
+
+  // Dispara InitiateCheckout no Meta Pixel ao abrir a modal
+  useEffect(() => {
+    if (isOpen) {
+      trackInitiateCheckout({
+        content_name: `Plano ${planoNome} (${cicloInicial})`,
+        content_category: 'Assinatura',
+        value: getValorNumerico(),
+        currency: 'BRL',
+      });
+    }
+  }, [isOpen]);
+
   // Polling em tempo real: detecta confirmação do pagamento no banco via webhook do Asaas
   useEffect(() => {
     if (!isOpen || (!pixData && !paymentUrl) || pagamentoConfirmado || !tenant?.id || !checkoutIniciadoEm) {
@@ -161,6 +183,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         if (assinaturaAtiva) {
           setPagamentoConfirmado(true);
+          trackPurchase({
+            content_name: `Plano ${planoNome}`,
+            content_category: 'Assinatura',
+            value: getValorNumerico(),
+            currency: 'BRL',
+            ciclo: ciclo,
+            plano: planoCodigo,
+          });
           await refetchTenantData();
           showSuccess(`🎉 Pagamento confirmado! Seu plano ${planoNome} foi ativado com sucesso!`);
         }
@@ -170,7 +200,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     }, 3500);
 
     return () => clearInterval(intervalId);
-  }, [isOpen, pixData, paymentUrl, pagamentoConfirmado, tenant?.id, planoCodigo, planoNome, refetchTenantData, showSuccess, checkoutIniciadoEm]);
+  }, [isOpen, pixData, paymentUrl, pagamentoConfirmado, tenant?.id, planoCodigo, planoNome, refetchTenantData, showSuccess, checkoutIniciadoEm, ciclo, cupomAplicado, precoAnual, precoMensal]);
 
   if (!isOpen) return null;
 

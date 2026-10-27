@@ -229,13 +229,49 @@ export function trackCompleteRegistration(params?: Record<string, any>): void {
  */
 export function trackInitiateCheckout(params?: Record<string, any>): void {
   try {
+    const payload = {
+      currency: 'BRL',
+      ...params,
+    };
     if (typeof window.fbq === 'function') {
-      window.fbq('track', 'InitiateCheckout', params || {});
+      window.fbq('track', 'InitiateCheckout', payload);
     }
     if (typeof window.gtag === 'function') {
-      window.gtag('event', 'begin_checkout', params || {});
+      window.gtag('event', 'begin_checkout', payload);
     }
+    if (typeof window.ttq?.track === 'function') {
+      window.ttq.track('InitiateCheckout', payload);
+    }
+    console.log('[Marketing] Evento InitiateCheckout disparado!', payload);
   } catch (e) {
     // Silencia
   }
 }
+
+/**
+ * Dispara evento de Compra / Assinatura Concluída (Purchase)
+ */
+export function trackPurchase(params?: Record<string, any>): void {
+  try {
+    const payload = {
+      currency: 'BRL',
+      ...params,
+    };
+    if (typeof window.fbq === 'function') {
+      window.fbq('track', 'Purchase', payload);
+    }
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'purchase', {
+        transaction_id: params?.transaction_id || `sub_${Date.now()}`,
+        ...payload,
+      });
+    }
+    if (typeof window.ttq?.track === 'function') {
+      window.ttq.track('CompletePayment', payload);
+    }
+    console.log('[Marketing] Evento Purchase disparado com sucesso!', payload);
+  } catch (e) {
+    // Silencia
+  }
+}
+
