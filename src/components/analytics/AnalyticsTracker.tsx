@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { 
@@ -11,9 +11,20 @@ import {
 
 export const AnalyticsTracker: React.FC = () => {
   const location = useLocation();
-  const initializedRef = useRef(false);
+  // 1. Inicializa imediatamente pelo cache local se já existir (para não esperar a RPC)
+  useEffect(() => {
+    try {
+      const cachedMeta = localStorage.getItem('app_meta_pixel_id');
+      const cachedGoogle = localStorage.getItem('app_google_ads_id');
+      const cachedGA4 = localStorage.getItem('app_google_analytics_id');
+      const cachedTikTok = localStorage.getItem('app_tiktok_pixel_id');
+      if (cachedMeta) initMetaPixel(cachedMeta);
+      if (cachedGoogle || cachedGA4) initGoogleTags(cachedGoogle, cachedGA4);
+      if (cachedTikTok) initTikTokPixel(cachedTikTok);
+    } catch {}
+  }, []);
 
-  // 1. Carrega as configurações de pixels cadastradas no Painel Admin
+  // 2. Carrega as configurações de pixels cadastradas no Painel Admin
   useEffect(() => {
     let active = true;
 
@@ -43,16 +54,17 @@ export const AnalyticsTracker: React.FC = () => {
     }
 
     function aplicarPixels(cfg: any) {
-      if (initializedRef.current) return;
-      initializedRef.current = true;
-
       if (cfg.meta_pixel_id) {
+        try { localStorage.setItem('app_meta_pixel_id', cfg.meta_pixel_id); } catch {}
         initMetaPixel(cfg.meta_pixel_id);
       }
       if (cfg.google_ads_id || cfg.google_analytics_id) {
+        if (cfg.google_ads_id) try { localStorage.setItem('app_google_ads_id', cfg.google_ads_id); } catch {}
+        if (cfg.google_analytics_id) try { localStorage.setItem('app_google_analytics_id', cfg.google_analytics_id); } catch {}
         initGoogleTags(cfg.google_ads_id, cfg.google_analytics_id);
       }
       if (cfg.tiktok_pixel_id) {
+        try { localStorage.setItem('app_tiktok_pixel_id', cfg.tiktok_pixel_id); } catch {}
         initTikTokPixel(cfg.tiktok_pixel_id);
       }
     }
