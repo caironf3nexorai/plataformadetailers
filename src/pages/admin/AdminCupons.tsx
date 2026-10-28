@@ -66,8 +66,14 @@ export const AdminCupons: React.FC = () => {
   const [validoAte, setValidoAte] = useState<string>('');
   const [ativo, setAtivo] = useState(true);
 
-  // Preços oficiais dinâmicos da tabela plans para a simulação DE / POR
-  const [planPrecos, setPlanPrecos] = useState<{ pro: number; studio: number }>({ pro: 57, studio: 147 });
+  // Preços oficiais dinâmicos da tabela plans para a simulação DE / POR (mensal e anual)
+  const [planPrecos, setPlanPrecos] = useState<{ pro: number; proAnual: number; studio: number; studioAnual: number }>({
+    pro: 57,
+    proAnual: 581.40,
+    studio: 147,
+    studioAnual: 1470,
+  });
+  const [simCiclo, setSimCiclo] = useState<'mensal' | 'anual'>('mensal');
 
   // Previne rolagem da página de fundo enquanto o modal estiver aberto
   useEffect(() => {
@@ -99,13 +105,15 @@ export const AdminCupons: React.FC = () => {
       // Carregar preços oficiais dos planos para simulação dinâmica DE / POR
       const { data: plansData } = await supabase
         .from('plans')
-        .select('codigo, preco_centavos');
+        .select('codigo, preco_centavos, preco_anual_centavos');
       if (plansData && plansData.length > 0) {
         const proRow = plansData.find((p: any) => p.codigo?.toLowerCase() === 'pro');
         const studioRow = plansData.find((p: any) => p.codigo?.toLowerCase() === 'studio');
         setPlanPrecos({
           pro: proRow?.preco_centavos ? proRow.preco_centavos / 100 : 57,
+          proAnual: proRow?.preco_anual_centavos ? proRow.preco_anual_centavos / 100 : 581.40,
           studio: studioRow?.preco_centavos ? studioRow.preco_centavos / 100 : 147,
+          studioAnual: studioRow?.preco_anual_centavos ? studioRow.preco_anual_centavos / 100 : 1470,
         });
       }
     } catch (err: any) {
@@ -192,20 +200,28 @@ export const AdminCupons: React.FC = () => {
     setModalAberto(true);
   };
 
-  // Cálculo da simulação DE / POR para preview em tempo real
-  const simularPreco = (precoBase: number) => {
+  // Cálculo da simulação DE / POR para preview em tempo real (Mensal ou Anual)
+  const simularPreco = (precoBase: number, isAnual: boolean = false) => {
     const val = Number(descontoValor) || 0;
-    const desconto = descontoTipo === 'percentual'
-      ? Math.round(precoBase * (val / 100) * 100) / 100
-      : Math.min(precoBase, val);
+    let desconto = 0;
+    if (descontoTipo === 'percentual') {
+      desconto = Math.round(precoBase * (val / 100) * 100) / 100;
+    } else {
+      if (isAnual) {
+        const mult = duracaoMeses === 0 ? 12 : Math.min(12, duracaoMeses);
+        desconto = Math.min(precoBase, Math.round(val * mult * 100) / 100);
+      } else {
+        desconto = Math.min(precoBase, val);
+      }
+    }
     const valorFinal = Math.max(0, Math.round((precoBase - desconto) * 100) / 100);
     const economia = Math.min(precoBase, desconto);
     const percentualEfetivo = precoBase > 0 ? Math.round((economia / precoBase) * 100) : 0;
     return { precoBase, valorFinal, economia, percentualEfetivo };
   };
 
-  const simPro = simularPreco(planPrecos.pro);
-  const simStudio = simularPreco(planPrecos.studio);
+  const simPro = simularPreco(simCiclo === 'anual' ? planPrecos.proAnual : planPrecos.pro, simCiclo === 'anual');
+  const simStudio = simularPreco(simCiclo === 'anual' ? planPrecos.studioAnual : planPrecos.studio, simCiclo === 'anual');
 
   const gerarCodigoAleatorio = () => {
     const sufixos = ['PRO', 'VIP', 'OFF', 'WASH', 'TOP', 'START'];
@@ -744,16 +760,38 @@ export const AdminCupons: React.FC = () => {
 
               {/* CARD DE SIMULAÇÃO DE PREÇO DINÂMICO (DE: X POR: Y) */}
               <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-900/90 to-amber-600/5 border border-amber-500/30 space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center space-x-1.5 text-amber-400">
                     <Sparkles className="w-4 h-4" />
                     <span className="text-xs font-black uppercase tracking-wider">
                       Simulação em Tempo Real (DE ➔ POR)
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    {descontoTipo === 'percentual' ? `${descontoValor || 0}% OFF` : `R$ ${Number(descontoValor || 0).toFixed(2)} OFF`}
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setSimCiclo('mensal')}
+                        className={`px-2 py-0.5 rounded-md transition ${simCiclo === 'mensal' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Mensal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSimCiclo('anual')}
+                        className={`px-2 py-0.5 rounded-md transition ${simCiclo === 'anual' ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'}`}
+                      >
+                        Anual (x12)
+                      </button>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      {descontoTipo === 'percentual'
+                        ? `${descontoValor || 0}% OFF`
+                        : simCiclo === 'anual'
+                        ? `R$ ${(Number(descontoValor || 0) * (duracaoMeses === 0 ? 12 : Math.min(12, duracaoMeses))).toFixed(2)} OFF`
+                        : `R$ ${Number(descontoValor || 0).toFixed(2)} OFF`}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -764,7 +802,7 @@ export const AdminCupons: React.FC = () => {
                       : 'bg-slate-950/80 border-amber-500/40 shadow-sm'
                   }`}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-300">Plano Pro</span>
+                      <span className="text-xs font-bold text-slate-300">Plano Pro ({simCiclo === 'anual' ? 'Anual' : 'Mensal'})</span>
                       {planoAlvo === 'pro' && (
                         <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-500/10 px-1.5 py-0.5 rounded">Exclusivo</span>
                       )}
@@ -776,11 +814,16 @@ export const AdminCupons: React.FC = () => {
                       <span className="text-base font-black text-amber-400 font-mono">
                         POR R$ {simPro.valorFinal.toFixed(2)}
                       </span>
-                      <span className="text-[10px] text-slate-400">/mês</span>
+                      <span className="text-[10px] text-slate-400">{simCiclo === 'anual' ? '/ano' : '/mês'}</span>
                     </div>
+                    {simCiclo === 'anual' && (
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                        Equivalente a R$ {(simPro.valorFinal / 12).toFixed(2)}/mês
+                      </span>
+                    )}
                     <div className="text-[10px] text-emerald-400 font-medium mt-1 flex items-center justify-between">
                       <span>Economia de R$ {simPro.economia.toFixed(2)} ({simPro.percentualEfetivo}%)</span>
-                      {duracaoMeses > 1 && (
+                      {duracaoMeses > 1 && simCiclo === 'mensal' && (
                         <span className="text-slate-400">Total: R$ {(simPro.economia * duracaoMeses).toFixed(2)}</span>
                       )}
                     </div>
@@ -793,7 +836,7 @@ export const AdminCupons: React.FC = () => {
                       : 'bg-slate-950/80 border-amber-500/40 shadow-sm'
                   }`}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-300">Plano Studio</span>
+                      <span className="text-xs font-bold text-slate-300">Plano Studio ({simCiclo === 'anual' ? 'Anual' : 'Mensal'})</span>
                       {planoAlvo === 'studio' && (
                         <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-500/10 px-1.5 py-0.5 rounded">Exclusivo</span>
                       )}
@@ -805,11 +848,16 @@ export const AdminCupons: React.FC = () => {
                       <span className="text-base font-black text-amber-400 font-mono">
                         POR R$ {simStudio.valorFinal.toFixed(2)}
                       </span>
-                      <span className="text-[10px] text-slate-400">/mês</span>
+                      <span className="text-[10px] text-slate-400">{simCiclo === 'anual' ? '/ano' : '/mês'}</span>
                     </div>
+                    {simCiclo === 'anual' && (
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                        Equivalente a R$ {(simStudio.valorFinal / 12).toFixed(2)}/mês
+                      </span>
+                    )}
                     <div className="text-[10px] text-emerald-400 font-medium mt-1 flex items-center justify-between">
                       <span>Economia de R$ {simStudio.economia.toFixed(2)} ({simStudio.percentualEfetivo}%)</span>
-                      {duracaoMeses > 1 && (
+                      {duracaoMeses > 1 && simCiclo === 'mensal' && (
                         <span className="text-slate-400">Total: R$ {(simStudio.economia * duracaoMeses).toFixed(2)}</span>
                       )}
                     </div>

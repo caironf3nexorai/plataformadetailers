@@ -107,6 +107,17 @@ serve(async (req) => {
           p_valor_centavos: valorPagoCentavos,
         });
 
+        // AUTOMAÇÃO DO CUPOM: Confirmar uso do cupom apenas quando o pagamento for realmente finalizado/pago
+        try {
+          await supabase.rpc('confirmar_uso_cupom', {
+            p_tenant_id: tenantId,
+            p_asaas_subscription_id: payment?.subscription || ass?.asaas_subscription_id || null,
+            p_asaas_payment_id: payment?.id || null,
+          });
+        } catch (errCupom) {
+          console.warn('[asaas-webhook] Aviso ao confirmar uso do cupom:', errCupom);
+        }
+
         // AUTOMAÇÃO PROMOCIONAL: decrementar meses restantes de promoção e restaurar preço ao término
         try {
           const { data: promoRes } = await supabase.rpc('decrementar_promo_assinatura', {

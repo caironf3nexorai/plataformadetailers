@@ -326,7 +326,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     R$ {Number(cupomAplicado.valor_final).toFixed(2)} {ciclo === 'anual' ? '/ ano' : '/ mês'}
                   </span>
                   <span className="text-[10px] bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                    {cupomAplicado.codigo} • {cupomAplicado.desconto_tipo === 'percentual' ? `${cupomAplicado.desconto_valor}% OFF` : `R$ ${cupomAplicado.desconto_valor} OFF`}
+                    {cupomAplicado.codigo} • {cupomAplicado.desconto_tipo === 'percentual'
+                      ? `${cupomAplicado.desconto_valor}% OFF`
+                      : `R$ ${Number(cupomAplicado.valor_desconto).toFixed(2)} OFF`}
                   </span>
                 </div>
               ) : (
@@ -659,6 +661,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                         <span className="text-[11px] text-emerald-400 block mt-0.5">
                           {cupomAplicado.desconto_tipo === 'percentual'
                             ? `${cupomAplicado.desconto_valor}% de desconto (Economia de R$ ${Number(cupomAplicado.valor_desconto).toFixed(2)})`
+                            : ciclo === 'anual'
+                            ? `Desconto de R$ ${Number(cupomAplicado.desconto_valor).toFixed(2)}/mês (Economia anual de R$ ${Number(cupomAplicado.valor_desconto).toFixed(2)})`
                             : `Desconto fixo de R$ ${Number(cupomAplicado.valor_desconto).toFixed(2)}`}
                         </span>
                       </div>
