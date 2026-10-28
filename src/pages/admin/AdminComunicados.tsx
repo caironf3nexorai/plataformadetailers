@@ -659,15 +659,18 @@ export const AdminComunicados: React.FC = () => {
                     {/* Banner Imagem URL */}
                     <div>
                       <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                        URL da Imagem / Banner (Opcional)
+                        URL de Mídia: Banner ou Vídeo YouTube/Vimeo/MP4 (Opcional)
                       </label>
                       <input
                         type="url"
-                        placeholder="https://exemplo.com/banner.jpg"
+                        placeholder="Ex: https://youtube.com/watch?v=... ou https://exemplo.com/banner.jpg"
                         value={imagemUrl}
                         onChange={e => setImagemUrl(e.target.value)}
                         className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
                       />
+                      <span className="block text-[10px] text-slate-500 mt-1">
+                        Aceita imagens (.jpg, .png) ou links de vídeo (YouTube, Vimeo, .mp4). Se for vídeo, será reproduzido no modal.
+                      </span>
                     </div>
                   </div>
 

@@ -59,11 +59,15 @@ export const AdminCupons: React.FC = () => {
   const [descontoValor, setDescontoValor] = useState<number>(10);
   const [planoAlvo, setPlanoAlvo] = useState<'todos' | 'pro' | 'studio'>('todos');
   const [duracaoMeses, setDuracaoMeses] = useState<number>(1);
+  const [duracaoModo, setDuracaoModo] = useState<'preset' | 'custom'>('preset');
   const [limiteUsos, setLimiteUsos] = useState<string>('');
   const [origem, setOrigem] = useState<'plataforma' | 'parceiro' | 'banner' | 'campanha'>('plataforma');
   const [parceiroId, setParceiroId] = useState<string>('');
   const [validoAte, setValidoAte] = useState<string>('');
   const [ativo, setAtivo] = useState(true);
+
+  // Preços oficiais dinâmicos da tabela plans para a simulação DE / POR
+  const [planPrecos, setPlanPrecos] = useState<{ pro: number; studio: number }>({ pro: 57, studio: 147 });
 
   // Previne rolagem da página de fundo enquanto o modal estiver aberto
   useEffect(() => {
@@ -91,6 +95,19 @@ export const AdminCupons: React.FC = () => {
         .eq('ativo', true)
         .order('nome');
       if (parceirosData) setParceiros(parceirosData);
+
+      // Carregar preços oficiais dos planos para simulação dinâmica DE / POR
+      const { data: plansData } = await supabase
+        .from('plans')
+        .select('codigo, preco_centavos');
+      if (plansData && plansData.length > 0) {
+        const proRow = plansData.find((p: any) => p.codigo?.toLowerCase() === 'pro');
+        const studioRow = plansData.find((p: any) => p.codigo?.toLowerCase() === 'studio');
+        setPlanPrecos({
+          pro: proRow?.preco_centavos ? proRow.preco_centavos / 100 : 57,
+          studio: studioRow?.preco_centavos ? studioRow.preco_centavos / 100 : 147,
+        });
+      }
     } catch (err: any) {
       console.error('Erro ao carregar cupons:', err);
       showError(err.message || 'Erro ao carregar lista de cupons.');
@@ -144,6 +161,7 @@ export const AdminCupons: React.FC = () => {
     setDescontoValor(20);
     setPlanoAlvo('todos');
     setDuracaoMeses(1);
+    setDuracaoModo('preset');
     setLimiteUsos('');
     setOrigem('plataforma');
     setParceiroId('');
@@ -159,7 +177,13 @@ export const AdminCupons: React.FC = () => {
     setDescontoTipo(cupom.desconto_tipo);
     setDescontoValor(cupom.desconto_valor);
     setPlanoAlvo(cupom.plano_alvo);
-    setDuracaoMeses(cupom.duracao_meses);
+    const dMeses = cupom.duracao_meses ?? 1;
+    setDuracaoMeses(dMeses);
+    if ([0, 1, 2, 3, 6, 12].includes(dMeses)) {
+      setDuracaoModo('preset');
+    } else {
+      setDuracaoModo('custom');
+    }
     setLimiteUsos(cupom.limite_usos ? String(cupom.limite_usos) : '');
     setOrigem(cupom.origem);
     setParceiroId(cupom.parceiro_id || '');
@@ -167,6 +191,21 @@ export const AdminCupons: React.FC = () => {
     setAtivo(cupom.ativo);
     setModalAberto(true);
   };
+
+  // Cálculo da simulação DE / POR para preview em tempo real
+  const simularPreco = (precoBase: number) => {
+    const val = Number(descontoValor) || 0;
+    const desconto = descontoTipo === 'percentual'
+      ? Math.round(precoBase * (val / 100) * 100) / 100
+      : Math.min(precoBase, val);
+    const valorFinal = Math.max(0, Math.round((precoBase - desconto) * 100) / 100);
+    const economia = Math.min(precoBase, desconto);
+    const percentualEfetivo = precoBase > 0 ? Math.round((economia / precoBase) * 100) : 0;
+    return { precoBase, valorFinal, economia, percentualEfetivo };
+  };
+
+  const simPro = simularPreco(planPrecos.pro);
+  const simStudio = simularPreco(planPrecos.studio);
 
   const gerarCodigoAleatorio = () => {
     const sufixos = ['PRO', 'VIP', 'OFF', 'WASH', 'TOP', 'START'];
@@ -659,18 +698,134 @@ export const AdminCupons: React.FC = () => {
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
                     Duração da Recorrência
                   </label>
-                  <select
-                    value={duracaoMeses}
-                    onChange={e => setDuracaoMeses(parseInt(e.target.value, 10))}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="1">Apenas 1ª mensalidade</option>
-                    <option value="2">Por 2 meses</option>
-                    <option value="3">Por 3 meses</option>
-                    <option value="6">Por 6 meses</option>
-                    <option value="12">Por 12 meses (1 ano)</option>
-                    <option value="0">Vitalício (recorrente sempre)</option>
-                  </select>
+                  <div className="space-y-1.5">
+                    <select
+                      value={duracaoModo === 'custom' ? 'custom' : duracaoMeses}
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === 'custom') {
+                          setDuracaoModo('custom');
+                          if (duracaoMeses <= 1) setDuracaoMeses(2);
+                        } else {
+                          setDuracaoModo('preset');
+                          setDuracaoMeses(parseInt(val, 10));
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="1">Apenas 1ª mensalidade (1 mês)</option>
+                      <option value="2">Por 2 meses (Ex: Semana do Detailer)</option>
+                      <option value="3">Por 3 meses (1 trimestre)</option>
+                      <option value="6">Por 6 meses (1 semestre)</option>
+                      <option value="12">Por 12 meses (1 ano)</option>
+                      <option value="0">Vitalício (recorrente para sempre)</option>
+                      <option value="custom">Outro período (personalizado em meses)...</option>
+                    </select>
+
+                    {duracaoModo === 'custom' && (
+                      <div className="flex items-center space-x-2 animate-in fade-in duration-150">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          placeholder="Ex: 4, 5, 8 meses..."
+                          value={duracaoMeses}
+                          onChange={e => setDuracaoMeses(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className="flex-1 px-3 py-1.5 bg-slate-950 border border-amber-500/60 rounded-xl text-xs font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500"
+                        />
+                        <span className="text-xs text-slate-400 font-semibold whitespace-nowrap">
+                          meses de promoção
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD DE SIMULAÇÃO DE PREÇO DINÂMICO (DE: X POR: Y) */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-900/90 to-amber-600/5 border border-amber-500/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5 text-amber-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span className="text-xs font-black uppercase tracking-wider">
+                      Simulação em Tempo Real (DE ➔ POR)
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    {descontoTipo === 'percentual' ? `${descontoValor || 0}% OFF` : `R$ ${Number(descontoValor || 0).toFixed(2)} OFF`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Card Pro */}
+                  <div className={`p-3 rounded-xl border transition ${
+                    planoAlvo === 'studio' 
+                      ? 'opacity-40 bg-slate-950/40 border-slate-800' 
+                      : 'bg-slate-950/80 border-amber-500/40 shadow-sm'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-300">Plano Pro</span>
+                      {planoAlvo === 'pro' && (
+                        <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-500/10 px-1.5 py-0.5 rounded">Exclusivo</span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline space-x-2">
+                      <span className="text-xs text-slate-500 line-through font-mono">
+                        DE R$ {simPro.precoBase.toFixed(2)}
+                      </span>
+                      <span className="text-base font-black text-amber-400 font-mono">
+                        POR R$ {simPro.valorFinal.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400">/mês</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-medium mt-1 flex items-center justify-between">
+                      <span>Economia de R$ {simPro.economia.toFixed(2)} ({simPro.percentualEfetivo}%)</span>
+                      {duracaoMeses > 1 && (
+                        <span className="text-slate-400">Total: R$ {(simPro.economia * duracaoMeses).toFixed(2)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Studio */}
+                  <div className={`p-3 rounded-xl border transition ${
+                    planoAlvo === 'pro' 
+                      ? 'opacity-40 bg-slate-950/40 border-slate-800' 
+                      : 'bg-slate-950/80 border-amber-500/40 shadow-sm'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-300">Plano Studio</span>
+                      {planoAlvo === 'studio' && (
+                        <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-500/10 px-1.5 py-0.5 rounded">Exclusivo</span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline space-x-2">
+                      <span className="text-xs text-slate-500 line-through font-mono">
+                        DE R$ {simStudio.precoBase.toFixed(2)}
+                      </span>
+                      <span className="text-base font-black text-amber-400 font-mono">
+                        POR R$ {simStudio.valorFinal.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400">/mês</span>
+                    </div>
+                    <div className="text-[10px] text-emerald-400 font-medium mt-1 flex items-center justify-between">
+                      <span>Economia de R$ {simStudio.economia.toFixed(2)} ({simStudio.percentualEfetivo}%)</span>
+                      {duracaoMeses > 1 && (
+                        <span className="text-slate-400">Total: R$ {(simStudio.economia * duracaoMeses).toFixed(2)}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumo da Regra de Duração */}
+                <div className="text-[11px] text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800 flex items-start space-x-2">
+                  <Check className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span className="leading-snug">
+                    {duracaoMeses === 0
+                      ? '🌟 Desconto Vitalício: O assinante pagará o valor com desconto em TODAS as faturas para sempre.'
+                      : duracaoMeses === 1
+                      ? '💳 Apenas 1ª mensalidade: O cliente paga com desconto no 1º mês. Do 2º mês em diante, o Asaas reverte automaticamente para o valor integral do plano.'
+                      : `🔁 Válido por ${duracaoMeses} meses: O cliente paga com desconto durante ${duracaoMeses} faturas. A partir do ${duracaoMeses + 1}º mês, o Asaas restaura o preço integral automaticamente.`}
+                  </span>
                 </div>
               </div>
 
@@ -688,11 +843,14 @@ export const AdminCupons: React.FC = () => {
                     onChange={e => setLimiteUsos(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
                   />
+                  <span className="block text-[10px] text-slate-500 mt-1">
+                    Ex: 100 primeiros resgates
+                  </span>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                    Validade Até (Opcional)
+                    Validade Até (Prazo para Ativar)
                   </label>
                   <input
                     type="date"
@@ -700,6 +858,9 @@ export const AdminCupons: React.FC = () => {
                     onChange={e => setValidoAte(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
                   />
+                  <span className="block text-[10px] text-slate-500 mt-1">
+                    Até que dia aceita resgate no checkout
+                  </span>
                 </div>
               </div>
 

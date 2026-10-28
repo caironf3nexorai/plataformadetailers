@@ -215,16 +215,56 @@ export const ModalComunicadoGlobal: React.FC = () => {
           </button>
         )}
 
-        {/* Banner Imagem Ilustrativa */}
+        {/* Banner Mídia Ilustrativa (Vídeo ou Imagem) */}
         {comunicado.imagem_url && (
-          <div className="w-full max-h-48 overflow-hidden relative border-b border-slate-800">
-            <img 
-              src={comunicado.imagem_url} 
-              alt={comunicado.titulo} 
-              className="w-full h-full object-cover"
-              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
+          <div className="w-full overflow-hidden relative border-b border-slate-800 bg-slate-950">
+            {/youtube\.com|youtu\.be|vimeo\.com|\.mp4|\.webm/i.test(comunicado.imagem_url) ? (
+              comunicado.imagem_url.includes('.mp4') || comunicado.imagem_url.includes('.webm') ? (
+                <video
+                  src={comunicado.imagem_url}
+                  controls
+                  playsInline
+                  className="w-full aspect-video object-cover"
+                />
+              ) : (
+                <div className="w-full aspect-video">
+                  <iframe
+                    src={(() => {
+                      const url = comunicado.imagem_url!;
+                      if (url.includes('youtube.com/watch')) {
+                        const v = new URL(url).searchParams.get('v');
+                        return v ? `https://www.youtube.com/embed/${v}?rel=0` : url;
+                      }
+                      if (url.includes('youtu.be/')) {
+                        const parts = url.split('youtu.be/');
+                        const v = parts[1]?.split('?')[0]?.split('&')[0];
+                        return v ? `https://www.youtube.com/embed/${v}?rel=0` : url;
+                      }
+                      if (url.includes('vimeo.com/')) {
+                        const parts = url.split('vimeo.com/');
+                        const v = parts[1]?.split('?')[0]?.split('/')[0];
+                        return v ? `https://player.vimeo.com/video/${v}` : url;
+                      }
+                      return url;
+                    })()}
+                    title={comunicado.titulo}
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )
+            ) : (
+              <div className="w-full max-h-48 overflow-hidden relative">
+                <img 
+                  src={comunicado.imagem_url} 
+                  alt={comunicado.titulo} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
+              </div>
+            )}
           </div>
         )}
 

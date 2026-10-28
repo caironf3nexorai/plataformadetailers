@@ -640,23 +640,39 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </div>
 
                 {cupomAplicado ? (
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
                       <div>
-                        <span className="text-xs font-mono font-bold text-white uppercase tracking-wider block">
-                          {cupomAplicado.codigo} aplicado!
-                        </span>
-                        <span className="text-[11px] text-emerald-400">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                            {cupomAplicado.codigo} aplicado!
+                          </span>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                            {cupomAplicado.duracao_meses === 0
+                              ? 'Vitalício'
+                              : cupomAplicado.duracao_meses === 1
+                              ? '1ª mensalidade'
+                              : `${cupomAplicado.duracao_meses} meses`}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-emerald-400 block mt-0.5">
                           {cupomAplicado.desconto_tipo === 'percentual'
-                            ? `${cupomAplicado.desconto_valor}% de desconto na mensalidade`
-                            : `R$ ${cupomAplicado.desconto_valor} de desconto na mensalidade`}
+                            ? `${cupomAplicado.desconto_valor}% de desconto (Economia de R$ ${Number(cupomAplicado.valor_desconto).toFixed(2)})`
+                            : `Desconto fixo de R$ ${Number(cupomAplicado.valor_desconto).toFixed(2)}`}
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-mono font-black text-emerald-400">
-                      R$ {Number(cupomAplicado.valor_final).toFixed(2)}
-                    </span>
+                    <div className="text-right">
+                      {cupomAplicado.valor_original && Number(cupomAplicado.valor_original) > Number(cupomAplicado.valor_final) && (
+                        <span className="text-[11px] text-slate-500 line-through block font-mono">
+                          DE R$ {Number(cupomAplicado.valor_original).toFixed(2)}
+                        </span>
+                      )}
+                      <span className="text-sm font-mono font-black text-emerald-400 block">
+                        POR R$ {Number(cupomAplicado.valor_final).toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex gap-2">

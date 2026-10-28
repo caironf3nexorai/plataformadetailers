@@ -534,10 +534,11 @@ serve(async (req) => {
         console.warn('Aviso ao registrar uso de cupom via RPC:', errRegCupom);
       }
 
-      // 5.1 Se o cupom tem duracao_meses > 1, iniciar rastreamento de promoção
-      //     para reversão automática de preço ao final do período
-      const cupomDuracaoMeses: number = cupomAplicado.duracao_meses ?? 1;
-      if (cupomDuracaoMeses > 1) {
+      // 5.1 Se o cupom tem duracao_meses >= 1 (temporário), iniciar rastreamento de promoção
+      //     para reversão automática de preço ao final do período.
+      //     Se for duracao_meses === 0 (vitalício), NÃO inicia reversão (fica descontado para sempre).
+      const cupomDuracaoMeses: number = Number(cupomAplicado.duracao_meses ?? 1);
+      if (cupomDuracaoMeses >= 1) {
         try {
           // Valor normal do plano (sem desconto) que será restaurado após a promoção
           const valorNormalCentavos = isAnual
