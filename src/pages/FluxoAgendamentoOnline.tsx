@@ -271,7 +271,20 @@ export function FluxoAgendamentoOnline() {
 
       if (error) throw error;
 
-      setResultado(data);
+      // Normaliza o resultado com fallbacks do estado para garantir que nunca fique zerado ou em branco
+      const resNormalizado = {
+        ...data,
+        inicio: data?.inicio || timestampInicio,
+        previsao_entrega: data?.previsao_entrega || data?.termino_previsto || slotSelecionadoObj?.termino_previsto,
+        termino_previsto: data?.termino_previsto || data?.previsao_entrega || slotSelecionadoObj?.termino_previsto,
+        duracao_total: Number(data?.duracao_total || data?.duracao_minutos || duracaoTotal || 0),
+        duracao_minutos: Number(data?.duracao_minutos || data?.duracao_total || duracaoTotal || 0),
+        preco_estimado_total: Number(data?.preco_estimado_total || data?.valor_total || valorTotal || 0),
+        valor_total: Number(data?.valor_total || data?.preco_estimado_total || valorTotal || 0),
+        sinal: data?.sinal,
+      };
+
+      setResultado(resNormalizado);
       setPasso(5); // Passo de Confirmação
       showToast('Agendamento solicitado com sucesso!', 'success');
     } catch (err: any) {
@@ -813,95 +826,151 @@ export function FluxoAgendamentoOnline() {
         )}
 
         {/* PASSO 5: CONFIRMAÇÃO E PIX */}
-        {passo === 5 && resultado && (
-          <div className="space-y-6 text-center py-4">
-            <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-emerald-400">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
+        {passo === 5 && resultado && (() => {
+          const inicioFinal = resultado.inicio || timestampInicioCalc;
+          const duracaoFinal = Number(resultado.duracao_total || resultado.duracao_minutos || duracaoTotal || 0);
+          const valorTotalServicos = Number(resultado.preco_estimado_total || resultado.valor_total || valorTotal || 0);
+          const temSinal = (resultado.sinal?.ativo || resultado.sinal?.exigido) && Number(resultado.sinal?.valor || 0) > 0;
+          const valorSinal = temSinal ? Number(resultado.sinal.valor) : 0;
+          const saldoRestante = Math.max(0, valorTotalServicos - valorSinal);
+          const previsaoEntregaFinal = resultado.previsao_entrega || resultado.termino_previsto || slotSelecionadoObj?.termino_previsto;
 
-            <div>
-              <h2 className="text-xl font-bold text-white">Agendamento Realizado!</h2>
-              <p className="text-xs text-slate-400 mt-1">
-                OS <span className="text-emerald-400 font-bold">#{resultado.numero_os}</span> · {tenant.nome}
-              </p>
-            </div>
-
-            {/* Card de Mensagem Conforme Configuração */}
-            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl text-left space-y-3">
-              <div className="text-xs text-slate-300 space-y-1">
-                <p><strong>Início:</strong> {formatarDataHora(resultado.inicio)}</p>
-                {resultado.previsao_entrega && (
-                  <p><strong>Retirada Permitida a partir de:</strong> <span className="text-emerald-400 font-bold font-mono">{formatarDataHora(resultado.previsao_entrega)}</span></p>
-                )}
-                <p><strong>Duração Prevista:</strong> {formatDuracao(resultado.duracao_total)}</p>
-                <p><strong>Valor Total Estimado:</strong> R$ {formatValorMoeda(resultado.preco_estimado_total)}</p>
+          return (
+            <div className="space-y-6 text-center py-4">
+              <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-emerald-400">
+                <CheckCircle2 className="w-10 h-10" />
               </div>
 
-              {(resultado.sinal?.ativo || resultado.sinal?.exigido) && Number(resultado.sinal?.valor || 0) > 0 ? (
-                <div className="border-t border-slate-800 pt-3 space-y-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-amber-400 font-semibold">Sinal Solicitado:</span>
-                    <span className="text-base font-bold text-amber-400">R$ {formatValorMoeda(resultado.sinal.valor)}</span>
+              <div>
+                <h2 className="text-xl font-bold text-white">Agendamento Realizado!</h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  OS <span className="text-emerald-400 font-bold">#{resultado.numero_os}</span> · {tenant.nome}
+                </p>
+              </div>
+
+              {/* Card de Mensagem Conforme Configuração */}
+              <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl text-left space-y-4">
+                {/* Informações de Horário */}
+                <div className="text-xs text-slate-300 space-y-1.5 pb-3 border-b border-slate-800">
+                  <p><strong>Início:</strong> {formatarDataHora(inicioFinal)}</p>
+                  {previsaoEntregaFinal && (
+                    <p><strong>Retirada Permitida a partir de:</strong> <span className="text-emerald-400 font-bold font-mono">{formatarDataHora(previsaoEntregaFinal)}</span></p>
+                  )}
+                  <p><strong>Duração Prevista:</strong> {formatDuracao(duracaoFinal)}</p>
+                </div>
+
+                {/* Discriminação de Valores Transparente */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400 font-medium">Valor Total dos Serviços:</span>
+                    <span className="text-slate-200 font-mono font-bold text-sm">R$ {formatValorMoeda(valorTotalServicos)}</span>
                   </div>
 
-                  {resultado.sinal.pix_payload ? (
-                    <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
-                      <p className="text-xs text-slate-300 font-medium">Escaneie o QR Code ou Copie a Chave Pix:</p>
-                      
-                      <img 
-                        src={gerarQrCodeUrl(resultado.sinal.pix_payload)} 
-                        alt="QR Code Pix" 
-                        className="w-44 h-44 mx-auto rounded-lg bg-white p-2 border border-slate-700" 
-                      />
+                  {temSinal ? (
+                    <>
+                      {/* Sinal Pix a Pagar Agora */}
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-amber-400">
+                            Sinal Solicitado (PIX agora):
+                          </span>
+                          <span className="text-base font-extrabold text-amber-400 font-mono">
+                            R$ {formatValorMoeda(valorSinal)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-300/80 leading-tight">
+                          Adiantamento para garantir e reservar sua vaga na bancada.
+                        </p>
+                      </div>
 
-                      <button
-                        onClick={handleCopiarPix}
-                        className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold text-xs rounded-xl border border-emerald-500/30 flex items-center justify-center gap-2 transition"
-                      >
-                        {copiado ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                        {copiado ? 'Código Pix Copiado!' : 'Copiar Código Pix (Copia e Cola)'}
-                      </button>
-                    </div>
+                      {/* Saldo Restante a Pagar na Oficina */}
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-emerald-400">
+                            Saldo Restante na Oficina:
+                          </span>
+                          <span className="text-base font-extrabold text-emerald-400 font-mono">
+                            R$ {formatValorMoeda(saldoRestante)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-300/80 leading-tight">
+                          (R$ {formatValorMoeda(valorTotalServicos)} - R$ {formatValorMoeda(valorSinal)}) a pagar somente na entrega do veículo.
+                        </p>
+                      </div>
+
+                      {/* Aviso Explicativo para Eliminar Dúvidas */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 flex items-start gap-2">
+                        <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="leading-snug">
+                          <strong>Aviso importante:</strong> O valor do sinal de R$ {formatValorMoeda(valorSinal)} é <u>abatido</u> do total. Você não pagará nada a mais: apenas os R$ {formatValorMoeda(saldoRestante)} restantes na entrega do seu veículo!
+                        </span>
+                      </div>
+
+                      {/* QR Code e Código Pix */}
+                      {resultado.sinal.pix_payload ? (
+                        <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800 text-center mt-3">
+                          <p className="text-xs text-slate-300 font-medium">Escaneie o QR Code ou Copie a Chave Pix:</p>
+                          
+                          <img 
+                            src={gerarQrCodeUrl(resultado.sinal.pix_payload)} 
+                            alt="QR Code Pix" 
+                            className="w-44 h-44 mx-auto rounded-lg bg-white p-2 border border-slate-700 shadow-md" 
+                          />
+
+                          <button
+                            onClick={handleCopiarPix}
+                            className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold text-xs rounded-xl border border-emerald-500/30 flex items-center justify-center gap-2 transition"
+                          >
+                            {copiado ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-emerald-400" />}
+                            {copiado ? 'Código Pix Copiado!' : 'Copiar Código Pix (Copia e Cola)'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/20 text-center text-xs text-amber-300">
+                          Envie o comprovante ou solicite a chave Pix diretamente pelo WhatsApp da oficina abaixo para validar seu agendamento.
+                        </div>
+                      )}
+                      
+                      <p className="text-[11px] text-slate-400 leading-relaxed text-center">
+                        Instrução: Envie o comprovante de pagamento pelo WhatsApp da oficina para confirmar seu horário.
+                      </p>
+                    </>
                   ) : (
-                    <div className="p-3 bg-slate-950 rounded-xl border border-amber-500/20 text-center text-xs text-amber-300">
-                      Envie o comprovante ou solicite a chave Pix diretamente pelo WhatsApp da oficina abaixo para validar seu agendamento.
+                    <div className="border-t border-slate-800 pt-3">
+                      <p className="text-xs text-emerald-400 font-medium">
+                        {resultado.status === 'aguardando_confirmacao'
+                          ? 'Recebemos seu pedido de agendamento. A oficina irá confirmar em breve.'
+                          : 'Seu horário está reservado e confirmado! Pagamento integral realizado na oficina.'}
+                      </p>
                     </div>
                   )}
-                  
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Instrução: Envie o comprovante de pagamento pelo WhatsApp da oficina para confirmar seu horário.
-                  </p>
                 </div>
-              ) : (
-                <div className="border-t border-slate-800 pt-3">
-                  <p className="text-xs text-emerald-400 font-medium">
-                    {resultado.status === 'aguardando_confirmacao'
-                      ? 'Recebemos seu pedido de agendamento. A oficina irá confirmar em breve.'
-                      : 'Seu horário está reservado e confirmado!'}
-                  </p>
-                </div>
-              )}
 
-              {tenant.politica_cancelamento && (
-                <div className="border-t border-slate-800/80 pt-2 text-[11px] text-slate-500">
-                  <strong>Política de Cancelamento:</strong> {tenant.politica_cancelamento}
-                </div>
-              )}
+                {tenant.politica_cancelamento && (
+                  <div className="border-t border-slate-800/80 pt-2 text-[11px] text-slate-500">
+                    <strong>Política de Cancelamento:</strong> {tenant.politica_cancelamento}
+                  </div>
+                )}
+              </div>
+
+              {/* Botão para Falar com a Oficina via WhatsApp */}
+              <a
+                href={`https://wa.me/${formatarTelefoneWhatsapp(tenant.telefone) || tenant.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
+                  `Olá! Fiz um agendamento online (OS #${resultado.numero_os}) na ${tenant.nome} para ${formatarData(dataSelecionada)} às ${horarioSelecionado}.${
+                    temSinal
+                      ? ` Segue o comprovante do sinal de R$ ${formatValorMoeda(valorSinal)} (Saldo restante na retirada: R$ ${formatValorMoeda(saldoRestante)}).`
+                      : ''
+                  }`
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/20"
+              >
+                <MessageSquare className="w-5 h-5" /> Enviar Comprovante / WhatsApp
+              </a>
             </div>
-
-            {/* Botão para Falar com a Oficina via WhatsApp */}
-            <a
-              href={`https://wa.me/${formatarTelefoneWhatsapp(tenant.telefone) || tenant.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
-                `Olá! Fiz um agendamento online (OS #${resultado.numero_os}) para ${formatarData(dataSelecionada)} às ${horarioSelecionado}.`
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/20"
-            >
-              <MessageSquare className="w-5 h-5" /> Enviar Comprovante / WhatsApp
-            </a>
-          </div>
-        )}
+          );
+        })()}
       </main>
 
       {/* Rodapé Legal Público */}
