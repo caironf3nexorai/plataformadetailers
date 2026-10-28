@@ -154,3 +154,132 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.validar_cupom(text, text, text) TO authenticated, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.validar_cupom(text, text) TO authenticated, anon, service_role;
+
+-- ------------------------------------------------------------------------------
+-- 2. Atualizar obter_assinatura_tenant para retornar dados da promoção de cupom
+--    (permite exibir banner ao cliente avisando quantos meses faltam e o valor futuro)
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.obter_assinatura_tenant(p_tenant_id UUID DEFAULT NULL)
+RETURNS JSONB
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_ass RECORD;
+  v_tenant RECORD;
+  v_hoje DATE;
+  v_dias_trial INTEGER := 0;
+  v_dias_atraso INTEGER := 0;
+  v_dias_para_rebaixamento INTEGER := 0;
+  v_status_final TEXT;
+  v_plano_final TEXT;
+  v_valor_dinamico INTEGER;
+BEGIN
+  v_tenant_id := COALESCE(p_tenant_id, (SELECT public.meus_tenants() LIMIT 1));
+  IF v_tenant_id IS NULL THEN
+    RETURN jsonb_build_object('existe', false, 'status', 'trial', 'plano', 'pro', 'ciclo', 'mensal');
+  END IF;
+
+  SELECT * INTO v_tenant FROM public.tenants WHERE id = v_tenant_id;
+  SELECT * INTO v_ass FROM public.assinaturas WHERE tenant_id = v_tenant_id;
+
+  v_hoje := (now() AT TIME ZONE 'America/Sao_Paulo')::date;
+
+  IF NOT FOUND THEN
+    SELECT preco_centavos INTO v_valor_dinamico FROM public.plans WHERE codigo = 'pro';
+    RETURN jsonb_build_object(
+      'existe', false,
+      'plano', COALESCE(v_tenant.plano::text, 'free'),
+      'status', CASE WHEN v_tenant.plano = 'free' THEN 'cancelada' ELSE 'trial' END,
+      'ciclo', 'mensal',
+      'valor_centavos', COALESCE(v_valor_dinamico, 0),
+      'dias_trial_restantes', 0
+    );
+  END IF;
+
+  v_status_final := v_ass.status;
+  v_plano_final := COALESCE(v_ass.plano, v_tenant.plano, 'pro');
+
+  -- VERIFICAÇÃO ATIVA DE EXPIRAÇÃO DE TRIAL
+  IF v_status_final = 'trial' AND v_ass.trial_fim IS NOT NULL THEN
+    v_dias_trial := v_ass.trial_fim - v_hoje;
+    IF v_dias_trial <= 0 THEN
+      v_dias_trial := 0;
+      v_status_final := 'cancelada';
+      v_plano_final := 'free';
+
+      UPDATE public.assinaturas
+      SET plano = 'free',
+          status = 'cancelada',
+          cancelada_em = COALESCE(cancelada_em, now()),
+          updated_at = now()
+      WHERE id = v_ass.id;
+
+      UPDATE public.tenants
+      SET plano = 'free',
+          updated_at = now()
+      WHERE id = v_tenant_id;
+    END IF;
+  END IF;
+
+  -- VERIFICAÇÃO DE ATRASO
+  IF v_status_final = 'atrasada' AND v_ass.atraso_desde IS NOT NULL THEN
+    v_dias_atraso := v_hoje - v_ass.atraso_desde;
+    v_dias_para_rebaixamento := 5 - v_dias_atraso;
+    IF v_dias_para_rebaixamento <= 0 THEN
+      v_dias_para_rebaixamento := 0;
+      v_status_final := 'cancelada';
+      v_plano_final := 'free';
+
+      UPDATE public.assinaturas
+      SET plano = 'free',
+          status = 'cancelada',
+          updated_at = now()
+      WHERE id = v_ass.id;
+
+      UPDATE public.tenants
+      SET plano = 'free',
+          updated_at = now()
+      WHERE id = v_tenant_id;
+    END IF;
+  END IF;
+
+  -- Busca preço dinâmico na tabela plans
+  SELECT 
+    CASE 
+      WHEN COALESCE(v_ass.ciclo, 'mensal') = 'anual' AND p.preco_anual_centavos IS NOT NULL AND p.preco_anual_centavos > 0 
+        THEN p.preco_anual_centavos
+      ELSE p.preco_centavos
+    END
+  INTO v_valor_dinamico
+  FROM public.plans p
+  WHERE p.codigo = v_plano_final;
+
+  RETURN jsonb_build_object(
+    'existe', true,
+    'id', v_ass.id,
+    'tenant_id', v_ass.tenant_id,
+    'plano', v_plano_final,
+    'status', v_status_final,
+    'ciclo', COALESCE(v_ass.ciclo, 'mensal'),
+    'forma_pagamento', v_ass.forma_pagamento,
+    'valor_centavos', COALESCE(v_valor_dinamico, v_ass.valor_centavos, 0),
+    'trial_fim', v_ass.trial_fim,
+    'dias_trial_restantes', v_dias_trial,
+    'proximo_vencimento', v_ass.proximo_vencimento,
+    'atraso_desde', v_ass.atraso_desde,
+    'dias_atraso', v_dias_atraso,
+    'dias_para_rebaixamento', v_dias_para_rebaixamento,
+    'url_pagamento_asaas', v_ass.url_pagamento_asaas,
+    'asaas_subscription_id', v_ass.asaas_subscription_id,
+    'cancelada_em', v_ass.cancelada_em,
+    'promo_meses_restantes', v_ass.promo_meses_restantes,
+    'promo_valor_normal_centavos', v_ass.promo_valor_normal_centavos,
+    'promo_cupom_codigo', v_ass.promo_cupom_codigo,
+    'promo_valor_cobrado_centavos', v_ass.valor_centavos
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.obter_assinatura_tenant(UUID) TO authenticated, service_role;
+

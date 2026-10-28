@@ -7,6 +7,7 @@ import { MobileNavDrawer } from './MobileNavDrawer';
 import { BotaoFeedbackFlutuante } from '../feedback/BotaoFeedbackFlutuante';
 import { ModalComunicadoGlobal } from '../comunicados/ModalComunicadoGlobal';
 import { ModalAvisoAssinatura } from '../assinatura/ModalAvisoAssinatura';
+import { BannerPromocaoAtiva } from '../assinatura/BannerPromocaoAtiva';
 import { ModalRadarFinanceiroDoDia } from '../financeiro/ModalRadarFinanceiroDoDia';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -112,6 +113,7 @@ export const AppShell: React.FC = () => {
               paddingBottom: 'calc(80px + max(12px, env(safe-area-inset-bottom, 0px)))',
             }}
           >
+            <BannerPromocaoAtiva assinatura={assinatura} />
             <Outlet />
           </main>
           

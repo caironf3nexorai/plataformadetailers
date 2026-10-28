@@ -342,6 +342,53 @@ export const AbaAssinatura: React.FC = () => {
           </div>
         )}
 
+        {/* Card de Condição Promocional Ativa (Cupom Temporário) */}
+        {assinatura?.promo_meses_restantes && assinatura.promo_meses_restantes > 0 && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-slate-900 to-amber-600/10 border border-amber-500/40 shadow-xl shadow-amber-500/5 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <span className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                    Condição Promocional Ativa
+                  </span>
+                  <span className="text-sm font-bold text-white">
+                    Cupom: {assinatura.promo_cupom_codigo || 'PROMOCIONAL'}
+                  </span>
+                </div>
+              </div>
+              <Badge tone="amber">
+                {assinatura.promo_meses_restantes === 1
+                  ? 'Última fatura promocional'
+                  : `${assinatura.promo_meses_restantes} mensalidades restantes`}
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="bg-graphite-950/70 p-3 rounded-xl border border-graphite-800">
+                <span className="text-[11px] text-vapor-400 block">Valor Cobrado Atualmente:</span>
+                <span className="text-base font-black text-emerald-400 font-mono">
+                  {formatarPrecoMensal(assinatura.promo_valor_cobrado_centavos ?? assinatura.valor_centavos)} / mês
+                </span>
+              </div>
+              <div className="bg-graphite-950/70 p-3 rounded-xl border border-graphite-800">
+                <span className="text-[11px] text-vapor-400 block">
+                  {assinatura.promo_meses_restantes === 1 ? 'Valor a partir da próxima fatura:' : `Valor após as ${assinatura.promo_meses_restantes} faturas:`}
+                </span>
+                <span className="text-base font-black text-amber-400 font-mono">
+                  {formatarPrecoMensal(assinatura.promo_valor_normal_centavos ?? 5700)} / mês
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11.5px] text-vapor-300 leading-relaxed">
+              ℹ️ A reversão para o valor normal do plano acontece de forma 100% automática através do Asaas, garantindo que suas funções nunca sejam interrompidas.
+            </p>
+          </div>
+        )}
+
         {/* Alerta de Trial */}
         {(assinatura?.status === 'trial' || tenant?.status === 'trial') && (
           <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-graphite-900 border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
