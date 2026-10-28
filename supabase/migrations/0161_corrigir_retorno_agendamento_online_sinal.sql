@@ -162,10 +162,10 @@ BEGIN
 
   -- 3. Registra Cliente e Veículo
   SELECT * INTO v_reg
-  FROM public.obter_ou_criar_cliente_veiculo_por_telefone(
+  FROM public.pre_registrar_cliente_e_veiculo_online(
     p_tenant_id => v_tenant.id,
-    p_telefone => p_cliente_telefone,
     p_nome => p_cliente_nome,
+    p_telefone => p_cliente_telefone,
     p_categoria_id => p_categoria,
     p_placa => p_veiculo_placa,
     p_modelo => p_veiculo_modelo,
@@ -183,8 +183,11 @@ BEGIN
     v_tenant.id, 'agendamento_online', v_tel_norm, 'v1.0-2026-08', now(), p_ip, p_user_agent
   );
 
-  -- 5. Tratamento de Sinal Pix e Status Inicial
-  IF coalesce(v_tenant.sinal_ativo, false) AND coalesce(v_tenant.sinal_valor, 0) > 0 AND v_valor_total > 0 THEN
+  -- 5. Tratamento de Sinal Pix e Status Inicial (somente se a oficina ativou E o plano liberar 'sinal_pix')
+  IF coalesce(v_tenant.sinal_ativo, false) 
+     AND public.tenant_tem_feature(v_tenant.id, 'sinal_pix')
+     AND coalesce(v_tenant.sinal_valor, 0) > 0 
+     AND v_valor_total > 0 THEN
     IF v_tenant.sinal_tipo = 'percentual' THEN
       v_sinal_valor_calc := round((v_valor_total * v_tenant.sinal_valor / 100.0), 2);
     ELSE
