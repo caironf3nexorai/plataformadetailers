@@ -57,6 +57,7 @@ import {
   MODELOS_TERMOS_PLATAFORMA_PADRAO,
   type ServicoParaTermo,
   type DadosPreenchimentoTermo,
+  preencherVariaveisTermo,
   gerarTermoDinamicoServicos,
   obterClausulasDetectadas,
   mesclarClausulasComTextoExistente,
@@ -300,17 +301,30 @@ export const DetalheOrcamento: React.FC = () => {
   // Texto formatado de preview da garantia com substituição de variáveis
   const textoPreviewGarantia = useMemo(() => {
     const prazoTexto = `${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'}`;
-    const nomeEmpresa = tenant?.nome || 'nossa oficina';
+    const nomeEmpresa = tenant?.razao_social || tenant?.nome || 'nossa oficina';
+    const orcData = orcamento as any;
+    const veicModelo = orcData?.veiculo?.modelo;
+    const veicPlaca = orcData?.veiculo?.placa;
+    const veicIdent = veicModelo ? `${veicModelo} (${veicPlaca || ''})` : veicPlaca;
 
-    if (termoGarantiaAtual?.conteudo) {
-      return termoGarantiaAtual.conteudo
-        .replace(/\[PRAZO DE GARANTIA\]/g, prazoTexto)
-        .replace(/\[NOME DA EMPRESA\]/g, nomeEmpresa);
-    }
-    return TERMO_GARANTIA_PADRAO_ADVOGADO
-      .replace(/\[PRAZO DE GARANTIA\]/g, prazoTexto)
-      .replace(/\[NOME DA EMPRESA\]/g, nomeEmpresa);
-  }, [termoGarantiaAtual, garantiaMeses, tenant?.nome]);
+    const dadosSubst = {
+      nomeEmpresa,
+      prazoGarantia: prazoTexto,
+      clienteNome: orcData?.cliente?.nome,
+      veiculoPlaca: veicIdent,
+    };
+
+    const textoBase = termoGarantiaAtual?.conteudo || TERMO_GARANTIA_PADRAO_ADVOGADO;
+    return preencherVariaveisTermo(textoBase, dadosSubst);
+  }, [
+    termoGarantiaAtual,
+    garantiaMeses,
+    tenant?.razao_social,
+    tenant?.nome,
+    (orcamento as any)?.cliente?.nome,
+    (orcamento as any)?.veiculo?.modelo,
+    (orcamento as any)?.veiculo?.placa,
+  ]);
 
   // Modal de Novo Serviço Rápido
   const [showModalServicoRapido, setShowModalServicoRapido] = useState<boolean>(false);

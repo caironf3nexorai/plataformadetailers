@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,7 +34,11 @@ import { formatarDataHora } from '../utils/datas';
 import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
 import { gerarPDFOS } from '../utils/pdfOS';
 import { getEvidenciaSignedUrl, baixarFoto } from '../utils/evidencias';
-import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
+import { 
+  TERMO_RESPONSABILIDADE_PADRAO, 
+  preencherVariaveisTermo, 
+  type DadosPreenchimentoTermo 
+} from '../types/termos';
 import { ModalEmitirCertificado } from '../components/garantia/ModalEmitirCertificado';
 import { AdesivoParabrisaModal } from '../components/garantia/AdesivoParabrisaModal';
 import { ModalEmitirNFSe } from '../components/atendimento/ModalEmitirNFSe';
@@ -71,6 +75,40 @@ export const VisualizarAtendimento: React.FC = () => {
   const [modalAvisoSemVistoriaOpen, setModalAvisoSemVistoriaOpen] = useState(false);
   const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
   const [termoGarantia, setTermoGarantia] = useState<{ titulo?: string; texto?: string } | null>(null);
+
+  // Preenchimento reativo dinâmico de variáveis das minutas (Empresa, Prazo de Garantia, Cliente, Veículo, etc.)
+  const dadosPreenchimentoAtual = useMemo<DadosPreenchimentoTermo>(() => {
+    const nomeEmpresa = tenant?.razao_social || tenant?.nome || 'Oficina';
+    const clienteNome = (agendamento?.cliente as any)?.nome || 'Cliente';
+    const clienteCpf = (agendamento?.cliente as any)?.documento || '';
+    const veicModelo = agendamento?.veiculo?.modelo || '';
+    const veicPlaca = agendamento?.veiculo?.placa || '';
+    const veicIdent = veicModelo && veicPlaca ? `${veicModelo} (${veicPlaca})` : (veicPlaca || veicModelo || 'Veículo');
+    const srvNome = (agendamento?.servico as any)?.nome || 'Serviços Especializados';
+    const meses = (agendamento as any)?.garantia_meses || (agendamento?.servico as any)?.garantia_meses || 3;
+    const prazo = `${meses} ${meses === 1 ? 'mês' : 'meses'}`;
+
+    return {
+      nomeEmpresa,
+      prazoGarantia: prazo,
+      servicoContratado: srvNome,
+      riscosObservacoes: (agendamento as any)?.termo_risco_observacoes || undefined,
+      clienteNome,
+      clienteCpf,
+      veiculoPlaca: veicIdent,
+      data: new Date().toLocaleDateString('pt-BR'),
+    };
+  }, [tenant, agendamento]);
+
+  const termoResponsabilidadeFormatado = useMemo(() => {
+    const raw = termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO;
+    return preencherVariaveisTermo(raw, dadosPreenchimentoAtual);
+  }, [termoResponsabilidade, dadosPreenchimentoAtual]);
+
+  const termoGarantiaTextoFormatado = useMemo(() => {
+    if (!termoGarantia?.texto) return '';
+    return preencherVariaveisTermo(termoGarantia.texto, dadosPreenchimentoAtual);
+  }, [termoGarantia?.texto, dadosPreenchimentoAtual]);
 
   // Estados de Certificado de Garantia
   const [certificadoExistente, setCertificadoExistente] = useState<{
@@ -1494,19 +1532,19 @@ export const VisualizarAtendimento: React.FC = () => {
               Termo Fixo de Responsabilidade & Falhas Ocultas da Oficina
             </span>
             <p className="font-sans text-[12px] text-vapor-300 leading-relaxed max-h-32 overflow-y-auto pr-1">
-              {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+              {termoResponsabilidadeFormatado}
             </p>
           </div>
 
           {/* Termo de Garantia Específica (se houver) */}
-          {termoGarantia?.texto && (
+          {termoGarantiaTextoFormatado && (
             <div className="p-3 bg-graphite-800/80 rounded border border-emerald-500/30 flex flex-col gap-1.5">
               <span className="text-[11px] text-emerald-400 font-sans font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles size={14} />
-                Termo de Garantia do Atendimento {termoGarantia.titulo ? `(${termoGarantia.titulo})` : ''}
+                Termo de Garantia do Atendimento {termoGarantia?.titulo ? `(${termoGarantia.titulo})` : ''}
               </span>
               <p className="font-sans text-[12px] text-vapor-300 leading-relaxed max-h-32 overflow-y-auto pr-1">
-                {termoGarantia.texto}
+                {termoGarantiaTextoFormatado}
               </p>
             </div>
           )}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,7 +30,11 @@ import {
   FileDown,
   ShieldCheck,
 } from 'lucide-react';
-import { TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
+import { 
+  TERMO_RESPONSABILIDADE_PADRAO, 
+  preencherVariaveisTermo, 
+  type DadosPreenchimentoTermo 
+} from '../../types/termos';
 
 export const FormularioCheckin: React.FC = () => {
   const { agendamentoId } = useParams<{ agendamentoId: string }>();
@@ -101,6 +105,40 @@ export const FormularioCheckin: React.FC = () => {
   const [pdfProgressManual, setPdfProgressManual] = useState('');
   const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
   const [termoGarantia, setTermoGarantia] = useState<{ titulo?: string; texto?: string } | null>(null);
+
+  // Preenchimento reativo dinâmico de variáveis das minutas (Empresa, Prazo de Garantia, Cliente, Veículo, etc.)
+  const dadosPreenchimentoAtual = useMemo<DadosPreenchimentoTermo>(() => {
+    const nomeEmpresa = tenant?.razao_social || tenant?.nome || 'Oficina';
+    const clienteNome = assinaturaNome || (agendamento?.cliente as any)?.nome || 'Cliente';
+    const clienteCpf = (agendamento?.cliente as any)?.documento || '';
+    const veicModelo = agendamento?.veiculo?.modelo || '';
+    const veicPlaca = agendamento?.veiculo?.placa || '';
+    const veicIdent = veicModelo && veicPlaca ? `${veicModelo} (${veicPlaca})` : (veicPlaca || veicModelo || 'Veículo');
+    const srvNome = (agendamento?.servico as any)?.nome || 'Serviços Especializados';
+    const meses = (agendamento as any)?.garantia_meses || (agendamento?.servico as any)?.garantia_meses || 3;
+    const prazo = `${meses} ${meses === 1 ? 'mês' : 'meses'}`;
+
+    return {
+      nomeEmpresa,
+      prazoGarantia: prazo,
+      servicoContratado: srvNome,
+      riscosObservacoes: (agendamento as any)?.termo_risco_observacoes || undefined,
+      clienteNome,
+      clienteCpf,
+      veiculoPlaca: veicIdent,
+      data: new Date().toLocaleDateString('pt-BR'),
+    };
+  }, [tenant, agendamento, assinaturaNome]);
+
+  const termoResponsabilidadeFormatado = useMemo(() => {
+    const raw = termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO;
+    return preencherVariaveisTermo(raw, dadosPreenchimentoAtual);
+  }, [termoResponsabilidade, dadosPreenchimentoAtual]);
+
+  const termoGarantiaTextoFormatado = useMemo(() => {
+    if (!termoGarantia?.texto) return '';
+    return preencherVariaveisTermo(termoGarantia.texto, dadosPreenchimentoAtual);
+  }, [termoGarantia?.texto, dadosPreenchimentoAtual]);
 
   const handleEnviarLinkRemoto = async () => {
     if (!checkin || !agendamento) return;
@@ -195,12 +233,17 @@ export const FormularioCheckin: React.FC = () => {
           id,
           inicio,
           status,
+          garantia_meses,
+          incluir_termo_risco,
+          termo_risco_servico,
+          termo_risco_observacoes,
+          termo_risco_texto,
           termo_garantia_id,
           termo_responsabilidade_texto,
           termo_garantia_texto,
-          cliente:clientes(id, nome, telefone),
+          cliente:clientes(id, nome, telefone, documento),
           veiculo:veiculos(id, modelo, placa, cor, marca),
-          servico:servicos(id, nome)
+          servico:servicos(id, nome, garantia_meses)
         `)
         .eq('id', agendamentoId)
         .maybeSingle();
@@ -213,6 +256,7 @@ export const FormularioCheckin: React.FC = () => {
             id,
             inicio,
             status,
+            garantia_meses,
             cliente:clientes(id, nome, telefone),
             veiculo:veiculos(id, modelo, placa, cor, marca)
           `)
@@ -231,16 +275,42 @@ export const FormularioCheckin: React.FC = () => {
       setVeiculoCor((agData.veiculo as any)?.cor || '');
       setAssinaturaNome((agData.cliente as any)?.nome || '');
 
+      // Dados para pré-preenchimento
+      const nomeEmpresa = tenant?.razao_social || tenant?.nome || 'Oficina';
+      const clienteNome = (agData.cliente as any)?.nome || '';
+      const clienteCpf = (agData.cliente as any)?.documento || '';
+      const veiculoModelo = (agData.veiculo as any)?.modelo || '';
+      const veiculoPlaca = (agData.veiculo as any)?.placa || '';
+      const veicPlacaIdent = veiculoModelo && veiculoPlaca 
+        ? `${veiculoModelo} (${veiculoPlaca})` 
+        : (veiculoPlaca || veiculoModelo || 'Veículo');
+      const servicoNome = (agData.servico as any)?.nome || 'Serviços Especializados';
+      const garantiaMesesNum = (agData as any)?.garantia_meses || (agData.servico as any)?.garantia_meses || 3;
+      const prazoGarantiaStr = `${garantiaMesesNum} ${garantiaMesesNum === 1 ? 'mês' : 'meses'}`;
+
+      const dadosPreenchimentoInicial: DadosPreenchimentoTermo = {
+        nomeEmpresa,
+        prazoGarantia: prazoGarantiaStr,
+        servicoContratado: servicoNome,
+        riscosObservacoes: (agData as any)?.termo_risco_observacoes || undefined,
+        clienteNome,
+        clienteCpf,
+        veiculoPlaca: veicPlacaIdent,
+        data: new Date().toLocaleDateString('pt-BR'),
+      };
+
       // Resolver Termo de Responsabilidade (Snapshot -> Tenant -> LocalStorage -> Padrão)
       const termoRespEfetivo = (agData as any).termo_responsabilidade_texto ||
         (tenant as any).termo_responsabilidade ||
         (tenant?.id ? localStorage.getItem(`tenant_termo_responsabilidade_${tenant.id}`) : null) ||
         TERMO_RESPONSABILIDADE_PADRAO;
-      setTermoResponsabilidade(termoRespEfetivo);
+      setTermoResponsabilidade(preencherVariaveisTermo(termoRespEfetivo, dadosPreenchimentoInicial));
 
       // Resolver Termo de Garantia (Snapshot -> Termos Garantia DB)
       if ((agData as any).termo_garantia_texto) {
-        setTermoGarantia({ texto: (agData as any).termo_garantia_texto });
+        setTermoGarantia({
+          texto: preencherVariaveisTermo((agData as any).termo_garantia_texto, dadosPreenchimentoInicial),
+        });
       } else if ((agData as any).termo_garantia_id) {
         const { data: tgData } = await supabase
           .from('termos_garantia')
@@ -248,7 +318,10 @@ export const FormularioCheckin: React.FC = () => {
           .eq('id', (agData as any).termo_garantia_id)
           .maybeSingle();
         if (tgData) {
-          setTermoGarantia({ titulo: tgData.titulo, texto: tgData.conteudo });
+          setTermoGarantia({
+            titulo: tgData.titulo,
+            texto: preencherVariaveisTermo(tgData.conteudo, dadosPreenchimentoInicial),
+          });
         }
       }
 
@@ -513,6 +586,18 @@ export const FormularioCheckin: React.FC = () => {
 
       if (rpcErr) throw rpcErr;
 
+      // 2.1 Snapshot de termos devidamente preenchidos salvo no agendamento para rastreabilidade
+      if (agendamentoId) {
+        try {
+          await supabase.from('agendamentos').update({
+            termo_responsabilidade_texto: termoResponsabilidadeFormatado,
+            termo_garantia_texto: termoGarantiaTextoFormatado || null,
+          }).eq('id', agendamentoId);
+        } catch (updErr) {
+          console.warn('[FormularioCheckin] Erro ao salvar snapshot de termos no agendamento:', updErr);
+        }
+      }
+
       // 3. Redirecionar para a visualização legível do Checkin
       navigate(`/checkin/${checkin.id}/ver`, { replace: true });
     } catch (err: any) {
@@ -626,8 +711,8 @@ export const FormularioCheckin: React.FC = () => {
           pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento,
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
-          termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
-          termoGarantia: termoGarantia?.texto || null,
+          termoResponsabilidade: termoResponsabilidadeFormatado,
+          termoGarantia: termoGarantiaTextoFormatado || null,
           garantiaMeses: (agendamento as any)?.garantia_meses ?? 3,
           incluirTermoRisco: (agendamento as any)?.incluir_termo_risco ?? false,
           termoRiscoServico: (agendamento as any)?.termo_risco_servico || null,
@@ -637,6 +722,18 @@ export const FormularioCheckin: React.FC = () => {
         },
         (msg) => setPdfProgressManual(msg)
       );
+
+      // Snapshot dos termos no agendamento
+      if (agendamentoId) {
+        try {
+          await supabase.from('agendamentos').update({
+            termo_responsabilidade_texto: termoResponsabilidadeFormatado,
+            termo_garantia_texto: termoGarantiaTextoFormatado || null,
+          }).eq('id', agendamentoId);
+        } catch (updErr) {
+          console.warn('[FormularioCheckin] Erro ao salvar termos manual:', updErr);
+        }
+      }
 
       navigate(`/checkin/${checkin.id}/ver`, { replace: true });
     } catch (err: any) {
@@ -1174,19 +1271,19 @@ export const FormularioCheckin: React.FC = () => {
                   <span>Termo de Responsabilidade & Falhas Ocultas da Oficina</span>
                 </div>
                 <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-28 overflow-y-auto pr-1">
-                  {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                  {termoResponsabilidadeFormatado}
                 </p>
               </div>
 
               {/* Termo de Garantia do Serviço (se houver) */}
-              {termoGarantia?.texto && (
+              {termoGarantiaTextoFormatado && (
                 <div className="p-3.5 bg-graphite-900 border border-emerald-500/30 rounded-xl flex flex-col gap-1.5">
                   <div className="flex items-center gap-2 text-emerald-400 font-bold font-sans text-[12px] uppercase">
                     <Sparkles size={16} />
-                    <span>Termo de Garantia do Atendimento {termoGarantia.titulo ? `(${termoGarantia.titulo})` : ''}</span>
+                    <span>Termo de Garantia do Atendimento {termoGarantia?.titulo ? `(${termoGarantia.titulo})` : ''}</span>
                   </div>
                   <p className="font-sans text-[11.5px] text-vapor-300 leading-relaxed max-h-28 overflow-y-auto pr-1">
-                    {termoGarantia.texto}
+                    {termoGarantiaTextoFormatado}
                   </p>
                 </div>
               )}
@@ -1254,10 +1351,10 @@ export const FormularioCheckin: React.FC = () => {
                     <ShieldCheck size={14} className="text-amber-400 shrink-0 mt-0.5" />
                     <span><strong>Termo de Responsabilidade & Falhas Ocultas:</strong> Fixo e obrigatório</span>
                   </div>
-                  {termoGarantia?.texto && (
+                  {termoGarantiaTextoFormatado && (
                     <div className="flex items-start gap-1.5">
                       <Sparkles size={14} className="text-emerald-400 shrink-0 mt-0.5" />
-                      <span><strong>Garantia do Serviço:</strong> {termoGarantia.titulo || 'Garantia personalizada'}</span>
+                      <span><strong>Garantia do Serviço:</strong> {termoGarantia?.titulo || 'Garantia personalizada'}</span>
                     </div>
                   )}
                   {(agendamento as any)?.incluir_termo_risco && (

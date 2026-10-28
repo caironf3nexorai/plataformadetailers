@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -37,7 +37,11 @@ import {
   Send,
 } from 'lucide-react';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
-import { TERMO_RESPONSABILIDADE_PADRAO } from '../../types/termos';
+import { 
+  TERMO_RESPONSABILIDADE_PADRAO, 
+  preencherVariaveisTermo, 
+  type DadosPreenchimentoTermo 
+} from '../../types/termos';
 import { montarLinkWhatsapp } from '../../utils/whatsapp';
 
 export const VisualizarCheckin: React.FC = () => {
@@ -64,6 +68,42 @@ export const VisualizarCheckin: React.FC = () => {
   const [showModalEditarVeiculo, setShowModalEditarVeiculo] = useState(false);
   const [termoResponsabilidade, setTermoResponsabilidade] = useState<string>('');
   const [termoGarantia, setTermoGarantia] = useState<{ titulo?: string; texto?: string } | null>(null);
+
+  // Preenchimento reativo dinâmico de variáveis das minutas (Empresa, Prazo de Garantia, Cliente, Veículo, etc.)
+  const dadosPreenchimentoAtual = useMemo<DadosPreenchimentoTermo>(() => {
+    const nomeEmpresa = tenant?.razao_social || tenant?.nome || 'Oficina';
+    const clienteNome = checkin?.assinatura_nome || agendamento?.cliente?.nome || 'Cliente';
+    const clienteCpf = (agendamento?.cliente as any)?.documento || '';
+    const veicModelo = agendamento?.veiculo?.modelo || '';
+    const veicPlaca = agendamento?.veiculo?.placa || '';
+    const veicIdent = veicModelo && veicPlaca ? `${veicModelo} (${veicPlaca})` : (veicPlaca || veicModelo || 'Veículo');
+    const srvNome = (agendamento?.servico as any)?.nome || 'Serviços Especializados';
+    const meses = (agendamento as any)?.garantia_meses || (agendamento?.servico as any)?.garantia_meses || 3;
+    const prazo = `${meses} ${meses === 1 ? 'mês' : 'meses'}`;
+
+    return {
+      nomeEmpresa,
+      prazoGarantia: prazo,
+      servicoContratado: srvNome,
+      riscosObservacoes: (agendamento as any)?.termo_risco_observacoes || undefined,
+      clienteNome,
+      clienteCpf,
+      veiculoPlaca: veicIdent,
+      data: checkin?.assinado_em 
+        ? new Date(checkin.assinado_em).toLocaleDateString('pt-BR')
+        : new Date().toLocaleDateString('pt-BR'),
+    };
+  }, [tenant, agendamento, checkin]);
+
+  const termoResponsabilidadeFormatado = useMemo(() => {
+    const raw = termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO;
+    return preencherVariaveisTermo(raw, dadosPreenchimentoAtual);
+  }, [termoResponsabilidade, dadosPreenchimentoAtual]);
+
+  const termoGarantiaTextoFormatado = useMemo(() => {
+    if (!termoGarantia?.texto) return '';
+    return preencherVariaveisTermo(termoGarantia.texto, dadosPreenchimentoAtual);
+  }, [termoGarantia?.texto, dadosPreenchimentoAtual]);
 
   const svgRefs = useRef<{ [key in VistaDiagrama]?: SVGSVGElement | null }>({});
 
@@ -181,12 +221,17 @@ export const VisualizarCheckin: React.FC = () => {
           inicio,
           status,
           vistoria_dispensada,
+          garantia_meses,
+          incluir_termo_risco,
+          termo_risco_servico,
+          termo_risco_observacoes,
+          termo_risco_texto,
           termo_garantia_id,
           termo_responsabilidade_texto,
           termo_garantia_texto,
-          cliente:clientes(id, nome, telefone),
+          cliente:clientes(id, nome, telefone, documento),
           veiculo:veiculos(id, modelo, placa, marca, cor),
-          servico:servicos(id, nome)
+          servico:servicos(id, nome, garantia_meses)
         `)
         .eq('id', chkData.agendamento_id)
         .maybeSingle();
@@ -199,6 +244,7 @@ export const VisualizarCheckin: React.FC = () => {
             inicio,
             status,
             vistoria_dispensada,
+            garantia_meses,
             cliente:clientes(id, nome, telefone),
             veiculo:veiculos(id, modelo, placa, marca, cor)
           `)
@@ -330,8 +376,8 @@ export const VisualizarCheckin: React.FC = () => {
           pdfTextoObservacoesOrcamento: tenant.pdf_texto_observacoes_orcamento,
           pdfTextoRodape: tenant.pdf_texto_rodape,
           pdfOcultarMarcaDagua: tenant.pdf_ocultar_marca_dagua,
-          termoResponsabilidade: termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO,
-          termoGarantia: termoGarantia?.texto || null,
+          termoResponsabilidade: termoResponsabilidadeFormatado,
+          termoGarantia: termoGarantiaTextoFormatado || null,
           garantiaMeses: (agendamento as any)?.garantia_meses ?? 3,
           incluirTermoRisco: (agendamento as any)?.incluir_termo_risco ?? false,
           termoRiscoServico: (agendamento as any)?.termo_risco_servico || null,
@@ -845,19 +891,19 @@ export const VisualizarCheckin: React.FC = () => {
             <span>Termo de Responsabilidade & Falhas Ocultas da Oficina</span>
           </div>
           <p className="font-sans text-[12px] text-vapor-300 leading-relaxed">
-            {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+            {termoResponsabilidadeFormatado}
           </p>
         </div>
 
         {/* Termo de Garantia Específica (se houver) */}
-        {termoGarantia?.texto && (
+        {termoGarantiaTextoFormatado && (
           <div className="p-3.5 bg-graphite-900 border border-emerald-500/30 rounded-xl flex flex-col gap-1.5">
             <div className="flex items-center gap-2 text-emerald-400 font-bold font-sans text-[12px] uppercase">
               <Sparkles size={16} />
-              <span>Termo de Garantia do Atendimento {termoGarantia.titulo ? `(${termoGarantia.titulo})` : ''}</span>
+              <span>Termo de Garantia do Atendimento {termoGarantia?.titulo ? `(${termoGarantia.titulo})` : ''}</span>
             </div>
             <p className="font-sans text-[12px] text-vapor-300 leading-relaxed">
-              {termoGarantia.texto}
+              {termoGarantiaTextoFormatado}
             </p>
           </div>
         )}

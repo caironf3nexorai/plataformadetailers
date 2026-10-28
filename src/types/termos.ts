@@ -434,27 +434,74 @@ export function preencherVariaveisTermo(texto: string, dados: DadosPreenchimento
   if (!texto) return '';
   let res = texto;
 
-  const replacements: Record<string, string> = {
-    '[NOME DA EMPRESA]': dados.nomeEmpresa || 'Oficina',
-    '{oficina_nome}': dados.nomeEmpresa || 'Oficina',
-    '[PRAZO DE GARANTIA]': dados.prazoGarantia || '3 meses',
-    '{prazo_garantia}': dados.prazoGarantia || '3 meses',
-    '[SERVIÇO CONTRATADO]': dados.servicoContratado || 'Serviços Especializados',
-    '{servico_nome}': dados.servicoContratado || 'Serviços Especializados',
-    '[RISCOS/OBSERVAÇÕES]': dados.riscosObservacoes || 'Condições e riscos informados na vistoria inicial.',
-    '{riscos_informados}': dados.riscosObservacoes || 'Condições e riscos informados na vistoria inicial.',
-    '[NOME]': dados.clienteNome || 'Cliente',
-    '{cliente_nome}': dados.clienteNome || 'Cliente',
-    '[CPF]': dados.clienteCpf || 'Não informado',
-    '{cliente_documento}': dados.clienteCpf || 'Não informado',
-    '[VEÍCULO/PLACA]': dados.veiculoPlaca || 'Veículo do Cliente',
-    '{veiculo_placa}': dados.veiculoPlaca || 'Veículo do Cliente',
-    '[DATA]': dados.data || new Date().toLocaleDateString('pt-BR'),
-    '{data_atual}': dados.data || new Date().toLocaleDateString('pt-BR'),
-  };
+  const nomeEmpresa = (dados.nomeEmpresa && dados.nomeEmpresa.trim()) || 'Oficina';
+  const prazoGarantia = (dados.prazoGarantia && dados.prazoGarantia.trim()) || '3 meses';
+  const servicoContratado = (dados.servicoContratado && dados.servicoContratado.trim()) || 'Serviços Especializados';
+  const riscosObservacoes = (dados.riscosObservacoes && dados.riscosObservacoes.trim()) || 'Condições e riscos informados na vistoria inicial.';
+  const clienteNome = (dados.clienteNome && dados.clienteNome.trim()) || 'Cliente';
+  const clienteCpf = (dados.clienteCpf && dados.clienteCpf.trim()) || 'Não informado';
+  const veiculoPlaca = (dados.veiculoPlaca && dados.veiculoPlaca.trim()) || 'Veículo do Cliente';
+  const data = (dados.data && dados.data.trim()) || new Date().toLocaleDateString('pt-BR');
 
-  for (const [tag, val] of Object.entries(replacements)) {
-    res = res.split(tag).join(val);
+  const replacements: Array<{ pattern: RegExp; value: string }> = [
+    // Empresa / Oficina
+    { pattern: /\[NOME DA EMPRESA\]/gi, value: nomeEmpresa },
+    { pattern: /\{nome_empresa\}/gi, value: nomeEmpresa },
+    { pattern: /\{oficina_nome\}/gi, value: nomeEmpresa },
+    { pattern: /\[OFICINA\]/gi, value: nomeEmpresa },
+    { pattern: /\[EMPRESA\]/gi, value: nomeEmpresa },
+    { pattern: /\{empresa\}/gi, value: nomeEmpresa },
+
+    // Prazo de Garantia
+    { pattern: /\[PRAZO DE GARANTIA\]/gi, value: prazoGarantia },
+    { pattern: /\{prazo_garantia\}/gi, value: prazoGarantia },
+    { pattern: /\[PRAZO\]/gi, value: prazoGarantia },
+    { pattern: /\{prazo\}/gi, value: prazoGarantia },
+
+    // Serviço Contratado
+    { pattern: /\[SERVIÇO CONTRATADO\]/gi, value: servicoContratado },
+    { pattern: /\[SERVICO CONTRATADO\]/gi, value: servicoContratado },
+    { pattern: /\{servico_nome\}/gi, value: servicoContratado },
+    { pattern: /\[SERVIÇO\]/gi, value: servicoContratado },
+    { pattern: /\[SERVICO\]/gi, value: servicoContratado },
+    { pattern: /\{servico\}/gi, value: servicoContratado },
+
+    // Riscos e Observações
+    { pattern: /\[RISCOS\/OBSERVAÇÕES\]/gi, value: riscosObservacoes },
+    { pattern: /\[RISCOS\/OBSERVACOES\]/gi, value: riscosObservacoes },
+    { pattern: /\{riscos_informados\}/gi, value: riscosObservacoes },
+    { pattern: /\[RISCOS\]/gi, value: riscosObservacoes },
+    { pattern: /\{riscos\}/gi, value: riscosObservacoes },
+
+    // Cliente Nome
+    { pattern: /\[NOME DO CLIENTE\]/gi, value: clienteNome },
+    { pattern: /\[NOME\]/gi, value: clienteNome },
+    { pattern: /\{cliente_nome\}/gi, value: clienteNome },
+
+    // Cliente Documento / CPF
+    { pattern: /\[CPF\/CNPJ\]/gi, value: clienteCpf },
+    { pattern: /\[CPF\]/gi, value: clienteCpf },
+    { pattern: /\[DOCUMENTO\]/gi, value: clienteCpf },
+    { pattern: /\{cliente_documento\}/gi, value: clienteCpf },
+    { pattern: /\{cpf\}/gi, value: clienteCpf },
+
+    // Veículo / Placa
+    { pattern: /\[VEÍCULO\/PLACA\]/gi, value: veiculoPlaca },
+    { pattern: /\[VEICULO\/PLACA\]/gi, value: veiculoPlaca },
+    { pattern: /\[VEÍCULO\]/gi, value: veiculoPlaca },
+    { pattern: /\[VEICULO\]/gi, value: veiculoPlaca },
+    { pattern: /\[PLACA\]/gi, value: veiculoPlaca },
+    { pattern: /\{veiculo_placa\}/gi, value: veiculoPlaca },
+    { pattern: /\{placa\}/gi, value: veiculoPlaca },
+
+    // Data
+    { pattern: /\[DATA\]/gi, value: data },
+    { pattern: /\{data_atual\}/gi, value: data },
+    { pattern: /\{data\}/gi, value: data },
+  ];
+
+  for (const { pattern, value } of replacements) {
+    res = res.replace(pattern, value);
   }
 
   return res;

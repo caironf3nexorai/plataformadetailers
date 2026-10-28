@@ -18,7 +18,7 @@ import {
 import { formatarData, formatarHora } from '../utils/datas';
 import { formatarNomeVista, formatarNomeAvaria } from '../utils/checkin';
 import type { VistaDiagrama, TipoAvaria } from '../types/checkin';
-import { TERMO_RESPONSABILIDADE_PADRAO } from '../types/termos';
+import { TERMO_RESPONSABILIDADE_PADRAO, preencherVariaveisTermo } from '../types/termos';
 import { getEvidenciaSignedUrl } from '../utils/evidencias';
 
 interface VistoriaPublicaData {
@@ -109,6 +109,22 @@ export const VistoriaPublica: React.FC = () => {
       }
 
       const vistoriaData = resData as VistoriaPublicaData;
+
+      // Preenchimento dinâmico de variáveis das minutas (nome da empresa, prazos, etc.)
+      const dadosSubst = {
+        nomeEmpresa: vistoriaData.oficina?.nome || 'Oficina',
+        prazoGarantia: '3 meses',
+        clienteNome: vistoriaData.cliente?.primeiro_nome || 'Cliente',
+        veiculoPlaca: vistoriaData.veiculo ? `${vistoriaData.veiculo.modelo || ''} (${vistoriaData.veiculo.placa || ''})`.trim() : undefined,
+        data: new Date().toLocaleDateString('pt-BR'),
+      };
+
+      if (vistoriaData.termo_responsabilidade) {
+        vistoriaData.termo_responsabilidade = preencherVariaveisTermo(vistoriaData.termo_responsabilidade, dadosSubst);
+      }
+      if (vistoriaData.termo_garantia) {
+        vistoriaData.termo_garantia = preencherVariaveisTermo(vistoriaData.termo_garantia, dadosSubst);
+      }
 
       // Buscar Signed URLs seguras das evidências via Edge Function (se disponível)
       try {

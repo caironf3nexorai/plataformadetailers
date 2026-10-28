@@ -11,6 +11,11 @@ import {
 } from './checkin';
 import { fetchImageAsBase64, getEvidenciaSignedUrl, obterAssinaturaBase64 } from './evidencias';
 import { cabecalhoDocumento, rodapeDocumento, hexToRgb } from './pdf';
+import { 
+  preencherVariaveisTermo, 
+  type DadosPreenchimentoTermo, 
+  TERMO_RESPONSABILIDADE_PADRAO 
+} from '../types/termos';
 
 interface PDFCheckinData {
   checkin: Checkin;
@@ -876,9 +881,29 @@ export async function gerarPDFCheckin(
   const termoRespCustom = (data as any).termoResponsabilidade || (checkin as any).termo_responsabilidade_texto;
   const termoGarCustom = (data as any).termoGarantia || (checkin as any).termo_garantia_texto;
 
-  const textoPrincipalTermo = termoRespCustom && termoRespCustom.trim()
+  const rawTextoPrincipalTermo = termoRespCustom && termoRespCustom.trim()
     ? termoRespCustom.trim()
-    : 'Declaro que as informações e avarias registradas acima refletem com precisão o estado do veículo na entrega, isentando a oficina de danos preexistentes, verniz fragilizado ou falhas ocultas não relacionadas na vistoria.';
+    : TERMO_RESPONSABILIDADE_PADRAO;
+
+  const garantiaMesesNum = (data as any).garantiaMeses || 3;
+  const prazoGarantiaStr = `${garantiaMesesNum} ${garantiaMesesNum === 1 ? 'mês' : 'meses'}`;
+
+  const dadosPreenchimentoPdf: DadosPreenchimentoTermo = {
+    nomeEmpresa: data.oficinaRazaoSocial || data.oficinaNome || 'Oficina',
+    prazoGarantia: prazoGarantiaStr,
+    servicoContratado: (data as any).servicoNome || (data as any).termoRiscoServico || 'Serviços Especializados',
+    riscosObservacoes: (data as any).termoRiscoObservacoes || undefined,
+    clienteNome: data.assinaturaClienteNome || data.clienteNome || 'Cliente',
+    clienteCpf: (data as any).clienteDocumento || undefined,
+    veiculoPlaca: data.veiculoPlaca 
+      ? (data.veiculoModelo ? `${data.veiculoModelo} (${data.veiculoPlaca})` : data.veiculoPlaca) 
+      : undefined,
+    data: (checkin as any)?.assinado_em 
+      ? new Date((checkin as any).assinado_em).toLocaleDateString('pt-BR') 
+      : new Date().toLocaleDateString('pt-BR'),
+  };
+
+  const textoPrincipalTermo = preencherVariaveisTermo(rawTextoPrincipalTermo, dadosPreenchimentoPdf);
 
   doc.setFontSize(6.8);
   doc.setFont('helvetica', 'normal');
@@ -886,7 +911,8 @@ export async function gerarPDFCheckin(
 
   let linhasGarantia: string[] = [];
   if (termoGarCustom && termoGarCustom.trim()) {
-    linhasGarantia = doc.splitTextToSize(termoGarCustom.trim(), usableWidth - 8);
+    const textoPrincipalGarantia = preencherVariaveisTermo(termoGarCustom.trim(), dadosPreenchimentoPdf);
+    linhasGarantia = doc.splitTextToSize(textoPrincipalGarantia.trim(), usableWidth - 8);
   }
 
   // Altura dinâmica do card de termos:
