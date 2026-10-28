@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
 import { 
   Clock, CheckCircle2, AlertCircle, 
-  Copy, Check, ChevronLeft, ChevronRight, ArrowRight, MessageSquare, Info, Sparkles
+  Copy, Check, ChevronLeft, ChevronRight, ArrowRight, MessageSquare, Info, Sparkles, RotateCcw
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../contexts/ToastContext';
@@ -64,7 +64,57 @@ export function FluxoAgendamentoOnline() {
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const [passo, setPasso] = useState<number>(1);
+  // Chaves de persistência no navegador do cliente (evita perda de dados no F5)
+  const STORAGE_CONCLUIDO_KEY = slug ? `agendamento_online_concluido_${slug}` : null;
+  const STORAGE_RASCUNHO_KEY = slug ? `agendamento_online_rascunho_${slug}` : null;
+
+  // Carrega estado persistido síncrono para render imediato sem piscar tela inicial no F5
+  const dadosPersistidosIniciais = (() => {
+    if (!slug) return { concluido: null, rascunho: null };
+    try {
+      if (searchParams.get('novo') === '1') {
+        const kC = `agendamento_online_concluido_${slug}`;
+        const kR = `agendamento_online_rascunho_${slug}`;
+        localStorage.removeItem(kC);
+        sessionStorage.removeItem(kC);
+        sessionStorage.removeItem(kR);
+        return { concluido: null, rascunho: null };
+      }
+
+      const keyConcluido = `agendamento_online_concluido_${slug}`;
+      const salvoConcluidoStr = localStorage.getItem(keyConcluido) || sessionStorage.getItem(keyConcluido);
+      let concluido = null;
+      if (salvoConcluidoStr) {
+        const parsed = JSON.parse(salvoConcluidoStr);
+        // Mantém agendamento ativo por até 48 horas no dispositivo
+        if (parsed?.resultado && parsed?.salvoEm && (Date.now() - parsed.salvoEm < 48 * 60 * 60 * 1000)) {
+          concluido = parsed;
+        }
+      }
+
+      const keyRascunho = `agendamento_online_rascunho_${slug}`;
+      const rascunhoStr = sessionStorage.getItem(keyRascunho);
+      let rascunho = null;
+      if (!concluido && rascunhoStr) {
+        const parsed = JSON.parse(rascunhoStr);
+        if (parsed?.salvoEm && (Date.now() - parsed.salvoEm < 4 * 60 * 60 * 1000)) {
+          rascunho = parsed;
+        }
+      }
+
+      return { concluido, rascunho };
+    } catch {
+      return { concluido: null, rascunho: null };
+    }
+  })();
+
+  const [passo, setPasso] = useState<number>(() => {
+    if (dadosPersistidosIniciais.concluido) return 5;
+    if (dadosPersistidosIniciais.rascunho?.passo && dadosPersistidosIniciais.rascunho.passo < 5) {
+      return dadosPersistidosIniciais.rascunho.passo;
+    }
+    return 1;
+  });
   const [carregando, setCarregando] = useState<boolean>(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -74,20 +124,67 @@ export function FluxoAgendamentoOnline() {
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [mostrarTodosServicos, setMostrarTodosServicos] = useState<boolean>(false);
 
-  // Seleções do Usuário
-  const [categoriaId, setCategoriaId] = useState<string>('');
-  const [itensSelecionados, setItensSelecionados] = useState<{ servico_id: string; combo_id?: string }[]>([]);
-  const [placa, setPlaca] = useState<string>('');
-  const [modelo, setModelo] = useState<string>('');
+  // Seleções do Usuário (restaura do storage caso o usuário recarregue a página)
+  const [categoriaId, setCategoriaId] = useState<string>(() => {
+    return (
+      dadosPersistidosIniciais.concluido?.categoriaId ||
+      dadosPersistidosIniciais.rascunho?.categoriaId ||
+      searchParams.get('categoria') ||
+      searchParams.get('categoria_id') ||
+      ''
+    );
+  });
+  const [itensSelecionados, setItensSelecionados] = useState<{ servico_id: string; combo_id?: string }[]>(() => {
+    if (dadosPersistidosIniciais.concluido?.itensSelecionados?.length) {
+      return dadosPersistidosIniciais.concluido.itensSelecionados;
+    }
+    if (dadosPersistidosIniciais.rascunho?.itensSelecionados?.length) {
+      return dadosPersistidosIniciais.rascunho.itensSelecionados;
+    }
+    const urlServico = searchParams.get('servico') || searchParams.get('servico_id');
+    return urlServico ? [{ servico_id: urlServico }] : [];
+  });
+  const [placa, setPlaca] = useState<string>(() => {
+    return (
+      dadosPersistidosIniciais.concluido?.placa ||
+      dadosPersistidosIniciais.rascunho?.placa ||
+      searchParams.get('placa') ||
+      ''
+    );
+  });
+  const [modelo, setModelo] = useState<string>(() => {
+    return (
+      dadosPersistidosIniciais.concluido?.modelo ||
+      dadosPersistidosIniciais.rascunho?.modelo ||
+      searchParams.get('modelo') ||
+      ''
+    );
+  });
 
   // Data e Horário
-  const [dataSelecionada, setDataSelecionada] = useState<string>(
-    searchParams.get('data') || formatarDataIsoSP(new Date())
-  );
-  const [horarioSelecionado, setHorarioSelecionado] = useState<string>(
-    searchParams.get('horario') || ''
-  );
-  const [slotSelecionadoObj, setSlotSelecionadoObj] = useState<SlotHorarioPublico | null>(null);
+  const [dataSelecionada, setDataSelecionada] = useState<string>(() => {
+    return (
+      dadosPersistidosIniciais.concluido?.dataSelecionada ||
+      dadosPersistidosIniciais.rascunho?.dataSelecionada ||
+      searchParams.get('data') ||
+      formatarDataIsoSP(new Date())
+    );
+  });
+  const [horarioSelecionado, setHorarioSelecionado] = useState<string>(() => {
+    return (
+      dadosPersistidosIniciais.concluido?.horarioSelecionado ||
+      dadosPersistidosIniciais.rascunho?.horarioSelecionado ||
+      searchParams.get('horario') ||
+      ''
+    );
+  });
+  const [slotSelecionadoObj, setSlotSelecionadoObj] = useState<SlotHorarioPublico | null>(() => {
+    return (
+      dadosPersistidosIniciais.concluido?.slotSelecionadoObj ||
+      dadosPersistidosIniciais.rascunho?.slotSelecionadoObj ||
+      null
+    );
+  });
   const [transbordoAceito, setTransbordoAceito] = useState<boolean>(false);
   const [consentimentoPrivacidade, setConsentimentoPrivacidade] = useState<boolean>(false);
 
@@ -97,13 +194,42 @@ export function FluxoAgendamentoOnline() {
   }, [dataSelecionada, horarioSelecionado]);
 
   // Dados Pessoais
-  const [nome, setNome] = useState<string>('');
-  const [telefone, setTelefone] = useState<string>('');
+  const [nome, setNome] = useState<string>(() => {
+    return dadosPersistidosIniciais.concluido?.nome || dadosPersistidosIniciais.rascunho?.nome || '';
+  });
+  const [telefone, setTelefone] = useState<string>(() => {
+    return dadosPersistidosIniciais.concluido?.telefone || dadosPersistidosIniciais.rascunho?.telefone || '';
+  });
 
   // Envio e Resultado
   const [enviando, setEnviando] = useState<boolean>(false);
-  const [resultado, setResultado] = useState<any | null>(null);
+  const [resultado, setResultado] = useState<any | null>(() => {
+    return dadosPersistidosIniciais.concluido?.resultado || null;
+  });
   const [copiado, setCopiado] = useState<boolean>(false);
+
+  // Salva rascunho enquanto o cliente navega pelos passos 1 a 4 para não perder progresso no F5
+  useEffect(() => {
+    if (!STORAGE_RASCUNHO_KEY || passo >= 5) return;
+    try {
+      const draft = {
+        passo,
+        categoriaId,
+        itensSelecionados,
+        placa,
+        modelo,
+        dataSelecionada,
+        horarioSelecionado,
+        slotSelecionadoObj,
+        nome,
+        telefone,
+        salvoEm: Date.now()
+      };
+      sessionStorage.setItem(STORAGE_RASCUNHO_KEY, JSON.stringify(draft));
+    } catch {
+      // Ignora erro
+    }
+  }, [passo, categoriaId, itensSelecionados, placa, modelo, dataSelecionada, horarioSelecionado, slotSelecionadoObj, nome, telefone, STORAGE_RASCUNHO_KEY]);
 
   // Carrega Catálogo Inicial e Lê Parâmetros da URL
   useEffect(() => {
@@ -127,39 +253,31 @@ export function FluxoAgendamentoOnline() {
         setCategorias(cats);
         setServicos(servs);
 
-        // 1. Ler Parâmetros de Categoria da URL
-        const urlCat = searchParams.get('categoria') || searchParams.get('categoria_id');
-        if (urlCat && cats.some((c: any) => c.id === urlCat)) {
-          setCategoriaId(urlCat);
-        } else if (cats.length > 0) {
-          setCategoriaId(cats[0].id);
+        // Apenas aplica padrões do catálogo se NÃO houver agendamento concluído ativo
+        if (!dadosPersistidosIniciais.concluido) {
+          // 1. Ler Parâmetros de Categoria da URL
+          const urlCat = searchParams.get('categoria') || searchParams.get('categoria_id');
+          if (urlCat && cats.some((c: any) => c.id === urlCat)) {
+            setCategoriaId(urlCat);
+          } else if (!categoriaId && cats.length > 0) {
+            setCategoriaId(cats[0].id);
+          }
+
+          // 2. Ler Parâmetros de Serviço da URL
+          const urlServico = searchParams.get('servico') || searchParams.get('servico_id');
+          const urlModelo = searchParams.get('modelo');
+          const urlPlaca = searchParams.get('placa');
+
+          if (urlServico && servs.some((s: any) => s.id === urlServico)) {
+            setItensSelecionados([{ servico_id: urlServico }]);
+          } else if (itensSelecionados.length === 0 && servs.length > 0) {
+            // Pre-seleciona o primeiro serviço se nenhum foi informado
+            setItensSelecionados([{ servico_id: servs[0].id }]);
+          }
+
+          if (urlModelo && !modelo) setModelo(urlModelo);
+          if (urlPlaca && !placa) setPlaca(urlPlaca);
         }
-
-        // 2. Ler Parâmetros de Serviço da URL
-        const urlServico = searchParams.get('servico') || searchParams.get('servico_id');
-        const urlModelo = searchParams.get('modelo');
-        const urlPlaca = searchParams.get('placa');
-        const urlData = searchParams.get('data');
-        const urlHorario = searchParams.get('horario');
-
-        console.log('[FluxoAgendamentoOnline] Params lidos da URL:', {
-          urlServico,
-          urlCategoria: urlCat,
-          urlModelo,
-          urlPlaca,
-          urlData,
-          urlHorario
-        });
-
-        if (urlServico && servs.some((s: any) => s.id === urlServico)) {
-          setItensSelecionados([{ servico_id: urlServico }]);
-        } else if (servs.length > 0) {
-          // Pre-seleciona o primeiro serviço se nenhum foi informado
-          setItensSelecionados([{ servico_id: servs[0].id }]);
-        }
-
-        if (urlModelo) setModelo(urlModelo);
-        if (urlPlaca) setPlaca(urlPlaca);
 
         if (!data.oficina.agendamento_online_ativo) {
           setErro('O agendamento online está temporariamente desativado para esta oficina.');
@@ -222,6 +340,11 @@ export function FluxoAgendamentoOnline() {
 
   // Submissão Final do Agendamento
   const handleFinalizarAgendamento = async () => {
+    if (enviando) return;
+    if (resultado) {
+      setPasso(5);
+      return;
+    }
     if (!tenant || !slug) return;
 
     if (nome.trim().length < 2) {
@@ -286,6 +409,38 @@ export function FluxoAgendamentoOnline() {
 
       setResultado(resNormalizado);
       setPasso(5); // Passo de Confirmação
+
+      // Salva no storage para que F5 mantenha o usuário na tela do PIX/Confirmação
+      if (STORAGE_CONCLUIDO_KEY) {
+        try {
+          const payloadConcluido = {
+            resultado: resNormalizado,
+            dataSelecionada,
+            horarioSelecionado,
+            slotSelecionadoObj,
+            nome: nome.trim(),
+            telefone: telLimpo,
+            placa: placa.trim(),
+            modelo: modelo.trim() || 'Veículo',
+            categoriaId,
+            itensSelecionados,
+            salvoEm: Date.now()
+          };
+          localStorage.setItem(STORAGE_CONCLUIDO_KEY, JSON.stringify(payloadConcluido));
+          sessionStorage.setItem(STORAGE_CONCLUIDO_KEY, JSON.stringify(payloadConcluido));
+          if (STORAGE_RASCUNHO_KEY) {
+            sessionStorage.removeItem(STORAGE_RASCUNHO_KEY);
+          }
+
+          // Atualiza a URL com a OS para referência sem recarregar a página
+          const url = new URL(window.location.href);
+          url.searchParams.set('os', String(resNormalizado.numero_os));
+          window.history.replaceState({}, '', url.toString());
+        } catch (e) {
+          console.warn('[FluxoAgendamentoOnline] Erro ao salvar agendamento concluído:', e);
+        }
+      }
+
       showToast('Agendamento solicitado com sucesso!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Falha ao processar agendamento.', 'error');
@@ -300,6 +455,34 @@ export function FluxoAgendamentoOnline() {
       setCopiado(true);
       showToast('Código Pix copiado!', 'success');
       setTimeout(() => setCopiado(false), 3000);
+    }
+  };
+
+  const handleNovoAgendamento = () => {
+    if (window.confirm('Deseja iniciar um novo agendamento? Os dados do agendamento atual já foram enviados para a oficina, mas a tela voltará ao início para um novo cadastro.')) {
+      if (STORAGE_CONCLUIDO_KEY) {
+        try {
+          localStorage.removeItem(STORAGE_CONCLUIDO_KEY);
+          sessionStorage.removeItem(STORAGE_CONCLUIDO_KEY);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      if (STORAGE_RASCUNHO_KEY) {
+        try {
+          sessionStorage.removeItem(STORAGE_RASCUNHO_KEY);
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('os');
+      window.history.replaceState({}, '', url.toString());
+
+      setResultado(null);
+      setPasso(1);
+      setTransbordoAceito(false);
+      showToast('Pronto para um novo agendamento!', 'info');
     }
   };
 
@@ -968,6 +1151,21 @@ export function FluxoAgendamentoOnline() {
               >
                 <MessageSquare className="w-5 h-5" /> Enviar Comprovante / WhatsApp
               </a>
+
+              {/* Badge Informativo de Persistência contra F5 */}
+              <div className="flex items-center justify-center gap-2 p-3 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-400">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Seu agendamento está salvo. Você pode atualizar ou reabrir esta página sem perder estas informações ou seu código Pix.</span>
+              </div>
+
+              {/* Botão para Iniciar Novo Agendamento */}
+              <button
+                type="button"
+                onClick={handleNovoAgendamento}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs rounded-xl border border-slate-800 transition flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Fazer Outro Agendamento
+              </button>
             </div>
           );
         })()}
