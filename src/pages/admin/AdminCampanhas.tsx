@@ -14,7 +14,9 @@ import {
   ExternalLink,
   Power,
   Target,
-  Save
+  Save,
+  Video,
+  PlaySquare
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
@@ -77,6 +79,13 @@ export const AdminCampanhas: React.FC = () => {
   const [salvandoPixels, setSalvandoPixels] = useState(false);
   const [painelPixelsAberto, setPainelPixelsAberto] = useState(false);
 
+  // Configuração do Vídeo Tutorial de Onboarding Flutuante (Aberto para Todos)
+  const [videoOnboardingUrl, setVideoOnboardingUrl] = useState('');
+  const [videoOnboardingTitulo, setVideoOnboardingTitulo] = useState('Guia Rápido: Configuração Completa da Sua Oficina');
+  const [videoOnboardingAtivo, setVideoOnboardingAtivo] = useState(true);
+  const [salvandoOnboardingVideo, setSalvandoOnboardingVideo] = useState(false);
+  const [painelOnboardingAberto, setPainelOnboardingAberto] = useState(false);
+
   // Previne rolagem de fundo no modal
   useEffect(() => {
     if (modalAberto) {
@@ -103,13 +112,16 @@ export const AdminCampanhas: React.FC = () => {
         if (data.google_ads_id) setGoogleAdsId(data.google_ads_id);
         if (data.google_analytics_id) setGoogleAnalyticsId(data.google_analytics_id);
         if (data.tiktok_pixel_id) setTiktokPixelId(data.tiktok_pixel_id);
+        if (data.video_onboarding_url) setVideoOnboardingUrl(data.video_onboarding_url);
+        if (data.video_onboarding_titulo) setVideoOnboardingTitulo(data.video_onboarding_titulo);
+        if (typeof data.video_onboarding_ativo === 'boolean') setVideoOnboardingAtivo(data.video_onboarding_ativo);
       }
 
       // Fallback para carregar diretamente da tabela caso a RPC antiga não retorne os novos campos
       if (!data?.meta_pixel_id && !data?.google_ads_id) {
         const { data: directData } = await supabase
           .from('plataforma_config')
-          .select('meta_pixel_id, google_ads_id, google_analytics_id, tiktok_pixel_id')
+          .select('meta_pixel_id, google_ads_id, google_analytics_id, tiktok_pixel_id, video_onboarding_url, video_onboarding_titulo, video_onboarding_ativo')
           .eq('id', 1)
           .single();
         if (directData) {
@@ -117,10 +129,45 @@ export const AdminCampanhas: React.FC = () => {
           if (directData.google_ads_id) setGoogleAdsId(directData.google_ads_id);
           if (directData.google_analytics_id) setGoogleAnalyticsId(directData.google_analytics_id);
           if (directData.tiktok_pixel_id) setTiktokPixelId(directData.tiktok_pixel_id);
+          if (directData.video_onboarding_url) setVideoOnboardingUrl(directData.video_onboarding_url);
+          if (directData.video_onboarding_titulo) setVideoOnboardingTitulo(directData.video_onboarding_titulo);
+          if (typeof directData.video_onboarding_ativo === 'boolean') setVideoOnboardingAtivo(directData.video_onboarding_ativo);
         }
       }
     } catch (err) {
       console.error('Erro ao buscar configuracao da plataforma no campanhas:', err);
+    }
+  };
+
+  const handleSalvarVideoOnboarding = async () => {
+    setSalvandoOnboardingVideo(true);
+    try {
+      const { error } = await supabase.rpc('admin_salvar_config_onboarding', {
+        p_video_url: videoOnboardingUrl.trim() || null,
+        p_titulo: videoOnboardingTitulo.trim() || null,
+        p_ativo: videoOnboardingAtivo,
+      });
+
+      if (error) {
+        const { error: directErr } = await supabase
+          .from('plataforma_config')
+          .update({
+            video_onboarding_url: videoOnboardingUrl.trim() || null,
+            video_onboarding_titulo: videoOnboardingTitulo.trim() || null,
+            video_onboarding_ativo: videoOnboardingAtivo,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', 1);
+
+        if (directErr) throw directErr;
+      }
+
+      showSuccess('Configurações do vídeo tutorial de onboarding salvas com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao salvar vídeo de onboarding:', err);
+      showError('Erro ao salvar vídeo: ' + (err.message || 'Falha de permissão'));
+    } finally {
+      setSalvandoOnboardingVideo(false);
     }
   };
 
@@ -538,6 +585,117 @@ export const AdminCampanhas: React.FC = () => {
               >
                 <Save size={14} />
                 <span>{salvandoPixels ? 'Salvando...' : 'Salvar Pixels de Marketing'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 🎬 Card de Configuração do Vídeo Tutorial de Iniciação (Onboarding Flutuante) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+              <PlaySquare size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-sm font-bold text-slate-100 uppercase tracking-wide">
+                  Vídeo Tutorial de Iniciação (Onboarding Flutuante)
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Aberto a Todos
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Vídeo gravado que abre em modal e se transforma em mini-player flutuante para novos usuários acompanharem enquanto configuram a plataforma.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setPainelOnboardingAberto(!painelOnboardingAberto)}
+            className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors self-start sm:self-center"
+          >
+            {painelOnboardingAberto ? 'Recolher Painel ▲' : 'Configurar Vídeo ▼'}
+          </button>
+        </div>
+
+        {painelOnboardingAberto && (
+          <div className="space-y-4 pt-1 animate-fade-in">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* URL do Vídeo */}
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Video className="w-4 h-4 text-amber-400" />
+                    Link do Vídeo Gravado (YouTube, Vimeo ou MP4)
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-500">Ex: https://youtu.be/... ou https://youtube.com/watch?v=...</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Cole aqui o link do YouTube, Vimeo ou arquivo MP4 do tutorial..."
+                  value={videoOnboardingUrl}
+                  onChange={(e) => setVideoOnboardingUrl(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <span className="text-[10px] text-slate-400">
+                  Suporta qualquer link público ou não-listado do YouTube, Vimeo ou link direto .mp4.
+                </span>
+              </div>
+
+              {/* Título do Vídeo */}
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <label className="text-xs font-semibold text-slate-200">
+                  Título Exibido no Player
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Guia Rápido: Como Configurar Tudo na Plataforma"
+                  value={videoOnboardingTitulo}
+                  onChange={(e) => setVideoOnboardingTitulo(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+
+              {/* Status Ativo/Inativo */}
+              <div className="flex flex-col justify-between bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-200 block">
+                      Exibir Tutorial Automaticamente
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Se ativo, abre para todo usuário que ainda não marcou "Plataforma Configurada".
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={videoOnboardingAtivo}
+                      onChange={(e) => setVideoOnboardingAtivo(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 flex-wrap gap-3">
+              <span className="text-[11px] text-slate-400 font-sans">
+                💡 <strong>Dica:</strong> Quando o cliente assiste ou clica em <em>"Plataforma Configurada"</em>, o player desaparece definitivamente do painel dele.
+              </span>
+              <button
+                type="button"
+                onClick={handleSalvarVideoOnboarding}
+                disabled={salvandoOnboardingVideo}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+              >
+                <Save size={14} />
+                <span>{salvandoOnboardingVideo ? 'Salvando...' : 'Salvar Vídeo de Iniciação'}</span>
               </button>
             </div>
           </div>

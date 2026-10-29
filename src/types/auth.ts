@@ -43,6 +43,8 @@ export interface Tenant {
   pdf_texto_rodape?: string | null;
   pdf_ocultar_marca_dagua?: boolean | null;
   placa_balcao_config?: PlacaBalcaoConfig | null;
+  onboarding_concluido?: boolean;
+  onboarding_concluido_em?: string | null;
   created_at?: string;
   updated_at?: string;
 }

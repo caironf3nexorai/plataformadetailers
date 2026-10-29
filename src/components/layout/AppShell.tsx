@@ -9,6 +9,7 @@ import { ModalComunicadoGlobal } from '../comunicados/ModalComunicadoGlobal';
 import { ModalAvisoAssinatura } from '../assinatura/ModalAvisoAssinatura';
 import { BannerPromocaoAtiva } from '../assinatura/BannerPromocaoAtiva';
 import { ModalRadarFinanceiroDoDia } from '../financeiro/ModalRadarFinanceiroDoDia';
+import { ModalOnboardingVideoFlutuante } from '../onboarding/ModalOnboardingVideoFlutuante';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
@@ -133,6 +134,9 @@ export const AppShell: React.FC = () => {
 
           {/* Botão Flutuante de Feedback */}
           <BotaoFeedbackFlutuante />
+
+          {/* Tutorial de Iniciação e Vídeo de Onboarding Flutuante (Aberto a todos os usuários) */}
+          <ModalOnboardingVideoFlutuante />
 
           {/* Modal Global de Comunicados, Banners e Brindes */}
           <ModalComunicadoGlobal />

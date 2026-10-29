@@ -23,7 +23,7 @@ import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
 import { AbaFiscal } from '../components/configuracoes/AbaFiscal';
 import { AbaWhatsApp } from '../components/configuracoes/AbaWhatsApp';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X, Mail, Phone, MapPin } from 'lucide-react';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X, Mail, Phone, MapPin, PlayCircle } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
@@ -634,7 +634,20 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Minha Oficina" />
+      <PageHeader
+        title="Minha Oficina"
+        action={
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('abrir_onboarding_tutorial'))}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+            title="Abrir o tutorial em vídeo com o passo a passo completo da plataforma"
+          >
+            <PlayCircle className="w-4 h-4 text-amber-400" />
+            <span>Vídeo Tutorial de Iniciação</span>
+          </button>
+        }
+      />
 
       {/* Tabs Switcher com Gradiente de Fade, Chevrons e Menu Rápido Mobile */}
       <ScrollableTabs
