@@ -14,6 +14,7 @@ import {
   Tag,
   QrCode,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -48,15 +49,19 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   const storageKeyConcluido = tenant?.id ? `onboarding_tutorial_concluido_${tenant.id}` : null;
   const storageKeyTempo = tenant?.id ? `onboarding_tempo_assistido_${tenant.id}` : null;
+  const storageKeySessaoFechado = tenant?.id ? `onboarding_fechado_sessao_${tenant.id}` : null;
 
-  // Carrega configuração e verifica se o tenant já marcou como configurado
+  // Carrega configuração e verifica se o tenant já marcou como configurado ou já tem dados
   useEffect(() => {
     if (!tenant?.id) return;
+    const currentTenantId = tenant.id;
 
     const jaConcluiuLocal = storageKeyConcluido && localStorage.getItem(storageKeyConcluido) === 'true';
     const jaConcluiuBanco = Boolean(tenant.onboarding_concluido);
+    const jaFechouNaSessao = storageKeySessaoFechado && sessionStorage.getItem(storageKeySessaoFechado) === 'true';
 
-    if (jaConcluiuLocal || jaConcluiuBanco) {
+    // Se já concluiu permanentemente ou já fechou nesta sessão atual do navegador
+    if (jaConcluiuLocal || jaConcluiuBanco || jaFechouNaSessao) {
       setVisivel(false);
       setCarregandoConfig(false);
       return;
@@ -70,9 +75,40 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       }
     }
 
-    async function buscarConfiguracaoVideo() {
+    async function buscarConfiguracaoVideoEValidarOficina() {
       try {
         setCarregandoConfig(true);
+
+        // 1. VERIFICAÇÃO AUTOMÁTICA INTELIGENTE:
+        // A oficina já possui serviços cadastrados com preços/tempos ou já possui agendamentos/orçamentos?
+        // Se já tiver, ela já está operacional e NÃO deve ser bloqueada pelo vídeo de onboarding!
+        const [{ count: totalServicos }, { count: totalAgendamentos }] = await Promise.all([
+          supabase
+            .from('servicos')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', currentTenantId)
+            .eq('ativo', true),
+          supabase
+            .from('agendamentos')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', currentTenantId),
+        ]);
+
+        const jaEstaConfigurada = (totalServicos || 0) > 0 || (totalAgendamentos || 0) > 0;
+        if (jaEstaConfigurada) {
+          // Marca permanentemente como concluído
+          if (storageKeyConcluido) {
+            localStorage.setItem(storageKeyConcluido, 'true');
+          }
+          try {
+            await supabase.rpc('marcar_onboarding_concluido', { p_tenant_id: currentTenantId });
+          } catch {}
+          setVisivel(false);
+          setCarregandoConfig(false);
+          return;
+        }
+
+        // 2. Busca configuração do vídeo da plataforma
         const { data, error } = await supabase.rpc('obter_config_plataforma');
         if (!error && data) {
           if (data.video_onboarding_url) {
@@ -86,6 +122,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
             return;
           }
         }
+
         // Exibe o modal na primeira vez se não estiver em rotas operacionais de tela cheia
         const isTelaCheia = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
         if (!isTelaCheia) {
@@ -99,8 +136,8 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       }
     }
 
-    buscarConfiguracaoVideo();
-  }, [tenant?.id, tenant?.onboarding_concluido, storageKeyConcluido, storageKeyTempo, location.pathname]);
+    buscarConfiguracaoVideoEValidarOficina();
+  }, [tenant?.id, tenant?.onboarding_concluido, storageKeyConcluido, storageKeyTempo, storageKeySessaoFechado, location.pathname]);
 
   // Listener para reabertura manual sob demanda (ex: botão de ajuda ou em configurações)
   useEffect(() => {
@@ -203,6 +240,14 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     } finally {
       setSalvandoConclusao(false);
     }
+  };
+
+  // Fecha o vídeo temporariamente para navegar livremente sem bloquear a tela
+  const handleFecharTemporario = () => {
+    if (storageKeySessaoFechado) {
+      sessionStorage.setItem(storageKeySessaoFechado, 'true');
+    }
+    setVisivel(false);
   };
 
   // Atalho para navegar até as seções cruciais de configuração
@@ -314,6 +359,16 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
                 title="Maximizar Vídeo"
               >
                 <Maximize2 className="w-4 h-4" />
+              </button>
+
+              {/* Botão de Fechar Mini-Player */}
+              <button
+                type="button"
+                onClick={handleFecharTemporario}
+                className="p-1 rounded-md text-vapor-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                title="Fechar Vídeo Tutorial"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -489,11 +544,22 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
             <button
               type="button"
               onClick={() => setModoExpandido(false)}
-              className="px-3 py-1.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 hover:text-vapor-100 text-xs font-semibold flex items-center gap-1.5 border border-graphite-700 transition-colors"
+              className="px-3 py-1.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 hover:text-vapor-100 text-xs font-semibold flex items-center gap-1.5 border border-graphite-700 transition-colors cursor-pointer"
               title="Minimizar e continuar no canto da tela enquanto configura"
             >
-              <Minimize2 className="w-3.5 h-3.5" />
+              <Minimize2 className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Minimizar & Navegar</span>
+            </button>
+
+            {/* Botão Fechar (X) Imediato e Claro */}
+            <button
+              type="button"
+              onClick={handleFecharTemporario}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-graphite-800 hover:bg-red-500/20 text-vapor-300 hover:text-red-300 text-xs font-semibold flex items-center gap-1.5 border border-graphite-700 hover:border-red-500/40 transition-colors cursor-pointer"
+              title="Fechar vídeo e acessar a plataforma livremente"
+            >
+              <X className="w-4 h-4 text-red-400" />
+              <span className="text-xs font-semibold">Fechar</span>
             </button>
           </div>
         </div>
