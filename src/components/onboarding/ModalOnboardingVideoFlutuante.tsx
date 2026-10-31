@@ -79,64 +79,81 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       try {
         setCarregandoConfig(true);
 
-        // 0. TRAVA DE HOMOLOGAÇÃO / PRÉVIA EXCLUSIVA PARA SUPER ADMIN:
-        // Enquanto o vídeo definitivo não for homologado e publicado,
-        // o player de onboarding NÃO abre para oficinas normais ou novos cadastros.
-        // Aparece exclusivamente para o Super Admin da plataforma testar e avaliar.
+        // 0. VERIFICAÇÃO SE É O SUPER ADMIN:
+        // O Super Admin da plataforma deve conseguir analisar e pré-visualizar o vídeo no sistema
+        // sem ser ocultado pela detecção automática de oficina configurada.
         let ehSuperAdmin = false;
         try {
-          const { data: isSuperRpc } = await supabase.rpc('is_super_admin');
-          if (typeof isSuperRpc === 'boolean') {
-            ehSuperAdmin = isSuperRpc;
-          } else {
-            const { data: userAuth } = await supabase.auth.getUser();
-            if (userAuth?.user) {
-              const { data: adminRow } = await supabase
-                .from('platform_admins')
-                .select('super_admin')
-                .eq('user_id', userAuth.user.id)
-                .eq('ativo', true)
-                .maybeSingle();
-              ehSuperAdmin = Boolean(adminRow?.super_admin);
-            }
+          const { data: userAuth } = await supabase.auth.getUser();
+          if (userAuth?.user) {
+            const { data: adminRow } = await supabase
+              .from('platform_admins')
+              .select('super_admin')
+              .eq('user_id', userAuth.user.id)
+              .eq('ativo', true)
+              .maybeSingle();
+            ehSuperAdmin = Boolean(adminRow?.super_admin);
           }
         } catch {
           ehSuperAdmin = false;
         }
 
+        // 1. VERIFICAÇÃO AUTOMÁTICA INTELIGENTE DE OFICINA CONFIGURADA (para oficinas e novos usuários):
+        // Se NÃO for o Super Admin, avaliamos o nível de configuração da oficina:
+        // - Se for um NOVO USUÁRIO que ainda não configurou (sem serviços/preços/agendamentos): o vídeo APARECE para onboarding inicial.
+        // - Se a oficina JÁ ESTIVER CONFIGURADA (serviços com preço/tempo ou agendamentos/orçamentos): NÃO exibe o vídeo.
         if (!ehSuperAdmin) {
-          setVisivel(false);
-          setCarregandoConfig(false);
-          return;
-        }
+          const [
+            { count: totalServicos },
+            { count: totalPrecos },
+            { count: totalHorarios },
+            { count: totalAgendamentos },
+            { count: totalOrcamentos }
+          ] = await Promise.all([
+            supabase
+              .from('servicos')
+              .select('id', { count: 'exact', head: true })
+              .eq('tenant_id', currentTenantId)
+              .eq('ativo', true),
+            supabase
+              .from('servico_precos')
+              .select('id', { count: 'exact', head: true })
+              .eq('tenant_id', currentTenantId)
+              .gt('duracao_minutos', 0),
+            supabase
+              .from('horarios_funcionamento')
+              .select('id', { count: 'exact', head: true })
+              .eq('tenant_id', currentTenantId)
+              .eq('ativo', true),
+            supabase
+              .from('agendamentos')
+              .select('id', { count: 'exact', head: true })
+              .eq('tenant_id', currentTenantId),
+            supabase
+              .from('orcamentos')
+              .select('id', { count: 'exact', head: true })
+              .eq('tenant_id', currentTenantId),
+          ]);
 
-        // 1. VERIFICAÇÃO AUTOMÁTICA INTELIGENTE:
-        // A oficina já possui serviços cadastrados com preços/tempos ou já possui agendamentos/orçamentos?
-        // Se já tiver, ela já está operacional e NÃO deve ser bloqueada pelo vídeo de onboarding!
-        const [{ count: totalServicos }, { count: totalAgendamentos }] = await Promise.all([
-          supabase
-            .from('servicos')
-            .select('id', { count: 'exact', head: true })
-            .eq('tenant_id', currentTenantId)
-            .eq('ativo', true),
-          supabase
-            .from('agendamentos')
-            .select('id', { count: 'exact', head: true })
-            .eq('tenant_id', currentTenantId),
-        ]);
+          // Critérios de oficina já configurada / operacional:
+          // Se já tem serviços com preços/tempos OU já tem agendamentos/orçamentos em andamento
+          const temServicosConfigurados = (totalServicos || 0) > 0 && ((totalPrecos || 0) > 0 || (totalHorarios || 0) > 0);
+          const temOperacaoAtiva = (totalAgendamentos || 0) > 0 || (totalOrcamentos || 0) > 0;
 
-        const jaEstaConfigurada = (totalServicos || 0) > 0 || (totalAgendamentos || 0) > 0;
-        if (jaEstaConfigurada) {
-          // Marca permanentemente como concluído
-          if (storageKeyConcluido) {
-            localStorage.setItem(storageKeyConcluido, 'true');
+          const jaEstaConfigurada = temServicosConfigurados || temOperacaoAtiva;
+
+          if (jaEstaConfigurada) {
+            // Marca permanentemente como concluído para que nunca mais bloqueie a oficina operacional
+            if (storageKeyConcluido) {
+              localStorage.setItem(storageKeyConcluido, 'true');
+            }
+            try {
+              await supabase.rpc('marcar_onboarding_concluido', { p_tenant_id: currentTenantId });
+            } catch {}
+            setVisivel(false);
+            setCarregandoConfig(false);
+            return;
           }
-          try {
-            await supabase.rpc('marcar_onboarding_concluido', { p_tenant_id: currentTenantId });
-          } catch {}
-          setVisivel(false);
-          setCarregandoConfig(false);
-          return;
         }
 
         // 2. Busca configuração do vídeo da plataforma
