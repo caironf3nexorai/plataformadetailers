@@ -79,6 +79,37 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       try {
         setCarregandoConfig(true);
 
+        // 0. TRAVA DE HOMOLOGAÇÃO / PRÉVIA EXCLUSIVA PARA SUPER ADMIN:
+        // Enquanto o vídeo definitivo não for homologado e publicado,
+        // o player de onboarding NÃO abre para oficinas normais ou novos cadastros.
+        // Aparece exclusivamente para o Super Admin da plataforma testar e avaliar.
+        let ehSuperAdmin = false;
+        try {
+          const { data: isSuperRpc } = await supabase.rpc('is_super_admin');
+          if (typeof isSuperRpc === 'boolean') {
+            ehSuperAdmin = isSuperRpc;
+          } else {
+            const { data: userAuth } = await supabase.auth.getUser();
+            if (userAuth?.user) {
+              const { data: adminRow } = await supabase
+                .from('platform_admins')
+                .select('super_admin')
+                .eq('user_id', userAuth.user.id)
+                .eq('ativo', true)
+                .maybeSingle();
+              ehSuperAdmin = Boolean(adminRow?.super_admin);
+            }
+          }
+        } catch {
+          ehSuperAdmin = false;
+        }
+
+        if (!ehSuperAdmin) {
+          setVisivel(false);
+          setCarregandoConfig(false);
+          return;
+        }
+
         // 1. VERIFICAÇÃO AUTOMÁTICA INTELIGENTE:
         // A oficina já possui serviços cadastrados com preços/tempos ou já possui agendamentos/orçamentos?
         // Se já tiver, ela já está operacional e NÃO deve ser bloqueada pelo vídeo de onboarding!
