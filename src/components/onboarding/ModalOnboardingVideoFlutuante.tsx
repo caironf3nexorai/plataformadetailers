@@ -47,8 +47,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   const [estaReproduzindo, setEstaReproduzindo] = useState(false);
   const intervalRef = useRef<any>(null);
 
-  const [isAdmin, setIsAdmin] = useState(false);
-
   const storageKeyConcluido = tenant?.id ? `onboarding_tutorial_concluido_${tenant.id}` : null;
   const storageKeyTempo = tenant?.id ? `onboarding_tempo_assistido_${tenant.id}` : null;
   const storageKeySessaoFechado = tenant?.id ? `onboarding_fechado_sessao_${tenant.id}` : null;
@@ -126,7 +124,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
         // 3. Checa privilégio de Super Admin ANTES de qualquer trava de oficina concluída
         const ehAdmin = await checarSeEhAdmin();
         if (!ativo) return;
-        setIsAdmin(ehAdmin);
 
         // SE FOR O SUPER ADMIN:
         // Ele NUNCA deve ser bloqueado por status de oficina já configurada ou conclusão passada.
@@ -346,34 +343,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     navigate(caminho);
   };
 
-  if (carregandoConfig) {
-    return null;
-  }
-
-  // Se não estiver visível mas o usuário for Super Admin, disponibiliza o botão flutuante discreto para abrir quando quiser gravar/testar
-  if (!visivel) {
-    if (isAdmin && !location.pathname.startsWith('/execucao/') && !location.pathname.startsWith('/checkin/')) {
-      return (
-        <aside
-          aria-label="Controle Admin do Vídeo de Onboarding"
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2 animate-fade-in pointer-events-auto"
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setVisivel(true);
-              setModoExpandido(true);
-              setColapsado(false);
-            }}
-            className="px-3.5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-graphite-950 font-bold rounded-xl shadow-2xl flex items-center gap-2 text-xs border border-amber-300 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            title="Reabrir Modal do Vídeo de Onboarding (Super Admin)"
-          >
-            <Sparkles className="w-4 h-4 text-graphite-950" />
-            <span>Vídeo Onboarding (Super Admin)</span>
-          </button>
-        </aside>
-      );
-    }
+  if (!visivel || carregandoConfig) {
     return null;
   }
 
