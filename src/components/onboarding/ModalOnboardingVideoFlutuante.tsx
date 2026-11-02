@@ -1,20 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Maximize2,
   Minimize2,
   CheckCircle2,
   Sparkles,
   Clock,
   ArrowRight,
-  ChevronDown,
-  ChevronUp,
   Building2,
   Calendar,
   Tag,
   QrCode,
   ShieldCheck,
   X,
+  Play,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,16 +22,25 @@ interface ModalOnboardingVideoFlutuanteProps {
   onConcluido?: () => void;
 }
 
+type ModoVisualOnboarding = 'modal' | 'flutuante' | 'fechado' | 'concluido';
+
 export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuanteProps> = ({ onConcluido }) => {
   const { tenant, refetchTenantData } = useAuth();
   const { showSuccess } = useToast();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Estados principais
-  const [visivel, setVisivel] = useState(false);
-  const [modoExpandido, setModoExpandido] = useState(true);
-  const [colapsado, setColapsado] = useState(false);
+  // Chaves de armazenamento
+  const storageKeyConcluido = tenant?.id ? `onboarding_tutorial_concluido_${tenant.id}` : null;
+  const storageKeyTempo = tenant?.id ? `onboarding_tempo_assistido_${tenant.id}` : null;
+  const storageKeyModo = tenant?.id ? `onboarding_video_modo_${tenant.id}` : 'onboarding_video_modo_global';
+
+  // Estado visual unificado: 'modal' | 'flutuante' | 'fechado' | 'concluido'
+  const [modoVisual, setModoVisual] = useState<ModoVisualOnboarding>(() => {
+    const modoSalvo = sessionStorage.getItem(storageKeyModo) as ModoVisualOnboarding | null;
+    return modoSalvo || 'fechado';
+  });
+
   const [carregandoConfig, setCarregandoConfig] = useState(true);
   const [salvandoConclusao, setSalvandoConclusao] = useState(false);
 
@@ -43,13 +50,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Rastreamento de progresso (% assistida)
   const [segundosAssistidos, setSegundosAssistidos] = useState(0);
-  const [duracaoTotalSegundos, setDuracaoTotalSegundos] = useState(300); // 5 min padrão se não detectado
+  const [duracaoTotalSegundos, setDuracaoTotalSegundos] = useState(300); // 5 min padrão
   const [estaReproduzindo, setEstaReproduzindo] = useState(false);
   const intervalRef = useRef<any>(null);
-
-  const storageKeyConcluido = tenant?.id ? `onboarding_tutorial_concluido_${tenant.id}` : null;
-  const storageKeyTempo = tenant?.id ? `onboarding_tempo_assistido_${tenant.id}` : null;
-  const storageKeySessaoFechado = tenant?.id ? `onboarding_fechado_sessao_${tenant.id}` : null;
 
   // Função auxiliar robusta para verificar se o usuário autenticado é Super Admin / Platform Admin
   const checarSeEhAdmin = async (): Promise<boolean> => {
@@ -90,7 +93,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return false;
   };
 
-  // Carrega configuração e controla a visibilidade com base no perfil (Super Admin vs Nova Oficina)
+  // Inicializa configuração e determina modo inicial sem resetar ao trocar de rota
   useEffect(() => {
     let ativo = true;
 
@@ -98,7 +101,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       try {
         setCarregandoConfig(true);
 
-        // 1. Sempre carrega os dados de configuração do vídeo da plataforma
+        // 1. Carrega dados do vídeo da plataforma
         try {
           const { data: configData } = await supabase.rpc('obter_config_plataforma');
           if (configData && ativo) {
@@ -121,41 +124,48 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
           }
         }
 
-        // 3. Checa privilégio de Super Admin ANTES de qualquer trava de oficina concluída
+        // 3. Checa estado já salvo nesta sessão do navegador
+        const modoSalvoSessao = sessionStorage.getItem(storageKeyModo) as ModoVisualOnboarding | null;
+        if (modoSalvoSessao) {
+          if (ativo) {
+            setModoVisual(modoSalvoSessao);
+            setCarregandoConfig(false);
+          }
+          return;
+        }
+
+        // 4. Checa privilégio de Super Admin
         const ehAdmin = await checarSeEhAdmin();
         if (!ativo) return;
 
         // SE FOR O SUPER ADMIN:
-        // Ele NUNCA deve ser bloqueado por status de oficina já configurada ou conclusão passada.
-        // O vídeo deve abrir para ele poder gravar, inspecionar e apresentar a plataforma.
+        // Abre como modal na primeira visita da sessão para teste/gravação
         if (ehAdmin) {
-          const isTelaCheia = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
-          if (!isTelaCheia) {
-            setVisivel(true);
-            setModoExpandido(true);
-          }
+          setModoVisual('modal');
+          sessionStorage.setItem(storageKeyModo, 'modal');
           setCarregandoConfig(false);
           return;
         }
 
-        // SE FOR USUÁRIO COMUM (Oficinas e Clientes):
+        // SE FOR USUÁRIO COMUM (Oficinas):
         if (!tenant?.id) {
+          setModoVisual('fechado');
           setCarregandoConfig(false);
           return;
         }
 
         const jaConcluiuLocal = storageKeyConcluido && localStorage.getItem(storageKeyConcluido) === 'true';
         const jaConcluiuBanco = Boolean(tenant.onboarding_concluido);
-        const jaFechouNaSessao = storageKeySessaoFechado && sessionStorage.getItem(storageKeySessaoFechado) === 'true';
 
-        // Se o usuário comum já concluiu ou já fechou nesta sessão
-        if (jaConcluiuLocal || jaConcluiuBanco || jaFechouNaSessao) {
-          setVisivel(false);
+        // Se já concluiu permanentemente no banco ou no dispositivo
+        if (jaConcluiuLocal || jaConcluiuBanco) {
+          setModoVisual('concluido');
+          sessionStorage.setItem(storageKeyModo, 'concluido');
           setCarregandoConfig(false);
           return;
         }
 
-        // 4. Verificação automática se a oficina já está configurada/operacional:
+        // 5. Avalia se a oficina já está configurada/operacional:
         const currentTenantId = tenant.id;
         const [
           { count: totalServicos },
@@ -200,19 +210,17 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
           try {
             await supabase.rpc('marcar_onboarding_concluido', { p_tenant_id: currentTenantId });
           } catch {}
-          setVisivel(false);
+          setModoVisual('concluido');
+          sessionStorage.setItem(storageKeyModo, 'concluido');
           setCarregandoConfig(false);
           return;
         }
 
-        // Se for oficina nova sem configuração, abre o tutorial automaticamente
-        const isTelaCheia = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
-        if (!isTelaCheia) {
-          setVisivel(true);
-        }
+        // Se for oficina nova sem configuração, abre no modo modal
+        setModoVisual('modal');
+        sessionStorage.setItem(storageKeyModo, 'modal');
       } catch (err) {
-        console.warn('[OnboardingVideo] Erro ao carregar:', err);
-        setVisivel(true);
+        console.warn('[OnboardingVideo] Erro na inicialização:', err);
       } finally {
         if (ativo) setCarregandoConfig(false);
       }
@@ -222,23 +230,22 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return () => {
       ativo = false;
     };
-  }, [tenant?.id, tenant?.onboarding_concluido, storageKeyConcluido, storageKeyTempo, storageKeySessaoFechado, location.pathname]);
+  }, [tenant?.id, tenant?.onboarding_concluido, storageKeyConcluido, storageKeyTempo, storageKeyModo]);
 
-  // Listener para reabertura manual sob demanda (ex: botão de ajuda ou em configurações)
+  // Listener para reabertura sob demanda (ex: botão de ajuda ou em configurações)
   useEffect(() => {
     const handleReabrir = () => {
-      setVisivel(true);
-      setModoExpandido(true);
-      setColapsado(false);
+      setModoVisual('modal');
+      sessionStorage.setItem(storageKeyModo, 'modal');
     };
 
     window.addEventListener('abrir_onboarding_tutorial', handleReabrir);
     return () => window.removeEventListener('abrir_onboarding_tutorial', handleReabrir);
-  }, []);
+  }, [storageKeyModo]);
 
-  // Timer para contabilizar o tempo e a % assistida enquanto o usuário assiste
+  // Timer para contabilizar tempo assistido enquanto o modal está ativo e tocando
   useEffect(() => {
-    if (estaReproduzindo && visivel) {
+    if (estaReproduzindo && modoVisual === 'modal') {
       intervalRef.current = setInterval(() => {
         setSegundosAssistidos((prev) => {
           const prox = Math.min(duracaoTotalSegundos, prev + 1);
@@ -255,7 +262,63 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [estaReproduzindo, visivel, duracaoTotalSegundos, storageKeyTempo]);
+  }, [estaReproduzindo, modoVisual, duracaoTotalSegundos, storageKeyTempo]);
+
+  // Transição do modal para botão flutuante ao fechar ou minimizar
+  const handleMinimizarParaFlutuante = () => {
+    setModoVisual('flutuante');
+    sessionStorage.setItem(storageKeyModo, 'flutuante');
+  };
+
+  // Reabertura do modal completo ao clicar no botão flutuante
+  const handleExpandirParaModal = () => {
+    setModoVisual('modal');
+    sessionStorage.setItem(storageKeyModo, 'modal');
+  };
+
+  // Oculta o botão flutuante nesta sessão caso o usuário queira total limpeza visual
+  const handleDispensarBotao = () => {
+    setModoVisual('fechado');
+    sessionStorage.setItem(storageKeyModo, 'fechado');
+  };
+
+  // Conclusão definitiva da plataforma (marca no banco e remove para sempre)
+  const handleMarcarConfigurada = async () => {
+    setSalvandoConclusao(true);
+    try {
+      if (storageKeyConcluido) {
+        localStorage.setItem(storageKeyConcluido, 'true');
+      }
+      sessionStorage.setItem(storageKeyModo, 'concluido');
+
+      try {
+        await supabase.rpc('marcar_onboarding_concluido', {
+          p_tenant_id: tenant?.id,
+        });
+      } catch (errBanco) {
+        console.warn('[Onboarding] Falha ao sincronizar conclusão no banco:', errBanco);
+      }
+
+      showSuccess('🎉 Parabéns! Sua plataforma foi marcada como configurada com sucesso.');
+      setModoVisual('concluido');
+      if (onConcluido) onConcluido();
+      if (refetchTenantData) await refetchTenantData();
+    } finally {
+      setSalvandoConclusao(false);
+    }
+  };
+
+  // Atalho para navegar até as seções cruciais de configuração (minimiza para botão flutuante)
+  const handleIrPara = (caminho: string) => {
+    handleMinimizarParaFlutuante();
+    navigate(caminho);
+  };
+
+  // Rota de tela cheia operacional (execução ou check-in) não exibe nada
+  const isTelaCheia = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
+  if (isTelaCheia || carregandoConfig || modoVisual === 'fechado' || modoVisual === 'concluido') {
+    return null;
+  }
 
   // Cálculo da porcentagem assistida
   const porcentagemAssistida = Math.min(
@@ -269,10 +332,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Extração ou formatação da URL de embed (YouTube, Vimeo ou MP4)
+  // Formatação da URL de embed (YouTube, Vimeo ou MP4)
   const obterEmbedUrl = (rawUrl: string): string => {
     if (!rawUrl || !rawUrl.trim()) {
-      // Vídeo demonstrativo oficial de boas-vindas caso o tenant ainda não tenha configurado URL própria
       return 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&enablejsapi=1';
     }
 
@@ -301,56 +363,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return clean;
   };
 
-  // Ação definitiva: "Plataforma Configurada" -> fecha e some para sempre
-  const handleMarcarConfigurada = async () => {
-    setSalvandoConclusao(true);
-    try {
-      if (storageKeyConcluido) {
-        localStorage.setItem(storageKeyConcluido, 'true');
-      }
-
-      // Salva no banco de dados para sincronia permanente
-      try {
-        await supabase.rpc('marcar_onboarding_concluido', {
-          p_tenant_id: tenant?.id,
-        });
-      } catch (errBanco) {
-        console.warn('[Onboarding] Falha ao sincronizar conclusão no banco (mantido local):', errBanco);
-      }
-
-      showSuccess('🎉 Parabéns! Sua plataforma foi marcada como configurada com sucesso.');
-      setVisivel(false);
-      if (onConcluido) onConcluido();
-      if (refetchTenantData) await refetchTenantData();
-    } finally {
-      setSalvandoConclusao(false);
-    }
-  };
-
-  // Fecha o vídeo temporariamente para navegar livremente sem bloquear a tela
-  const handleFecharTemporario = () => {
-    if (storageKeySessaoFechado) {
-      sessionStorage.setItem(storageKeySessaoFechado, 'true');
-    }
-    setVisivel(false);
-  };
-
-  // Atalho para navegar até as seções cruciais de configuração
-  const handleIrPara = (caminho: string) => {
-    // Ao clicar em uma seção, minimiza o player automaticamente para ficar no canto da tela executando junto!
-    setModoExpandido(false);
-    setColapsado(false);
-    navigate(caminho);
-  };
-
-  if (!visivel || carregandoConfig) {
-    return null;
-  }
-
   const etapasSetup = [
     {
       id: 'oficina',
-      num: '1',
       titulo: 'Dados da Oficina & Logo',
       descricao: 'Nome fantasia, WhatsApp de contato e logotipo',
       rota: '/configuracoes?aba=oficina',
@@ -358,7 +373,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     },
     {
       id: 'horarios',
-      num: '2',
       titulo: 'Horários e Boxes',
       descricao: 'Dias de funcionamento e capacidade de atendimento',
       rota: '/configuracoes?aba=horarios',
@@ -366,7 +380,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     },
     {
       id: 'servicos',
-      num: '3',
       titulo: 'Catálogo de Serviços',
       descricao: 'Serviços oferecidos, preços e tempos de execução',
       rota: '/servicos',
@@ -374,7 +387,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     },
     {
       id: 'agendamento',
-      num: '4',
       titulo: 'Agendamento Online & PIX',
       descricao: 'Chave PIX e percentual do sinal de confirmação',
       rota: '/configuracoes?aba=agendamento',
@@ -382,7 +394,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     },
     {
       id: 'termos',
-      num: '5',
       titulo: 'Minutas & Garantias',
       descricao: 'Termos de responsabilidade e garantias com advogado',
       rota: '/configuracoes?aba=termos',
@@ -391,209 +402,52 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   ];
 
   // =========================================================================
-  // MODO 1: MINI-PLAYER FLUTUANTE (Picture-in-Picture no Canto Inferior)
+  // MODO 1: BOTÃO FLUTUANTE ELEGANTE E DESOBSTRUÍDO
+  // Posicionado estrategicamente à esquerda e acima da BottomNav no mobile,
+  // e ao lado da Sidebar no desktop. NUNCA tampa a barra de navegação.
   // =========================================================================
-  if (!modoExpandido) {
+  if (modoVisual === 'flutuante') {
     return (
-      <aside 
-        aria-label="Player do Tutorial de Configuração"
-        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end pointer-events-auto select-none"
+      <aside
+        aria-label="Tutorial de Configuração da Plataforma"
+        className="fixed left-4 lg:left-[256px] bottom-[74px] lg:bottom-6 z-40 flex items-center gap-1.5 animate-fade-in pointer-events-auto select-none"
       >
-        <div
-          className={`bg-graphite-900/95 border border-amber-500/40 shadow-2xl backdrop-blur-xl rounded-2xl overflow-hidden transition-all duration-300 ${
-            colapsado ? 'w-72 sm:w-80' : 'w-80 sm:w-96'
-          }`}
+        <button
+          type="button"
+          onClick={handleExpandirParaModal}
+          className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-graphite-900/95 hover:bg-graphite-850 border border-amber-500/60 hover:border-amber-400 text-vapor-100 shadow-2xl backdrop-blur-md transition-all hover:scale-[1.03] active:scale-[0.98] cursor-pointer"
+          title="Abrir Vídeo Tutorial de Configuração"
         >
-          {/* Barra de Título do Mini-Player */}
-          <div className="bg-graphite-950/80 px-3.5 py-2.5 flex items-center justify-between border-b border-graphite-700/60">
-            <div className="flex items-center gap-2 truncate pr-2">
-              <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                <Sparkles className="w-3.5 h-3.5" />
-              </div>
-              <div className="truncate">
-                <span className="text-xs font-bold text-vapor-100 truncate block font-display tracking-tight">
-                  Tutorial de Iniciação
-                </span>
-                <span className="text-[10px] text-amber-400 font-medium">
-                  {porcentagemAssistida}% assistido
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {/* Botão de Colapsar/Expandir Altura */}
-              <button
-                type="button"
-                onClick={() => setColapsado(!colapsado)}
-                className="p-1 rounded-md text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 transition-colors"
-                title={colapsado ? 'Expandir Mini-Player' : 'Recolher Mini-Player'}
-              >
-                {colapsado ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
-
-              {/* Botão de Maximizar para Tela Cheia / Modal */}
-              <button
-                type="button"
-                onClick={() => setModoExpandido(true)}
-                className="p-1 rounded-md text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 transition-colors"
-                title="Maximizar Vídeo"
-              >
-                <Maximize2 className="w-4 h-4" />
-              </button>
-
-              {/* Botão de Fechar Mini-Player */}
-              <button
-                type="button"
-                onClick={handleFecharTemporario}
-                className="p-1 rounded-md text-vapor-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                title="Fechar Vídeo Tutorial"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-graphite-950 font-bold shadow-sm shrink-0">
+            <Play className="w-3 h-3 fill-current ml-0.5" />
           </div>
+          <div className="text-left flex flex-col">
+            <span className="text-xs font-bold font-display text-amber-400 group-hover:text-amber-300 leading-tight flex items-center gap-1">
+              <span>Vídeo Tutorial</span>
+              <Sparkles className="w-3 h-3 text-amber-400" />
+            </span>
+            <span className="text-[10px] text-vapor-400 leading-tight">
+              Configuração da Oficina
+            </span>
+          </div>
+        </button>
 
-          {/* Conteúdo do Mini-Player (quando não colapsado) */}
-          {!colapsado && (
-            <div className="p-3 space-y-3">
-              {/* Vídeo Embed Compacto */}
-              <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-graphite-800 shadow-inner">
-                {videoUrl && (videoUrl.includes('.mp4') || videoUrl.includes('.webm')) ? (
-                  <video
-                    src={videoUrl}
-                    controls
-                    playsInline
-                    onPlay={() => setEstaReproduzindo(true)}
-                    onPause={() => setEstaReproduzindo(false)}
-                    onEnded={() => {
-                      setEstaReproduzindo(false);
-                      setSegundosAssistidos(duracaoTotalSegundos);
-                    }}
-                    onTimeUpdate={(e) => {
-                      const videoEl = e.currentTarget;
-                      if (videoEl.duration) {
-                        setDuracaoTotalSegundos(Math.round(videoEl.duration));
-                        setSegundosAssistidos(Math.round(videoEl.currentTime));
-                      }
-                    }}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <iframe
-                    src={obterEmbedUrl(videoUrl)}
-                    title="Vídeo Tutorial de Iniciação"
-                    className="w-full h-full border-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                )}
-              </div>
-
-              {/* Barra de Progresso e % Assistida */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] text-vapor-400">
-                  <span className="flex items-center gap-1 text-vapor-300 font-semibold">
-                    <Clock className="w-3 h-3 text-amber-400" />
-                    {formatarTempo(segundosAssistidos)} / {formatarTempo(duracaoTotalSegundos)}
-                  </span>
-                  <span className="font-bold text-amber-400">{porcentagemAssistida}% concluído</span>
-                </div>
-                <div className="w-full h-1.5 bg-graphite-800 rounded-full overflow-hidden border border-graphite-700">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-300"
-                    style={{ width: `${porcentagemAssistida}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Atalhos Rápidos para Ir Executando Enquanto Assiste */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] font-semibold text-vapor-400 uppercase tracking-wider block">
-                  Atalhos Rápidos de Configuração:
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleIrPara('/configuracoes?aba=oficina')}
-                    className="flex items-center gap-1.5 p-1.5 rounded-lg bg-graphite-800/80 hover:bg-amber-500/10 border border-graphite-700 hover:border-amber-500/40 text-[11px] text-vapor-200 transition-all text-left truncate group"
-                  >
-                    <Building2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="truncate group-hover:text-amber-300">1. Oficina</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleIrPara('/configuracoes?aba=horarios')}
-                    className="flex items-center gap-1.5 p-1.5 rounded-lg bg-graphite-800/80 hover:bg-amber-500/10 border border-graphite-700 hover:border-amber-500/40 text-[11px] text-vapor-200 transition-all text-left truncate group"
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="truncate group-hover:text-amber-300">2. Horários</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleIrPara('/servicos')}
-                    className="flex items-center gap-1.5 p-1.5 rounded-lg bg-graphite-800/80 hover:bg-amber-500/10 border border-graphite-700 hover:border-amber-500/40 text-[11px] text-vapor-200 transition-all text-left truncate group"
-                  >
-                    <Tag className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="truncate group-hover:text-amber-300">3. Serviços</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleIrPara('/configuracoes?aba=agendamento')}
-                    className="flex items-center gap-1.5 p-1.5 rounded-lg bg-graphite-800/80 hover:bg-amber-500/10 border border-graphite-700 hover:border-amber-500/40 text-[11px] text-vapor-200 transition-all text-left truncate group"
-                  >
-                    <QrCode className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="truncate group-hover:text-amber-300">4. PIX & Vitrine</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* BOTÃO PRINCIPAL DEFINITIVO: "Plataforma Configurada" */}
-              <div className="pt-2 border-t border-graphite-800">
-                <button
-                  type="button"
-                  onClick={handleMarcarConfigurada}
-                  disabled={salvandoConclusao}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-graphite-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-all cursor-pointer"
-                  title="Finalizar e remover o player da tela permanentemente"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-graphite-950" />
-                  <span>{salvandoConclusao ? 'Salvando...' : 'Plataforma Configurada ✔️'}</span>
-                </button>
-                <p className="text-[10px] text-center text-vapor-500 mt-1">
-                  Clique aqui quando terminar para ocultar o player para sempre.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Versão colapsada mínima com barra de progresso */}
-          {colapsado && (
-            <div className="px-3 py-2 bg-graphite-950/60 border-t border-graphite-800/60 flex items-center justify-between gap-2">
-              <div className="w-full h-1.5 bg-graphite-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                  style={{ width: `${porcentagemAssistida}%` }}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={handleMarcarConfigurada}
-                className="shrink-0 px-2 py-1 text-[10px] font-bold bg-emerald-500 text-graphite-950 rounded-md hover:bg-emerald-400 transition-colors"
-              >
-                Concluir
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Botão sutil para dispensar o botão flutuante nesta sessão */}
+        <button
+          type="button"
+          onClick={handleDispensarBotao}
+          className="p-2 rounded-xl bg-graphite-900/90 hover:bg-graphite-800 text-vapor-400 hover:text-vapor-200 border border-graphite-700 hover:border-graphite-600 transition-colors shadow-lg cursor-pointer"
+          title="Ocultar botão nesta sessão (pode reabrir em Configurações)"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
       </aside>
     );
   }
 
   // =========================================================================
-  // MODO 2: MODAL CENTRALIZADO EXPANDIDO (Visualização Inicial / Detalhada)
+  // MODO 2: MODAL CENTRALIZADO EXPANDIDO (Visualização Completa do Tutorial)
+  // Possui botões claros de Fechar (X) e Minimizar para navegar sem bloqueios.
   // =========================================================================
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-graphite-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
@@ -620,23 +474,23 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Minimizar para ir executando junto */}
+            {/* Minimizar para navegar e deixar o botão flutuante disponível */}
             <button
               type="button"
-              onClick={() => setModoExpandido(false)}
+              onClick={handleMinimizarParaFlutuante}
               className="px-3 py-1.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 hover:text-vapor-100 text-xs font-semibold flex items-center gap-1.5 border border-graphite-700 transition-colors cursor-pointer"
-              title="Minimizar e continuar no canto da tela enquanto configura"
+              title="Minimizar e continuar navegando pela plataforma"
             >
               <Minimize2 className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Minimizar & Navegar</span>
             </button>
 
-            {/* Botão Fechar (X) Imediato e Claro */}
+            {/* Botão Fechar (X): Transiciona para o botão flutuante desobstruído */}
             <button
               type="button"
-              onClick={handleFecharTemporario}
+              onClick={handleMinimizarParaFlutuante}
               className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-graphite-800 hover:bg-red-500/20 text-vapor-300 hover:text-red-300 text-xs font-semibold flex items-center gap-1.5 border border-graphite-700 hover:border-red-500/40 transition-colors cursor-pointer"
-              title="Fechar vídeo e acessar a plataforma livremente"
+              title="Fechar modal e manter botão flutuante para quando precisar"
             >
               <X className="w-4 h-4 text-red-400" />
               <span className="text-xs font-semibold">Fechar</span>
@@ -705,7 +559,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
               Etapas Essenciais Ensinadas no Vídeo:
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {etapasSetup.map((etapa) => {
+              {etapasSetup.map((etapa, idx) => {
                 const Icone = etapa.icon;
                 return (
                   <button
@@ -719,7 +573,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
                     </div>
                     <div className="truncate">
                       <div className="text-xs font-bold text-vapor-100 group-hover:text-amber-300 truncate flex items-center gap-1">
-                        <span>{etapa.titulo}</span>
+                        <span>{idx + 1}. {etapa.titulo}</span>
                         <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                       <p className="text-[11px] text-vapor-400 truncate">{etapa.descricao}</p>
@@ -731,22 +585,22 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
           </div>
         </div>
 
-        {/* Rodapé com os dois botões principais de ação */}
+        {/* Rodapé com os botões principais de ação */}
         <div className="bg-graphite-950/90 px-4 sm:px-6 py-4 border-t border-graphite-700/60 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="text-xs text-vapor-400 text-center sm:text-left">
-            <span>Deseja ir preenchendo enquanto o vídeo rola?</span>{' '}
-            <strong className="text-amber-400">O player flutua na tela sem travar sua navegação.</strong>
+            <span>Deseja ir preenchendo agora?</span>{' '}
+            <strong className="text-amber-400">Clique em Minimizar para deixar o botão disponível no canto.</strong>
           </div>
 
           <div className="flex items-center gap-2.5 w-full sm:w-auto">
-            {/* Botão para Minimizar e Configurar Junto */}
+            {/* Botão para Minimizar e Navegar Livremente */}
             <button
               type="button"
-              onClick={() => setModoExpandido(false)}
-              className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-graphite-800 hover:bg-graphite-700 text-vapor-200 hover:text-vapor-100 font-semibold text-xs border border-graphite-600 transition-all flex items-center justify-center gap-2"
+              onClick={handleMinimizarParaFlutuante}
+              className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-graphite-800 hover:bg-graphite-700 text-vapor-200 hover:text-vapor-100 font-semibold text-xs border border-graphite-600 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Minimize2 className="w-4 h-4 text-amber-400" />
-              <span>Configurar Enquanto Assisto</span>
+              <span>Minimizar & Navegar</span>
             </button>
 
             {/* Botão Definitivo: Marcar Plataforma como Configurada */}
