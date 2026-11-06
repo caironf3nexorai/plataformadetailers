@@ -1,0 +1,719 @@
+[
+  {
+    "id": "TC001",
+    "title": "Configurando horários e capacidade para receber reservas",
+    "description": "Verifies that an administrator can define operating hours and simultaneous box capacity and save the agenda settings successfully.",
+    "category": "Agendamento e Horários",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the agenda configuration page"
+      },
+      {
+        "type": "action",
+        "description": "Define the operating days and hours"
+      },
+      {
+        "type": "action",
+        "description": "Set the simultaneous box capacity"
+      },
+      {
+        "type": "action",
+        "description": "Save the agenda settings"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the agenda configuration is saved and ready for bookings"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Fazendo um agendamento público com sucesso",
+    "description": "Verifies that a customer can choose an available service, pick an available date and time, enter details, and complete a public booking successfully.",
+    "category": "Agendamento e Horários",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the public booking page"
+      },
+      {
+        "type": "action",
+        "description": "Choose a service"
+      },
+      {
+        "type": "action",
+        "description": "Select an available date"
+      },
+      {
+        "type": "action",
+        "description": "Select an available time slot"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the customer details"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the booking"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the reservation is registered successfully"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Concluir check-in com vistoria e aceite completo",
+    "description": "Verifica que um atendente consegue registrar a entrada do veículo com vistoria, avarias, assinatura e termo aceito, finalizando o check-in com sucesso.",
+    "category": "Check-in Digital e Execução",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the check-in page"
+      },
+      {
+        "type": "action",
+        "description": "Register vehicle conditions with photos"
+      },
+      {
+        "type": "action",
+        "description": "Mark any pre-existing damage that applies"
+      },
+      {
+        "type": "action",
+        "description": "Capture the customer's digital signature"
+      },
+      {
+        "type": "action",
+        "description": "Accept the responsibility term"
+      },
+      {
+        "type": "action",
+        "description": "Complete the check-in"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the check-in is completed successfully"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the vehicle entry is recorded"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Mostrando o tutorial de boas-vindas para uma nova oficina",
+    "description": "Verifies that a new tenant sees the onboarding welcome modal with the tutorial video on first access.",
+    "category": "Onboarding e Vídeo Tutorial",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the application home page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the welcome onboarding modal is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the tutorial video content is available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Cadastrando um novo serviço com tempo e preços por porte",
+    "description": "Verifies that an administrator can create a new service, define execution time and base prices by vehicle size, and save it to the catalog.",
+    "category": "Catálogo de Serviços e Matriz de Preços",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the service management page"
+      },
+      {
+        "type": "action",
+        "description": "Start creating a new service"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the service name"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the execution time"
+      },
+      {
+        "type": "action",
+        "description": "Define the base prices by vehicle size"
+      },
+      {
+        "type": "action",
+        "description": "Save the service"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new service appears in the catalog"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Record receivables expenses and commission",
+    "description": "Verifica que o usuário financeiro consegue lançar recebíveis, despesas e comissão vinculada a um atendimento, com os movimentos refletidos no caixa.",
+    "category": "Financeiro e Controle de Caixa",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the finance area"
+      },
+      {
+        "type": "action",
+        "description": "Register an account receivable"
+      },
+      {
+        "type": "action",
+        "description": "Record an operational expense"
+      },
+      {
+        "type": "action",
+        "description": "Register a commission linked to a service appointment"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the financial entries are listed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cash flow reflects the new movements"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "Review cash flow and balance after transactions",
+    "description": "Verifica que, após registrar movimentações financeiras, o usuário consegue consultar o fluxo de caixa e conferir o saldo atualizado.",
+    "category": "Financeiro e Controle de Caixa",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the finance area"
+      },
+      {
+        "type": "action",
+        "description": "Record financial movements for the period"
+      },
+      {
+        "type": "action",
+        "description": "Open the cash flow view"
+      },
+      {
+        "type": "action",
+        "description": "Review the balance summary"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the cash flow entries are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the balance summary is updated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Create a proposal with services and discounts",
+    "description": "Verifica que o gestor consegue montar uma proposta com itens, aplicar descontos e revisar o total calculado antes de gerar o documento.",
+    "category": "Orçamentos e Propostas em PDF",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the proposals area"
+      },
+      {
+        "type": "action",
+        "description": "Create a new proposal"
+      },
+      {
+        "type": "action",
+        "description": "Add services and items to the proposal"
+      },
+      {
+        "type": "action",
+        "description": "Apply a discount to the proposal"
+      },
+      {
+        "type": "action",
+        "description": "Review the calculated total"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal total is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the proposal is ready for document generation"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Bloqueando um horário indisponível no agendamento público",
+    "description": "Verifies that a customer cannot confirm a booking for an unavailable time and is prompted to choose another option.",
+    "category": "Agendamento e Horários",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the public booking page"
+      },
+      {
+        "type": "action",
+        "description": "Choose a service"
+      },
+      {
+        "type": "action",
+        "description": "Select an unavailable time slot"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to confirm the booking"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a time unavailable message is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the booking is not completed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Generate and share a proposal PDF",
+    "description": "Verifica que uma proposta concluída pode ser gerada em PDF e compartilhada com o cliente dentro do fluxo esperado.",
+    "category": "Orçamentos e Propostas em PDF",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the proposals area"
+      },
+      {
+        "type": "action",
+        "description": "Open an existing proposal or create a new one"
+      },
+      {
+        "type": "action",
+        "description": "Generate the proposal PDF"
+      },
+      {
+        "type": "action",
+        "description": "Share the document with the customer"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a proposal PDF is available"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a sharing confirmation is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Reproduz uma aula prática da academia",
+    "description": "Verifica que o aluno consegue iniciar a reprodução de uma aula prática e assistir ao vídeo de treinamento.",
+    "category": "Academia do Detailer",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to access the academy"
+      },
+      {
+        "type": "action",
+        "description": "Open a practical lesson"
+      },
+      {
+        "type": "action",
+        "description": "Start the lesson video"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the training video player is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Block check-in completion without signature",
+    "description": "Verifica que o processo de check-in não pode ser finalizado enquanto a assinatura do cliente não tiver sido coletada.",
+    "category": "Check-in Digital e Execução",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the check-in page"
+      },
+      {
+        "type": "action",
+        "description": "Register vehicle conditions with photos"
+      },
+      {
+        "type": "action",
+        "description": "Accept the responsibility term"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to complete the check-in without capturing the customer's digital signature"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the check-in remains incomplete"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Acessa a academia e abre um curso disponível",
+    "description": "Verifica que o aluno consegue entrar na área de membros e abrir um curso disponível para estudo.",
+    "category": "Academia do Detailer",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to access the academy"
+      },
+      {
+        "type": "action",
+        "description": "Click a course that is available for study"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the course lesson view is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Desativando um serviço do catálogo público",
+    "description": "Verifies that an administrator can deactivate an existing service and prevent it from appearing for new bookings.",
+    "category": "Catálogo de Serviços e Matriz de Preços",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the service management page"
+      },
+      {
+        "type": "action",
+        "description": "Select an existing service"
+      },
+      {
+        "type": "action",
+        "description": "Deactivate the service"
+      },
+      {
+        "type": "action",
+        "description": "Save the change"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the service is no longer available in the public catalog"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Marca uma aula como concluída",
+    "description": "Verifica que o aluno consegue concluir uma aula e ver o progresso atualizado no curso.",
+    "category": "Academia do Detailer",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to access the academy"
+      },
+      {
+        "type": "action",
+        "description": "Open a lesson"
+      },
+      {
+        "type": "action",
+        "description": "Mark the lesson as completed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the lesson completion status is updated"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Minimizando o tutorial para continuar usando a plataforma",
+    "description": "Verifies that the onboarding modal can be minimized so the user can continue with normal platform usage.",
+    "category": "Onboarding e Vídeo Tutorial",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the application home page"
+      },
+      {
+        "type": "action",
+        "description": "Open the welcome onboarding modal"
+      },
+      {
+        "type": "action",
+        "description": "Minimize the tutorial modal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the onboarding modal is minimized"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the main platform remains accessible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC017",
+    "title": "Consulta os materiais complementares de uma aula",
+    "description": "Verifica que o aluno consegue abrir os materiais de apoio associados a uma aula.",
+    "category": "Academia do Detailer",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to access the academy"
+      },
+      {
+        "type": "action",
+        "description": "Open a lesson that has support materials"
+      },
+      {
+        "type": "action",
+        "description": "Click the materials section for the lesson"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the lesson support materials are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC018",
+    "title": "Continua para outro módulo de aprendizagem",
+    "description": "Verifica que o aluno consegue sair de uma aula e navegar para outro curso ou módulo disponível.",
+    "category": "Academia do Detailer",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to access the academy"
+      },
+      {
+        "type": "action",
+        "description": "Open a course"
+      },
+      {
+        "type": "action",
+        "description": "Click the next available module or course"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify another learning module is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC019",
+    "title": "Abrindo a plataforma sem exibir o tutorial quando já há configuração",
+    "description": "Verifies that an already configured office does not see the onboarding tutorial automatically and can proceed directly to normal operation.",
+    "category": "Onboarding e Vídeo Tutorial",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the application home page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the welcome onboarding modal is not displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the normal operating area is accessible"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC020",
+    "title": "Respect Free plan PDF layout limits",
+    "description": "Verifica que, no plano Free, a proposta não permite personalizações visuais avançadas e mantém o layout permitido.",
+    "category": "Orçamentos e Propostas em PDF",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the proposals area"
+      },
+      {
+        "type": "action",
+        "description": "Create or open a proposal"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to apply an advanced visual customization"
+      },
+      {
+        "type": "action",
+        "description": "Generate the proposal PDF"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the layout limitation is enforced"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the PDF is generated within the allowed format"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC021",
+    "title": "Exibe um estado vazio quando não há cursos disponíveis",
+    "description": "Verifica que a academia mostra um estado vazio apropriado quando não existem cursos ou aulas visíveis para o usuário.",
+    "category": "Academia do Detailer",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to access the academy"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no course content is displayed"
+      }
+    ],
+    "priority": "Low"
+  }
+]

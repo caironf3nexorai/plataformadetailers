@@ -41,6 +41,22 @@ serve(async (req) => {
     const body = await req.json();
 
     if (body.action === 'sincronizar_valor_plano') {
+      // 1.1 Validação estrita de Super-Admin da plataforma
+      const { data: adminRecord } = await supabase
+        .from('platform_admins')
+        .select('id')
+        .or(`user_id.eq.${user.id},email.ilike.${user.email}`)
+        .eq('ativo', true)
+        .is('revogado_em', null)
+        .maybeSingle();
+
+      if (!adminRecord) {
+        return new Response(JSON.stringify({ error: 'Acesso negado: apenas administradores da plataforma podem sincronizar valores de planos.' }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       const targetPlano = body.plano;
       const novoPrecoCentavos = body.novo_preco_centavos;
       const novoValorReais = Number((novoPrecoCentavos / 100).toFixed(2));

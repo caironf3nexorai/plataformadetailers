@@ -32,3 +32,5 @@ scratch/
 .agents/skills/
 skills/
 skills-lock.json
+testsprite_tests/tmp/
+testsprite_tests/tmp/config.json

@@ -20,7 +20,8 @@ import {
   ArrowLeftRight,
   Trash2
 } from 'lucide-react';
-import { parseVideoUrl, getEmbedUrl } from '../../utils/videoExtractor';
+import { parseVideoUrl } from '../../utils/videoExtractor';
+import { PlayerVideoSeguro } from '../../components/video/PlayerVideoSeguro';
 import { AdminAbaMateriaisDidaticos } from '../../components/admin/AdminAbaMateriaisDidaticos';
 
 export const CATEGORIAS_PADRAO_ACADEMIA = [
@@ -859,15 +860,12 @@ export const AdminTreinamentos: React.FC = () => {
               </button>
             </div>
 
-            <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-slate-800 shadow-inner">
-              <iframe
-                src={getEmbedUrl(previewVideo.plataforma, previewVideo.video_id)}
-                title={previewVideo.titulo}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full border-0"
+            {/* Player do Vídeo Seguro com Camuflagem e Escudo Anti-Fuga */}
+              <PlayerVideoSeguro
+                url={previewVideo.url || (previewVideo.plataforma === 'youtube' ? `https://www.youtube.com/watch?v=${previewVideo.video_id}` : previewVideo.video_id || '')}
+                titulo={previewVideo.titulo}
+                mostrarWatermark={true}
               />
-            </div>
           </div>
         </div>,
         document.body

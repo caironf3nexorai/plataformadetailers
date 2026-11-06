@@ -5,11 +5,20 @@ const ASAAS_WEBHOOK_SECRET = Deno.env.get('ASAAS_WEBHOOK_SECRET') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
+function safeCompare(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const enc = new TextEncoder();
+  const bufA = enc.encode(a);
+  const bufB = enc.encode(b);
+  if (bufA.byteLength !== bufB.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(bufA, bufB);
+}
+
 serve(async (req) => {
   try {
-    // 1. Validação de Token no Cabeçalho
-    const tokenHeader = req.headers.get('asaas-access-token');
-    if (!ASAAS_WEBHOOK_SECRET || tokenHeader !== ASAAS_WEBHOOK_SECRET) {
+    // 1. Validação de Token no Cabeçalho em Tempo Constante (Anti Timing-Attack)
+    const tokenHeader = req.headers.get('asaas-access-token') || '';
+    if (!ASAAS_WEBHOOK_SECRET || !safeCompare(tokenHeader, ASAAS_WEBHOOK_SECRET)) {
       return new Response(JSON.stringify({ error: 'Não autorizado' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },

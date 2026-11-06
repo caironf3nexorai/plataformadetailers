@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Minimize2,
@@ -17,6 +17,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { PlayerVideoSeguro } from '../video/PlayerVideoSeguro';
 
 interface ModalOnboardingVideoFlutuanteProps {
   onConcluido?: () => void;
@@ -51,8 +52,6 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   // Rastreamento de progresso (% assistida)
   const [segundosAssistidos, setSegundosAssistidos] = useState(0);
   const [duracaoTotalSegundos, setDuracaoTotalSegundos] = useState(300); // 5 min padrão
-  const [estaReproduzindo, setEstaReproduzindo] = useState(false);
-  const intervalRef = useRef<any>(null);
 
   // Função auxiliar robusta para verificar se o usuário autenticado é Super Admin / Platform Admin
   const checarSeEhAdmin = async (): Promise<boolean> => {
@@ -243,26 +242,31 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return () => window.removeEventListener('abrir_onboarding_tutorial', handleReabrir);
   }, [storageKeyModo]);
 
-  // Timer para contabilizar tempo assistido enquanto o modal está ativo e tocando
-  useEffect(() => {
-    if (estaReproduzindo && modoVisual === 'modal') {
-      intervalRef.current = setInterval(() => {
-        setSegundosAssistidos((prev) => {
-          const prox = Math.min(duracaoTotalSegundos, prev + 1);
-          if (storageKeyTempo && prox % 5 === 0) {
-            localStorage.setItem(storageKeyTempo, prox.toString());
-          }
-          return prox;
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
+    // Callback de alta fidelidade do Player Seguro (YouTube, Vimeo ou MP4)
+  const handleProgressoVideo = useCallback(
+    (dados: {
+      segundosAssistidos: number;
+      duracaoTotal: number;
+      porcentagem: number;
+      estaReproduzindo: boolean;
+    }) => {
+      setSegundosAssistidos(dados.segundosAssistidos);
+      if (dados.duracaoTotal > 0) {
+        setDuracaoTotalSegundos(dados.duracaoTotal);
+      }
+      if (storageKeyTempo && dados.segundosAssistidos > 0 && dados.segundosAssistidos % 3 === 0) {
+        localStorage.setItem(storageKeyTempo, dados.segundosAssistidos.toString());
+      }
+    },
+    [storageKeyTempo]
+  );
 
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [estaReproduzindo, modoVisual, duracaoTotalSegundos, storageKeyTempo]);
+  const handleConclusaoAutomatica = useCallback(() => {
+    setSegundosAssistidos(duracaoTotalSegundos);
+    if (storageKeyTempo && duracaoTotalSegundos > 0) {
+      localStorage.setItem(storageKeyTempo, duracaoTotalSegundos.toString());
+    }
+  }, [storageKeyTempo, duracaoTotalSegundos]);
 
   // Transição do modal para botão flutuante ao fechar ou minimizar
   const handleMinimizarParaFlutuante = () => {
@@ -332,36 +336,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Formatação da URL de embed (YouTube, Vimeo ou MP4)
-  const obterEmbedUrl = (rawUrl: string): string => {
-    if (!rawUrl || !rawUrl.trim()) {
-      return 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&enablejsapi=1';
-    }
-
-    const clean = rawUrl.trim();
-    if (clean.includes('youtube.com/watch')) {
-      try {
-        const v = new URL(clean).searchParams.get('v');
-        return v ? `https://www.youtube-nocookie.com/embed/${v}?rel=0&enablejsapi=1` : clean;
-      } catch {
-        return clean;
-      }
-    }
-    if (clean.includes('youtu.be/')) {
-      const parts = clean.split('youtu.be/');
-      const v = parts[1]?.split('?')[0]?.split('&')[0];
-      return v ? `https://www.youtube-nocookie.com/embed/${v}?rel=0&enablejsapi=1` : clean;
-    }
-    if (clean.includes('youtube.com/embed/')) {
-      return clean.includes('enablejsapi=1') ? clean : `${clean}${clean.includes('?') ? '&' : '?'}enablejsapi=1`;
-    }
-    if (clean.includes('vimeo.com/')) {
-      const parts = clean.split('vimeo.com/');
-      const v = parts[1]?.split('?')[0]?.split('/')[0];
-      return v ? `https://player.vimeo.com/video/${v}` : clean;
-    }
-    return clean;
-  };
+  
 
   const etapasSetup = [
     {
@@ -500,39 +475,15 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
         {/* Corpo do Modal com Scroll Interno */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
-          {/* Player do Vídeo 16:9 */}
-          <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden border border-graphite-800 shadow-2xl">
-            {videoUrl && (videoUrl.includes('.mp4') || videoUrl.includes('.webm')) ? (
-              <video
-                src={videoUrl}
-                controls
-                playsInline
-                autoPlay
-                onPlay={() => setEstaReproduzindo(true)}
-                onPause={() => setEstaReproduzindo(false)}
-                onEnded={() => {
-                  setEstaReproduzindo(false);
-                  setSegundosAssistidos(duracaoTotalSegundos);
-                }}
-                onTimeUpdate={(e) => {
-                  const videoEl = e.currentTarget;
-                  if (videoEl.duration) {
-                    setDuracaoTotalSegundos(Math.round(videoEl.duration));
-                    setSegundosAssistidos(Math.round(videoEl.currentTime));
-                  }
-                }}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <iframe
-                src={obterEmbedUrl(videoUrl)}
-                title="Vídeo Tutorial de Iniciação"
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            )}
-          </div>
+          {/* Player do Vídeo Seguro com Camuflagem e Escudo Anti-Fuga */}
+          <PlayerVideoSeguro
+            url={videoUrl}
+            titulo={videoTitulo}
+            tempoInicial={segundosAssistidos}
+            onProgresso={handleProgressoVideo}
+            onConcluido={handleConclusaoAutomatica}
+            mostrarWatermark={true}
+          />
 
           {/* Régua de Progresso do Vídeo */}
           <div className="bg-graphite-950/60 p-3 rounded-xl border border-graphite-800 space-y-2">

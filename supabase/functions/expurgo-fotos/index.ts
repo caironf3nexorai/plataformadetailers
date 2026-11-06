@@ -6,20 +6,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 
+function safeCompare(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const enc = new TextEncoder();
+  const bufA = enc.encode(a);
+  const bufB = enc.encode(b);
+  if (bufA.byteLength !== bufB.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(bufA, bufB);
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // 1. Proteção de Segurança: Validação de Secret no cabeçalho HTTP Authorization / x-cron-secret
+    // 1. Proteção de Segurança: Validação de Secret no cabeçalho HTTP Authorization / x-cron-secret em tempo constante
     const cronSecret = Deno.env.get('CRON_SECRET');
     const authHeader = req.headers.get('Authorization') || '';
     const cronHeader = req.headers.get('x-cron-secret') || '';
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    if (!cronSecret || (token !== cronSecret && cronHeader !== cronSecret)) {
+    if (!cronSecret || (!safeCompare(token, cronSecret) && !safeCompare(cronHeader, cronSecret))) {
       return new Response(JSON.stringify({ error: 'Não autorizado: Secret do CRON inválido ou ausente.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { useAuth } from '../../contexts/AuthContext';
-import { getEmbedUrl } from '../../utils/videoExtractor';
+
+import { PlayerVideoSeguro } from '../video/PlayerVideoSeguro';
 
 interface TreinamentoItem {
   id: string;
@@ -165,8 +166,8 @@ export const AbaTreinamento: React.FC = () => {
     fetchTreinamentos();
   }, [tenant?.id, tenant?.plano]);
 
-  const handleToggleConcluido = async (treinamento: TreinamentoItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleToggleConcluido = async (treinamento: TreinamentoItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const novoStatus = !treinamento.concluido;
 
     // Atualização otimista na UI
@@ -497,16 +498,18 @@ export const AbaTreinamento: React.FC = () => {
               </button>
             </div>
 
-            {/* Container Responsivo 16:9 */}
-            <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-inner border border-graphite-700">
-              <iframe
-                src={getEmbedUrl(activeVideo.plataforma, activeVideo.video_id || '')}
-                title={activeVideo.titulo}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="w-full h-full border-0"
-              />
-            </div>
+            {/* Player do Vídeo Seguro com Camuflagem e Escudo Anti-Fuga */}
+            <PlayerVideoSeguro
+              url={activeVideo.url || (activeVideo.plataforma === 'youtube' ? `https://www.youtube.com/watch?v=${activeVideo.video_id}` : activeVideo.video_id || '')}
+              titulo={activeVideo.titulo}
+              mostrarWatermark={true}
+              onConcluido={() => {
+                if (!activeVideo.concluido) {
+                  handleToggleConcluido(activeVideo);
+                  setActiveVideo(prev => prev ? { ...prev, concluido: true } : null);
+                }
+              }}
+            />
 
             {activeVideo.descricao && (
               <p className="text-vapor-300 text-xs leading-relaxed bg-graphite-900 p-3.5 rounded-xl border border-graphite-700">
