@@ -148,13 +148,15 @@ function carregarYouTubeApi(): Promise<void> {
       return;
     }
 
-    const existingScript = document.querySelector('script[src*="youtube.com/iframe_api"]');
-    if (!existingScript) {
-      const tag = document.createElement('script');
-      tag.src = 'https://www.youtube.com/iframe_api';
-      tag.async = true;
-      document.head.appendChild(tag);
-    }
+    try {
+      const existingScript = document.querySelector('script[src*="youtube.com/iframe_api"]');
+      if (!existingScript) {
+        const tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        tag.async = true;
+        document.head.appendChild(tag);
+      }
+    } catch {}
 
     const anteriorCallback = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
@@ -172,7 +174,7 @@ function carregarYouTubeApi(): Promise<void> {
       if (window.YT && window.YT.Player) {
         clearInterval(interval);
         resolve();
-      } else if (tentativas > 240) {
+      } else if (tentativas > 120) {
         clearInterval(interval);
         resolve();
       }
@@ -207,7 +209,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   const hideControlsTimerRef = useRef<any>(null);
 
   // Estados de reprodução e telemetria
-  const [carregandoApi, setCarregandoApi] = useState(true);
+  const [carregandoApi, setCarregandoApi] = useState(false);
   const [estaReproduzindo, setEstaReproduzindo] = useState(false);
   const [tempoAtual, setTempoAtual] = useState(tempoInicial || 0);
   const [duracaoTotal, setDuracaoTotal] = useState(0);
@@ -249,10 +251,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   useEffect(() => {
     let ativo = true;
 
-    if (videoData.plataforma !== 'youtube') {
-      setCarregandoApi(false);
-      return;
-    }
+    if (videoData.plataforma !== 'youtube') return;
 
     carregarYouTubeApi()
       .then(() => {
@@ -265,25 +264,9 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
             }
 
             const targetElement = document.getElementById(containerIdRef.current);
-            if (!targetElement) {
-              setCarregandoApi(false);
-              return;
-            }
+            if (!targetElement) return;
 
             ytPlayerRef.current = new window.YT.Player(containerIdRef.current, {
-              videoId: videoData.videoId,
-              playerVars: {
-                autoplay: autoPlay ? 1 : 0,
-                controls: 0,
-                disablekb: 1,
-                fs: 0,
-                modestbranding: 1,
-                rel: 0,
-                iv_load_policy: 3,
-                playsinline: 1,
-                enablejsapi: 1,
-                cc_load_policy: 0,
-              },
               events: {
                 onReady: (event: any) => {
                   if (!ativo) return;
@@ -318,16 +301,11 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
               },
             });
           } catch (errInit) {
-            console.warn('[PlayerVideoSeguro] Inicializacao YT.Player, fallback ativo:', errInit);
-            if (ativo) setCarregandoApi(false);
+            console.warn('[PlayerVideoSeguro] Inicializacao YT.Player, postMessage ativo:', errInit);
           }
-        } else {
-          if (ativo) setCarregandoApi(false);
         }
       })
-      .catch(() => {
-        if (ativo) setCarregandoApi(false);
-      });
+      .catch(() => {});
 
     return () => {
       ativo = false;
@@ -485,7 +463,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         } catch {}
       }
 
-      // Se a API oficial não respondeu ou como comando paralelo via postMessage
+      // Fallback garantido por postMessage direto para o iframe
       if (!mudou) {
         if (estaReproduzindo) {
           enviarComandoIframe('pauseVideo');
@@ -644,13 +622,17 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       }}
       className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-graphite-800 select-none group font-sans ${className}`}
     >
-      {/* 1. YOUTUBE COM SAFE-CROP (SCALE 1.25): CORTA FORA 100% DE LOGOS, ASSISTA NO YOUTUBE E LINKS */}
+      {/* 1. YOUTUBE COM SAFE-CROP (SCALE 1.25): RENDERIZA IFRAME DIRETO E CORTA 100% DE LOGOS E LINKS */}
       {videoData.plataforma === 'youtube' && (
         <div ref={iframeContainerRef} className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
           <div className="w-full h-full pointer-events-none scale-[1.25] transform-gpu origin-center">
-            <div 
+            <iframe 
               id={containerIdRef.current} 
-              className="w-full h-full" 
+              src={videoData.embedUrl}
+              title={titulo || 'Vídeo Seguro'}
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
             />
           </div>
 
