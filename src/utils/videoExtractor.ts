@@ -1,32 +1,27 @@
-/**
- * Extrator de URL de Vídeo para Módulo de Treinamento
- * Suporta links normais, encurtados, embed e com parâmetros do YouTube e Vimeo.
+﻿/**
+ * Extrator de URL de Vídeo para Módulo de Treinamento e Aulas
+ * Suporta links normais, encurtados, embed do YouTube, Vimeo e Arquivos Nativos Diretos (.mp4 / Storage).
  * 
- * NOTA DE SEGURANÇA SOBRE VÍDEOS NÃO LISTADOS:
- * Vídeos marcados como "Não Listados" no YouTube ou Vimeo não são secretos, apenas não aparecem
- * em buscas públicas nem no canal do autor. Qualquer pessoa com o link do vídeo consegue assistir,
- * independentemente do plano contratado. Este recurso é excelente para treinamentos de uso da plataforma,
- * mas não deve ser utilizado para armazenar dados estritamente confidenciais ou sensíveis.
+ * SUPORTE A HOSPEDAGEM NATIVA:
+ * Vídeos hospedados nativamente no Supabase Storage ou CDNs em formato MP4 eliminam 100% de
+ * vínculos com o YouTube, não exibem logos externas nem links para sites de terceiros,
+ * garantindo proteção total contra cancelamentos e retenção de alunos.
  */
 
 export interface ExtrairVideoResult {
-  plataforma: 'youtube' | 'vimeo';
+  plataforma: 'youtube' | 'vimeo' | 'arquivo';
   video_id: string;
   embedUrl: string;
 }
 
 export function parseVideoUrl(inputUrl: string): ExtrairVideoResult {
   if (!inputUrl || typeof inputUrl !== 'string') {
-    throw new Error('Link de vídeo não reconhecido. Por favor, insira um link válido do YouTube ou Vimeo.');
+    throw new Error('Link de vídeo não reconhecido. Por favor, insira um link válido do YouTube, Vimeo ou arquivo direto de vídeo (.mp4).');
   }
 
   const cleanUrl = inputUrl.trim();
 
-  // YOUTUBE REGEX PATTERNS
-  // 1. standard watch: youtube.com/watch?v=VIDEO_ID
-  // 2. short link: youtu.be/VIDEO_ID
-  // 3. embed link: youtube.com/embed/VIDEO_ID
-  // 4. shorts link: youtube.com/shorts/VIDEO_ID
+  // 1. YOUTUBE REGEX PATTERNS (watch, youtu.be, embed, shorts)
   const ytMatch = cleanUrl.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
@@ -37,9 +32,7 @@ export function parseVideoUrl(inputUrl: string): ExtrairVideoResult {
     };
   }
 
-  // VIMEO REGEX PATTERNS
-  // 1. standard link: vimeo.com/123456789
-  // 2. player link: player.vimeo.com/video/123456789
+  // 2. VIMEO REGEX PATTERNS (vimeo.com/123456789)
   const vimeoMatch = cleanUrl.match(/(?:vimeo\.com\/(?:video\/)?|player\.vimeo\.com\/video\/)([0-9]+)/i);
   if (vimeoMatch && vimeoMatch[1]) {
     const videoId = vimeoMatch[1];
@@ -50,11 +43,20 @@ export function parseVideoUrl(inputUrl: string): ExtrairVideoResult {
     };
   }
 
-  throw new Error('Link de vídeo não reconhecido. Por favor, insira um link válido do YouTube ou Vimeo.');
+  // 3. ARQUIVO DIRETO DE VÍDEO (MP4, WEBM, STORAGE NATIVO)
+  if (/\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(cleanUrl) || cleanUrl.includes('/storage/v1/object/public/')) {
+    return {
+      plataforma: 'arquivo',
+      video_id: cleanUrl,
+      embedUrl: cleanUrl
+    };
+  }
+
+  throw new Error('Link de vídeo não reconhecido. Por favor, insira um link válido do YouTube, Vimeo ou link direto de vídeo MP4.');
 }
 
 /**
- * Retorna a URL de embed pronta a partir da plataforma e id
+ * Retorna a URL pronta para reprodução a partir da plataforma e id
  */
 export function getEmbedUrl(plataforma: string, videoId: string): string {
   if (plataforma === 'youtube') {
@@ -62,6 +64,9 @@ export function getEmbedUrl(plataforma: string, videoId: string): string {
   }
   if (plataforma === 'vimeo') {
     return `https://player.vimeo.com/video/${videoId}`;
+  }
+  if (plataforma === 'arquivo') {
+    return videoId;
   }
   return '';
 }

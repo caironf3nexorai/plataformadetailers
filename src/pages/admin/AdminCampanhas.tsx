@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState, useRef } from 'react';
 import { 
   Rocket, 
   Plus, 
@@ -16,7 +16,9 @@ import {
   Target,
   Save,
   Video,
-  PlaySquare
+  PlaySquare,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
@@ -49,12 +51,12 @@ export const AdminCampanhas: React.FC = () => {
   const [filtroStatus, setFiltroStatus] = useState<'todas' | 'ativas' | 'inativas'>('todas');
   const [copiadoId, setCopiadoId] = useState<string | null>(null);
 
-  // Modal de Criação / Edição
+  // Modal de CriaÃ§Ã£o / EdiÃ§Ã£o
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [campanhaEmEdicao, setCampanhaEmEdicao] = useState<CampanhaItem | null>(null);
 
-  // Campos do formulário
+  // Campos do formulÃ¡rio
   const [nome, setNome] = useState('');
   const [codigo, setCodigo] = useState('');
   const [plano, setPlano] = useState<'pro' | 'studio'>('pro');
@@ -66,12 +68,12 @@ export const AdminCampanhas: React.FC = () => {
   const [beneficiosTexto, setBeneficiosTexto] = useState('');
   const [ativo, setAtivo] = useState(true);
 
-  // Chave Central de Degustação no Cadastro Geral (15 dias Pro)
+  // Chave Central de DegustaÃ§Ã£o no Cadastro Geral (15 dias Pro)
   const [trialCadastroAtivo, setTrialCadastroAtivo] = useState(true);
   const [trialDiasPadrao, setTrialDiasPadrao] = useState(15);
   const [alterandoTrial, setAlterandoTrial] = useState(false);
 
-  // Configuração de Pixels de Tráfego Pago (Meta, Google Ads, GA4, TikTok)
+  // ConfiguraÃ§Ã£o de Pixels de TrÃ¡fego Pago (Meta, Google Ads, GA4, TikTok)
   const [metaPixelId, setMetaPixelId] = useState('');
   const [googleAdsId, setGoogleAdsId] = useState('');
   const [googleAnalyticsId, setGoogleAnalyticsId] = useState('');
@@ -79,12 +81,14 @@ export const AdminCampanhas: React.FC = () => {
   const [salvandoPixels, setSalvandoPixels] = useState(false);
   const [painelPixelsAberto, setPainelPixelsAberto] = useState(false);
 
-  // Configuração do Vídeo Tutorial de Onboarding Flutuante (Aberto para Todos)
+  // ConfiguraÃ§Ã£o do VÃ­deo Tutorial de Onboarding Flutuante (Aberto para Todos)
   const [videoOnboardingUrl, setVideoOnboardingUrl] = useState('');
-  const [videoOnboardingTitulo, setVideoOnboardingTitulo] = useState('Guia Rápido: Configuração Completa da Sua Oficina');
+  const [videoOnboardingTitulo, setVideoOnboardingTitulo] = useState('Guia RÃ¡pido: ConfiguraÃ§Ã£o Completa da Sua Oficina');
   const [videoOnboardingAtivo, setVideoOnboardingAtivo] = useState(true);
   const [salvandoOnboardingVideo, setSalvandoOnboardingVideo] = useState(false);
   const [painelOnboardingAberto, setPainelOnboardingAberto] = useState(false);
+  const [enviandoVideoMp4, setEnviandoVideoMp4] = useState(false);
+  const fileInputVideoRef = useRef<HTMLInputElement | null>(null);
 
   // Previne rolagem de fundo no modal
   useEffect(() => {
@@ -117,7 +121,7 @@ export const AdminCampanhas: React.FC = () => {
         if (typeof data.video_onboarding_ativo === 'boolean') setVideoOnboardingAtivo(data.video_onboarding_ativo);
       }
 
-      // Fallback para carregar diretamente da tabela caso a RPC antiga não retorne os novos campos
+      // Fallback para carregar diretamente da tabela caso a RPC antiga nÃ£o retorne os novos campos
       if (!data?.meta_pixel_id && !data?.google_ads_id) {
         const { data: directData } = await supabase
           .from('plataforma_config')
@@ -136,6 +140,46 @@ export const AdminCampanhas: React.FC = () => {
       }
     } catch (err) {
       console.error('Erro ao buscar configuracao da plataforma no campanhas:', err);
+    }
+  };
+
+    const handleUploadVideoMp4 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.includes('mp4') && !file.type.includes('webm') && !file.name.match(/\.(mp4|webm|mov)$/i)) {
+      showError('Por favor, selecione um arquivo de vídeo .mp4 ou .webm.');
+      return;
+    }
+
+    setEnviandoVideoMp4(true);
+    try {
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = `videos_onboarding/${timestamp}_${safeName}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('academia-materiais')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('academia-materiais')
+        .getPublicUrl(filePath);
+
+      if (publicUrlData?.publicUrl) {
+        setVideoOnboardingUrl(publicUrlData.publicUrl);
+        showSuccess('Vídeo MP4 hospedado com sucesso na plataforma! Clique em "Salvar Vídeo de Iniciação".');
+      }
+    } catch (err: any) {
+      showError('Erro ao fazer upload do vídeo: ' + err.message);
+    } finally {
+      setEnviandoVideoMp4(false);
+      if (fileInputVideoRef.current) fileInputVideoRef.current.value = '';
     }
   };
 
@@ -162,10 +206,10 @@ export const AdminCampanhas: React.FC = () => {
         if (directErr) throw directErr;
       }
 
-      showSuccess('Configurações do vídeo tutorial de onboarding salvas com sucesso!');
+      showSuccess('ConfiguraÃ§Ãµes do vÃ­deo tutorial de onboarding salvas com sucesso!');
     } catch (err: any) {
-      console.error('Erro ao salvar vídeo de onboarding:', err);
-      showError('Erro ao salvar vídeo: ' + (err.message || 'Falha de permissão'));
+      console.error('Erro ao salvar vÃ­deo de onboarding:', err);
+      showError('Erro ao salvar vÃ­deo: ' + (err.message || 'Falha de permissÃ£o'));
     } finally {
       setSalvandoOnboardingVideo(false);
     }
@@ -197,10 +241,10 @@ export const AdminCampanhas: React.FC = () => {
         if (directErr) throw directErr;
       }
 
-      showSuccess('Pixels de tráfego pago salvos com sucesso!');
+      showSuccess('Pixels de trÃ¡fego pago salvos com sucesso!');
     } catch (err: any) {
       console.error('Erro ao salvar pixels:', err);
-      showError('Erro ao salvar pixels: ' + (err.message || 'Falha de permissão'));
+      showError('Erro ao salvar pixels: ' + (err.message || 'Falha de permissÃ£o'));
     } finally {
       setSalvandoPixels(false);
     }
@@ -227,10 +271,10 @@ export const AdminCampanhas: React.FC = () => {
       }
       setTrialCadastroAtivo(novoValor);
       showSuccess(novoValor
-        ? `Degustação gratuita no cadastro (Trial de ${trialDiasPadrao} dias Pro) ATIVADA para novos usuários!`
-        : 'Degustação gratuita no cadastro DESATIVADA. Novos usuários entrarão diretamente no Plano Free sem dias grátis de Pro.');
+        ? `DegustaÃ§Ã£o gratuita no cadastro (Trial de ${trialDiasPadrao} dias Pro) ATIVADA para novos usuÃ¡rios!`
+        : 'DegustaÃ§Ã£o gratuita no cadastro DESATIVADA. Novos usuÃ¡rios entrarÃ£o diretamente no Plano Free sem dias grÃ¡tis de Pro.');
     } catch (err: any) {
-      showError('Erro ao alterar configuração de trial de cadastro: ' + err.message);
+      showError('Erro ao alterar configuraÃ§Ã£o de trial de cadastro: ' + err.message);
     } finally {
       setAlterandoTrial(false);
     }
@@ -244,7 +288,7 @@ export const AdminCampanhas: React.FC = () => {
       setCampanhas((data as CampanhaItem[]) || []);
     } catch (err: any) {
       console.error('Erro ao carregar campanhas:', err);
-      showError(err.message || 'Erro ao listar campanhas de lançamento.');
+      showError(err.message || 'Erro ao listar campanhas de lanÃ§amento.');
     } finally {
       setLoading(false);
     }
@@ -292,7 +336,7 @@ export const AdminCampanhas: React.FC = () => {
       return;
     }
     if (!codigo.trim()) {
-      showError('Informe o código do link da campanha.');
+      showError('Informe o cÃ³digo do link da campanha.');
       return;
     }
 
@@ -323,7 +367,7 @@ export const AdminCampanhas: React.FC = () => {
       showSuccess(
         campanhaEmEdicao
           ? 'Campanha atualizada com sucesso!'
-          : 'Campanha de lançamento criada com sucesso!'
+          : 'Campanha de lanÃ§amento criada com sucesso!'
       );
       setModalAberto(false);
       carregarCampanhas();
@@ -361,14 +405,14 @@ export const AdminCampanhas: React.FC = () => {
     const url = obterUrlCampanha(cod);
     navigator.clipboard.writeText(url);
     setCopiadoId(id);
-    showSuccess(`Link ${cod} copiado para a área de transferência!`);
+    showSuccess(`Link ${cod} copiado para a Ã¡rea de transferÃªncia!`);
     setTimeout(() => setCopiadoId(null), 2500);
   };
 
   const handleCompartilharWhatsApp = (c: CampanhaItem) => {
     const url = obterUrlCampanha(c.codigo);
     const planoFormatado = c.plano === 'studio' ? 'Studio' : 'Pro';
-    const texto = `Fala amigo! 🚀 Consegui um acesso exclusivo para você testar o *NuvemWash* (Plataforma de Gestão e Vistorias para Estética Automotiva) com *${c.dias_trial} dias grátis no Plano ${planoFormatado}*!\n\nSem precisar de cartão de crédito. Acesse pelo link exclusivo de lançamento:\n${url}`;
+    const texto = `Fala amigo! ðŸš€ Consegui um acesso exclusivo para vocÃª testar o *NuvemWash* (Plataforma de GestÃ£o e Vistorias para EstÃ©tica Automotiva) com *${c.dias_trial} dias grÃ¡tis no Plano ${planoFormatado}*!\n\nSem precisar de cartÃ£o de crÃ©dito. Acesse pelo link exclusivo de lanÃ§amento:\n${url}`;
     const urlWpp = `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
     window.open(urlWpp, '_blank');
   };
@@ -386,7 +430,7 @@ export const AdminCampanhas: React.FC = () => {
     return true;
   });
 
-  // Métricas
+  // MÃ©tricas
   const totalCampanhas = campanhas.length;
   const ativasCount = campanhas.filter((c) => c.ativo && !c.expirado && !c.esgotado).length;
   const totalCadastros = campanhas.reduce((acc, c) => acc + (c.total_usos || 0), 0);
@@ -399,10 +443,10 @@ export const AdminCampanhas: React.FC = () => {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
             <Rocket className="w-7 h-7 text-amber-500" />
-            <span>Links de Campanha & Lançamento</span>
+            <span>Links de Campanha & LanÃ§amento</span>
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Gere links promocionais com dias de teste (trial) e planos personalizados para campanhas de lançamento.
+            Gere links promocionais com dias de teste (trial) e planos personalizados para campanhas de lanÃ§amento.
           </p>
         </div>
 
@@ -411,11 +455,11 @@ export const AdminCampanhas: React.FC = () => {
           className="w-full sm:w-auto bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm transition-all shadow-lg flex items-center justify-center gap-2 shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Nova Campanha de Lançamento</span>
+          <span>Nova Campanha de LanÃ§amento</span>
         </button>
       </div>
 
-      {/* Banner da Chave do Trial de Cadastro (15 Dias Grátis) */}
+      {/* Banner da Chave do Trial de Cadastro (15 Dias GrÃ¡tis) */}
       <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all ${
         trialCadastroAtivo
           ? 'bg-emerald-500/10 border-emerald-500/30 shadow-lg shadow-emerald-500/5'
@@ -426,14 +470,14 @@ export const AdminCampanhas: React.FC = () => {
             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold font-mono uppercase tracking-wider leading-none shrink-0 ${
               trialCadastroAtivo ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-300'
             }`}>
-              {trialCadastroAtivo ? `Degustação Ativa (${trialDiasPadrao} Dias Pro)` : 'Degustação Desativada (Inicia Free)'}
+              {trialCadastroAtivo ? `DegustaÃ§Ã£o Ativa (${trialDiasPadrao} Dias Pro)` : 'DegustaÃ§Ã£o Desativada (Inicia Free)'}
             </span>
             <span className="text-xs text-slate-400 font-mono">Chave Central de Novos Cadastros</span>
           </div>
           <p className="text-xs text-slate-300 font-sans max-w-3xl leading-relaxed">
             {trialCadastroAtivo
-              ? `Novos usuários que criam conta ganham automaticamente ${trialDiasPadrao} dias de degustação gratuita no Plano Pro. Desative este botão a qualquer momento se desejar que novos cadastros comecem direto no Free.`
-              : 'Degustação desligada. Novos usuários entram diretamente no Plano Free sem dias grátis de Pro (exigindo contratação imediata para recursos Pro/Studio).'}
+              ? `Novos usuÃ¡rios que criam conta ganham automaticamente ${trialDiasPadrao} dias de degustaÃ§Ã£o gratuita no Plano Pro. Desative este botÃ£o a qualquer momento se desejar que novos cadastros comecem direto no Free.`
+              : 'DegustaÃ§Ã£o desligada. Novos usuÃ¡rios entram diretamente no Plano Free sem dias grÃ¡tis de Pro (exigindo contrataÃ§Ã£o imediata para recursos Pro/Studio).'}
           </p>
         </div>
 
@@ -454,7 +498,7 @@ export const AdminCampanhas: React.FC = () => {
         </div>
       </div>
 
-      {/* 🎯 Card de Rastreamento de Tráfego Pago & Pixels */}
+      {/* ðŸŽ¯ Card de Rastreamento de TrÃ¡fego Pago & Pixels */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
           <div className="flex items-center gap-3">
@@ -464,14 +508,14 @@ export const AdminCampanhas: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-display text-sm font-bold text-slate-100 uppercase tracking-wide">
-                  Pixels de Tráfego Pago & Rastreamento
+                  Pixels de TrÃ¡fego Pago & Rastreamento
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                  Meta • Google • TikTok
+                  Meta â€¢ Google â€¢ TikTok
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Insira os IDs de anúncio para ativar o rastreamento automático de visitas (PageView), interesse (Lead) e cadastros (CompleteRegistration).
+                Insira os IDs de anÃºncio para ativar o rastreamento automÃ¡tico de visitas (PageView), interesse (Lead) e cadastros (CompleteRegistration).
               </p>
             </div>
           </div>
@@ -481,7 +525,7 @@ export const AdminCampanhas: React.FC = () => {
             onClick={() => setPainelPixelsAberto(!painelPixelsAberto)}
             className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors self-start sm:self-center"
           >
-            {painelPixelsAberto ? 'Recolher Configurações ▲' : 'Configurar Pixels ▼'}
+            {painelPixelsAberto ? 'Recolher ConfiguraÃ§Ãµes â–²' : 'Configurar Pixels â–¼'}
           </button>
         </div>
 
@@ -514,7 +558,7 @@ export const AdminCampanhas: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                    Google Ads Tag ID (Conversão)
+                    Google Ads Tag ID (ConversÃ£o)
                   </label>
                   <span className="text-[10px] font-mono text-slate-500">Ex: AW-1234567890</span>
                 </div>
@@ -526,7 +570,7 @@ export const AdminCampanhas: React.FC = () => {
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
                 />
                 <span className="text-[10px] text-slate-400">
-                  Tag de conversão do Google Ads para campanhas de Pesquisa e YouTube.
+                  Tag de conversÃ£o do Google Ads para campanhas de Pesquisa e YouTube.
                 </span>
               </div>
 
@@ -547,7 +591,7 @@ export const AdminCampanhas: React.FC = () => {
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
                 />
                 <span className="text-[10px] text-slate-400">
-                  Métricas de tráfego, fontes de aquisição e tempo de retenção do site.
+                  MÃ©tricas de trÃ¡fego, fontes de aquisiÃ§Ã£o e tempo de retenÃ§Ã£o do site.
                 </span>
               </div>
 
@@ -568,14 +612,14 @@ export const AdminCampanhas: React.FC = () => {
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
                 />
                 <span className="text-[10px] text-slate-400">
-                  Rastreamento para anúncios em vídeo e campanhas de TikTok Ads.
+                  Rastreamento para anÃºncios em vÃ­deo e campanhas de TikTok Ads.
                 </span>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 flex-wrap gap-3">
               <span className="text-[11px] text-slate-400 font-sans">
-                🔒 <strong>100% Seguro:</strong> Nenhum segredo ou chave de API é exposto. Apenas os IDs públicos de medição são ativados no navegador do visitante.
+                ðŸ”’ <strong>100% Seguro:</strong> Nenhum segredo ou chave de API Ã© exposto. Apenas os IDs pÃºblicos de mediÃ§Ã£o sÃ£o ativados no navegador do visitante.
               </span>
               <button
                 type="button"
@@ -591,7 +635,7 @@ export const AdminCampanhas: React.FC = () => {
         )}
       </div>
 
-      {/* 🎬 Card de Configuração do Vídeo Tutorial de Iniciação (Onboarding Flutuante) */}
+      {/* ðŸŽ¬ Card de ConfiguraÃ§Ã£o do VÃ­deo Tutorial de IniciaÃ§Ã£o (Onboarding Flutuante) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
           <div className="flex items-center gap-3">
@@ -601,14 +645,14 @@ export const AdminCampanhas: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-display text-sm font-bold text-slate-100 uppercase tracking-wide">
-                  Vídeo Tutorial de Iniciação (Onboarding Flutuante)
+                  VÃ­deo Tutorial de IniciaÃ§Ã£o (Onboarding Flutuante)
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   Aberto a Todos
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Vídeo gravado que abre em modal e se transforma em mini-player flutuante para novos usuários acompanharem enquanto configuram a plataforma.
+                VÃ­deo gravado que abre em modal e se transforma em mini-player flutuante para novos usuÃ¡rios acompanharem enquanto configuram a plataforma.
               </p>
             </div>
           </div>
@@ -618,42 +662,70 @@ export const AdminCampanhas: React.FC = () => {
             onClick={() => setPainelOnboardingAberto(!painelOnboardingAberto)}
             className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors self-start sm:self-center"
           >
-            {painelOnboardingAberto ? 'Recolher Painel ▲' : 'Configurar Vídeo ▼'}
+            {painelOnboardingAberto ? 'Recolher Painel â–²' : 'Configurar VÃ­deo â–¼'}
           </button>
         </div>
 
         {painelOnboardingAberto && (
           <div className="space-y-4 pt-1 animate-fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* URL do Vídeo */}
+              {/* URL do VÃ­deo */}
               <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 md:col-span-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                     <Video className="w-4 h-4 text-amber-400" />
-                    Link do Vídeo Gravado (YouTube, Vimeo ou MP4)
+                    Link do VÃ­deo Gravado (YouTube, Vimeo ou MP4)
                   </label>
                   <span className="text-[10px] font-mono text-slate-500">Ex: https://youtu.be/... ou https://youtube.com/watch?v=...</span>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Cole aqui o link do YouTube, Vimeo ou arquivo MP4 do tutorial..."
-                  value={videoOnboardingUrl}
-                  onChange={(e) => setVideoOnboardingUrl(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
-                />
+                                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder="Cole aqui o link do YouTube, Vimeo ou link direto .mp4 do tutorial..."
+                    value={videoOnboardingUrl}
+                    onChange={(e) => setVideoOnboardingUrl(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputVideoRef}
+                    accept="video/mp4,video/webm"
+                    onChange={handleUploadVideoMp4}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={enviandoVideoMp4}
+                    onClick={() => fileInputVideoRef.current?.click()}
+                    className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                    title="Hospedar vídeo diretamente na plataforma (sem YouTube)"
+                  >
+                    {enviandoVideoMp4 ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        <span>Hospedando Vídeo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Upload MP4 Nativo</span>
+                      </>
+                    )}
+                  </button>
+                </div>
                 <span className="text-[10px] text-slate-400">
-                  Suporta qualquer link público ou não-listado do YouTube, Vimeo ou link direto .mp4.
+                  Suporta qualquer link pÃºblico ou nÃ£o-listado do YouTube, Vimeo ou link direto .mp4.
                 </span>
               </div>
 
-              {/* Título do Vídeo */}
+              {/* TÃ­tulo do VÃ­deo */}
               <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
                 <label className="text-xs font-semibold text-slate-200">
-                  Título Exibido no Player
+                  TÃ­tulo Exibido no Player
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Guia Rápido: Como Configurar Tudo na Plataforma"
+                  placeholder="Ex: Guia RÃ¡pido: Como Configurar Tudo na Plataforma"
                   value={videoOnboardingTitulo}
                   onChange={(e) => setVideoOnboardingTitulo(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
@@ -668,7 +740,7 @@ export const AdminCampanhas: React.FC = () => {
                       Exibir Tutorial Automaticamente
                     </label>
                     <span className="text-[10px] text-slate-400">
-                      Se ativo, abre para todo usuário que ainda não marcou "Plataforma Configurada".
+                      Se ativo, abre para todo usuÃ¡rio que ainda nÃ£o marcou "Plataforma Configurada".
                     </span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -686,7 +758,7 @@ export const AdminCampanhas: React.FC = () => {
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 flex-wrap gap-3">
               <span className="text-[11px] text-slate-400 font-sans">
-                💡 <strong>Dica:</strong> Quando o cliente assiste ou clica em <em>"Plataforma Configurada"</em>, o player desaparece definitivamente do painel dele.
+                ðŸ’¡ <strong>Dica:</strong> Quando o cliente assiste ou clica em <em>"Plataforma Configurada"</em>, o player desaparece definitivamente do painel dele.
               </span>
               <button
                 type="button"
@@ -695,14 +767,14 @@ export const AdminCampanhas: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
               >
                 <Save size={14} />
-                <span>{salvandoOnboardingVideo ? 'Salvando...' : 'Salvar Vídeo de Iniciação'}</span>
+                <span>{salvandoOnboardingVideo ? 'Salvando...' : 'Salvar VÃ­deo de IniciaÃ§Ã£o'}</span>
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Cards de Métricas */}
+      {/* Cards de MÃ©tricas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col gap-1">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Campanhas Ativas</span>
@@ -722,7 +794,7 @@ export const AdminCampanhas: React.FC = () => {
         </div>
 
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col gap-1">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Taxa de Adesão</span>
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Taxa de AdesÃ£o</span>
           <span className="text-2xl font-mono font-black text-blue-400">
             {totalVagas > 0 ? `${Math.round((totalCadastros / totalVagas) * 100)}%` : 'Ativa'}
           </span>
@@ -735,7 +807,7 @@ export const AdminCampanhas: React.FC = () => {
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Buscar por nome ou código..."
+            placeholder="Buscar por nome ou cÃ³digo..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-500 outline-none"
@@ -782,13 +854,13 @@ export const AdminCampanhas: React.FC = () => {
 
       {/* Lista de Campanhas */}
       {loading ? (
-        <div className="py-20 text-center text-slate-400 font-mono text-sm">Carregando campanhas de lançamento...</div>
+        <div className="py-20 text-center text-slate-400 font-mono text-sm">Carregando campanhas de lanÃ§amento...</div>
       ) : campanhasFiltradas.length === 0 ? (
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center max-w-lg mx-auto">
           <Rocket className="w-12 h-12 text-amber-500/40 mx-auto mb-3" />
           <h3 className="text-lg font-bold text-white mb-1">Nenhuma campanha encontrada</h3>
           <p className="text-xs text-slate-400 mb-6">
-            Crie sua primeira campanha para gerar um link personalizado com dias de teste para o lançamento da plataforma.
+            Crie sua primeira campanha para gerar um link personalizado com dias de teste para o lanÃ§amento da plataforma.
           </p>
           <button
             onClick={abrirModalNovo}
@@ -829,7 +901,7 @@ export const AdminCampanhas: React.FC = () => {
                         Plano {c.plano_nome.toUpperCase()}
                       </span>
                       <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {c.dias_trial} Dias Grátis
+                        {c.dias_trial} Dias GrÃ¡tis
                       </span>
                     </div>
 
@@ -898,7 +970,7 @@ export const AdminCampanhas: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Ações e Compartilhamento */}
+                {/* AÃ§Ãµes e Compartilhamento */}
                 <div className="pt-3 border-t border-slate-800/80 flex flex-col gap-2.5">
                   {/* Link Preview Bar */}
                   <div className="flex items-center justify-between bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 gap-2">
@@ -970,14 +1042,14 @@ export const AdminCampanhas: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de Criação / Edição */}
+      {/* Modal de CriaÃ§Ã£o / EdiÃ§Ã£o */}
       {modalAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Rocket className="w-5 h-5 text-amber-500" />
-                <span>{campanhaEmEdicao ? 'Editar Campanha de Lançamento' : 'Nova Campanha de Lançamento'}</span>
+                <span>{campanhaEmEdicao ? 'Editar Campanha de LanÃ§amento' : 'Nova Campanha de LanÃ§amento'}</span>
               </h2>
               <button
                 onClick={() => setModalAberto(false)}
@@ -996,17 +1068,17 @@ export const AdminCampanhas: React.FC = () => {
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Lançamento VIP WhatsApp Grupo 1"
+                  placeholder="Ex: LanÃ§amento VIP WhatsApp Grupo 1"
                   value={nome}
                   onChange={(e) => setNome(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-500 outline-none"
                 />
               </div>
 
-              {/* Código / Slug do Link */}
+              {/* CÃ³digo / Slug do Link */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Código do Link (URL) *
+                  CÃ³digo do Link (URL) *
                 </label>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-mono text-slate-500 bg-slate-950 px-3 py-2.5 rounded-xl border border-slate-800 shrink-0">
@@ -1029,7 +1101,7 @@ export const AdminCampanhas: React.FC = () => {
               {/* Plano Concedido */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Plano Concedido para Degustação *
+                  Plano Concedido para DegustaÃ§Ã£o *
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -1060,11 +1132,11 @@ export const AdminCampanhas: React.FC = () => {
                 </div>
               </div>
 
-              {/* Dias de Degustação (Trial) */}
+              {/* Dias de DegustaÃ§Ã£o (Trial) */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Dias de Teste Grátis (Trial) *
+                    Dias de Teste GrÃ¡tis (Trial) *
                   </label>
                   <span className="text-xs font-mono font-bold text-emerald-400">
                     {diasTrial} dias
@@ -1083,7 +1155,7 @@ export const AdminCampanhas: React.FC = () => {
                   />
                 </div>
 
-                {/* Presets rápidos */}
+                {/* Presets rÃ¡pidos */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[11px] text-slate-500 mr-1">Atalhos:</span>
                   {[14, 21, 30, 45, 60, 90].map((d) => (
@@ -1130,18 +1202,18 @@ export const AdminCampanhas: React.FC = () => {
                     onChange={(e) => setValidoAte(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-amber-500 outline-none font-mono"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 block">Vazio = Sem expiração</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block">Vazio = Sem expiraÃ§Ã£o</span>
                 </div>
               </div>
 
-              {/* Título e Descrição Opcionais para a Página */}
+              {/* TÃ­tulo e DescriÃ§Ã£o Opcionais para a PÃ¡gina */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Título de Destaque na Página (Opcional)
+                  TÃ­tulo de Destaque na PÃ¡gina (Opcional)
                 </label>
                 <input
                   type="text"
-                  placeholder="Ex: Você ganhou 30 dias de Degustação VIP no Plano Pro!"
+                  placeholder="Ex: VocÃª ganhou 30 dias de DegustaÃ§Ã£o VIP no Plano Pro!"
                   value={tituloDestaque}
                   onChange={(e) => setTituloDestaque(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-500 outline-none"
@@ -1150,11 +1222,11 @@ export const AdminCampanhas: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-                  Benefícios em Destaque (1 por linha)
+                  BenefÃ­cios em Destaque (1 por linha)
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="Vistorias com assinatura digital&#10;Agendamento online integrado&#10;DRE e cálculo de margem real"
+                  placeholder="Vistorias com assinatura digital&#10;Agendamento online integrado&#10;DRE e cÃ¡lculo de margem real"
                   value={beneficiosTexto}
                   onChange={(e) => setBeneficiosTexto(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-500 outline-none"
@@ -1175,7 +1247,7 @@ export const AdminCampanhas: React.FC = () => {
                 </label>
               </div>
 
-              {/* Botoes de Ação */}
+              {/* Botoes de AÃ§Ã£o */}
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
@@ -1207,3 +1279,5 @@ export const AdminCampanhas: React.FC = () => {
     </div>
   );
 };
+
+
