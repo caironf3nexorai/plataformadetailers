@@ -59,7 +59,7 @@ export function formatarTempoVideo(segundos: number): string {
 /**
  * Analisa e extrai informacoes essenciais do video, desativando controles nativos
  */
-export function analisarUrlVideo(rawUrl: string, tempoInicial = 0): DadosVideoParsed {
+export function analisarUrlVideo(rawUrl: string, tempoInicial = 0, autoPlay = false): DadosVideoParsed {
   if (!rawUrl || !rawUrl.trim()) {
     return {
       plataforma: 'desconhecido',
@@ -79,7 +79,8 @@ export function analisarUrlVideo(rawUrl: string, tempoInicial = 0): DadosVideoPa
     const videoId = ytMatch[1];
     // controls=0 remove a barra e logo do YouTube. enablejsapi=1 permite controle via postMessage sem script externo
     const originParam = typeof window !== 'undefined' && window.location && window.location.origin ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${originParam}${tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : ''}`;
+    const autoPlayParam = autoPlay ? '&autoplay=1' : '';
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${autoPlayParam}${originParam}${tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : ''}`;
     return {
       plataforma: 'youtube',
       videoId,
@@ -408,8 +409,12 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       enviarComandoIframe('seekTo', [tempoInicialMontagemRef.current, true]);
     }
 
+    if (autoPlay) {
+      enviarComandoIframe('playVideo');
+    }
+
     onReady?.();
-  }, [desativarLegendas, enviarComandoIframe, onReady]);
+  }, [desativarLegendas, enviarComandoIframe, onReady, autoPlay]);
 
   // PLAY / PAUSE
   const alternarPlayPause = useCallback(() => {
@@ -684,10 +689,12 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
             src={videoData.embedUrl}
             title={titulo || 'Player de Video'}
             onLoad={handleIframeLoaded}
-            className="absolute inset-0 w-full h-full border-0 origin-center scale-[1.15]"
+            className="absolute inset-0 w-full h-full border-0 origin-center scale-[1.45] sm:scale-[1.15]"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
+          {/* VINHETA DE DEGRADE SUPERIOR SUAVE ANTI-LOGO/HEADER YOUTUBE NO MOBILE */}
+          <div className="absolute top-0 inset-x-0 h-9 sm:h-0 bg-gradient-to-b from-[#0A0D12]/95 via-[#0A0D12]/50 to-transparent pointer-events-none z-15" />
         </div>
       )}
 

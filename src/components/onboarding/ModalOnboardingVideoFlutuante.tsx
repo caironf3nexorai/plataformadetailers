@@ -55,6 +55,8 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   // Rastreamento de progresso (% assistida)
   const [segundosAssistidos, setSegundosAssistidos] = useState(0);
   const segundosAssistidosRef = useRef(0);
+  const estaReproduzindoRef = useRef(false);
+  const [deveAutoPlay, setDeveAutoPlay] = useState(false);
 
   useEffect(() => {
     segundosAssistidosRef.current = segundosAssistidos;
@@ -258,6 +260,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       porcentagem: number;
       estaReproduzindo: boolean;
     }) => {
+      estaReproduzindoRef.current = dados.estaReproduzindo;
       segundosAssistidosRef.current = dados.segundosAssistidos;
       setSegundosAssistidos(dados.segundosAssistidos);
       if (dados.duracaoTotal > 0) {
@@ -278,10 +281,13 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   }, [storageKeyTempo, duracaoTotalSegundos]);
 
   // Transição do modal para botão flutuante ao fechar ou minimizar
-  const handleMinimizarParaFlutuante = () => {
+  const handleMinimizarParaFlutuante = (manterReproducao?: boolean | unknown) => {
     const tempoAtual = segundosAssistidosRef.current || segundosAssistidos;
     if (storageKeyTempo && tempoAtual > 0) {
       localStorage.setItem(storageKeyTempo, tempoAtual.toString());
+    }
+    if (manterReproducao === true || estaReproduzindoRef.current) {
+      setDeveAutoPlay(true);
     }
     setModoVisual('flutuante');
     sessionStorage.setItem(storageKeyModo, 'flutuante');
@@ -293,6 +299,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     if (storageKeyTempo && tempoAtual > 0) {
       localStorage.setItem(storageKeyTempo, tempoAtual.toString());
     }
+    setDeveAutoPlay(estaReproduzindoRef.current);
     setModoVisual('modal');
     sessionStorage.setItem(storageKeyModo, 'modal');
   };
@@ -329,13 +336,13 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     }
   };
 
-  // Atalho para navegar até as seções cruciais de configuração (minimiza para botão flutuante)
+  // Atalho para navegar até as seções cruciais de configuração (minimiza para botão flutuante e preserva reprodução contínua)
   const handleIrPara = (caminho: string) => {
     const tempoAtual = segundosAssistidosRef.current || segundosAssistidos;
     if (storageKeyTempo && tempoAtual > 0) {
       localStorage.setItem(storageKeyTempo, tempoAtual.toString());
     }
-    handleMinimizarParaFlutuante();
+    handleMinimizarParaFlutuante(true);
     navigate(caminho);
   };
 
@@ -470,6 +477,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
                   url={videoUrl}
                   titulo={videoTitulo}
                   tempoInicial={segundosAssistidos}
+                  autoPlay={deveAutoPlay}
                   onProgresso={handleProgressoVideo}
                   onConcluido={handleConclusaoAutomatica}
                   mostrarWatermark={false}
@@ -559,6 +567,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
               url={videoUrl}
               titulo={videoTitulo}
               tempoInicial={segundosAssistidos}
+              autoPlay={deveAutoPlay}
               onProgresso={handleProgressoVideo}
               onConcluido={handleConclusaoAutomatica}
               mostrarWatermark={true}
