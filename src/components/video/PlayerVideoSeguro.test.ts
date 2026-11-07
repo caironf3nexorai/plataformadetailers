@@ -13,6 +13,8 @@ describe('PlayerVideoSeguro - Utilitários de Segurança e Extração de URL', (
     expect(res.embedUrl).toContain('controls=0');
     expect(res.embedUrl).toContain('disablekb=1');
     expect(res.embedUrl).toContain('fs=0');
+    expect(res.embedUrl).toContain('cc_load_policy=0');
+    expect(res.embedUrl).toContain('cc_lang_pref=off');
   });
 
   it('identifica e extrai URL encurtada do YouTube youtu.be', () => {

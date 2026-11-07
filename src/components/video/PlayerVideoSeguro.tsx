@@ -78,7 +78,7 @@ export function analisarUrlVideo(rawUrl: string): DadosVideoParsed {
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
     // controls=0 remove a barra e logo do YouTube. enablejsapi=1 permite controle via postMessage sem script externo
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0`;
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off`;
     return {
       plataforma: 'youtube',
       videoId,
@@ -181,6 +181,35 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   }, []);
 
   // Reinicia temporizador para esconder controles durante reproducao
+  /**
+   * Desativa e descarrega modulos de legendas do YouTube
+   * Evita legendas cortadas devido a camada de protecao inferior
+   */
+  const desativarLegendas = useCallback(() => {
+    if (videoData.plataforma !== 'youtube') return;
+    try {
+      const iframe = iframeRef.current;
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'unloadModule', args: ['captions'] }),
+          '*'
+        );
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'unloadModule', args: ['cc'] }),
+          '*'
+        );
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'setOption', args: ['captions', 'track', {}] }),
+          '*'
+        );
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'setOption', args: ['cc', 'track', {}] }),
+          '*'
+        );
+      }
+    } catch {}
+  }, [videoData.plataforma]);
+
   const resetarTemporizadorControles = useCallback(() => {
     setMostrarControles(true);
     if (hideControlsTimerRef.current) {
@@ -213,6 +242,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
           if (data.info === 1) {
             setEstaReproduzindo(true);
             setEstaConcluido(false);
+            desativarLegendas();
           } else if (data.info === 2) {
             setEstaReproduzindo(false);
           } else if (data.info === 0) {
@@ -294,8 +324,9 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         );
       }
     } catch {}
+    desativarLegendas();
     onReady?.();
-  }, [onReady]);
+  }, [desativarLegendas, onReady]);
 
   // PLAY / PAUSE
   const alternarPlayPause = useCallback(() => {
@@ -323,6 +354,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         setFeedbackCentral('pause');
       } else {
         enviarComandoIframe('playVideo');
+        desativarLegendas();
         setEstaReproduzindo(true);
         setFeedbackCentral('play');
       }
