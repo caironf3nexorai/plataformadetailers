@@ -478,6 +478,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
                   titulo={videoTitulo}
                   tempoInicial={segundosAssistidos}
                   autoPlay={deveAutoPlay}
+                  modoCompacto={true}
                   onProgresso={handleProgressoVideo}
                   onConcluido={handleConclusaoAutomatica}
                   mostrarWatermark={false}

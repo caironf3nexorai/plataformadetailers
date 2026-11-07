@@ -21,6 +21,7 @@ export interface PlayerVideoSeguroProps {
   tempoInicial?: number;
   mostrarWatermark?: boolean;
   textoWatermark?: string;
+  modoCompacto?: boolean;
   className?: string;
   onProgresso?: (dados: {
     segundosAssistidos: number;
@@ -127,6 +128,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   tempoInicial = 0,
   mostrarWatermark = true,
   textoWatermark,
+  modoCompacto = false,
   className = '',
   onProgresso,
   onConcluido,
@@ -837,8 +839,8 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         </div>
 
         {/* LINHA 2: BOTOES DE REPRODUCAO, TEMPO, VOLUME, VELOCIDADE E FULLSCREEN SEM OVERFLOW */}
-        <div className="flex items-center justify-between text-vapor-200 text-xs w-full gap-1">
-          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+        <div className="flex items-center justify-between text-vapor-200 text-xs w-full gap-1 overflow-hidden">
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0 shrink overflow-hidden">
             <button
               type="button"
               onClick={alternarPlayPause}
@@ -852,23 +854,27 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
               )}
             </button>
 
-            <button
-              type="button"
-              onClick={() => pularSegundos(-10)}
-              className="hidden sm:flex p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer shrink-0"
-              title="Voltar 10 segundos (Seta Esquerda)"
-            >
-              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </button>
+            {!modoCompacto && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => pularSegundos(-10)}
+                  className="hidden md:flex p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer shrink-0"
+                  title="Voltar 10 segundos (Seta Esquerda)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => pularSegundos(10)}
-              className="hidden sm:flex p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer shrink-0"
-              title="Avancar 10 segundos (Seta Direita)"
-            >
-              <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => pularSegundos(10)}
+                  className="hidden md:flex p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer shrink-0"
+                  title="Avancar 10 segundos (Seta Direita)"
+                >
+                  <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                </button>
+              </>
+            )}
 
             <div className="flex items-center gap-1 shrink-0">
               <button
@@ -886,25 +892,29 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
                 )}
               </button>
 
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={isMuted ? 0 : volume}
-                onChange={(e) => alterarVolume(parseInt(e.target.value, 10))}
-                className="hidden sm:block w-14 lg:w-18 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer shrink-0"
-                title={`Volume: ${isMuted ? 0 : volume}%`}
-              />
+              {!modoCompacto && (
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => alterarVolume(parseInt(e.target.value, 10))}
+                  className="hidden lg:block w-14 lg:w-18 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer shrink-0"
+                  title={`Volume: ${isMuted ? 0 : volume}%`}
+                />
+              )}
             </div>
 
-            <div className="font-mono text-[9px] sm:text-xs text-vapor-300 shrink-0 select-none">
-              <span className="text-amber-400 font-bold">{formatarTempoVideo(tempoAtual)}</span>
-              <span className="text-vapor-500 mx-0.5 sm:mx-1">/</span>
-              <span>{formatarTempoVideo(duracaoTotal || 223)}</span>
-            </div>
+            {!modoCompacto && (
+              <div className="font-mono text-[9px] sm:text-xs text-vapor-300 shrink-0 select-none">
+                <span className="text-amber-400 font-bold">{formatarTempoVideo(tempoAtual)}</span>
+                <span className="text-vapor-500 mx-0.5 sm:mx-1">/</span>
+                <span>{formatarTempoVideo(duracaoTotal || 223)}</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               type="button"
               onClick={cicloVelocidade}
@@ -919,18 +929,18 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
               type="button"
               id="btn-fullscreen-player-seguro"
               onClick={alternarFullscreen}
-              className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 hover:text-amber-200 border border-amber-500/50 flex items-center gap-1 text-[11px] font-bold shadow-md cursor-pointer transition-all active:scale-95 shrink-0"
+              className="p-1.5 sm:px-2 sm:py-1 rounded-lg bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 hover:text-amber-200 border border-amber-500/50 flex items-center gap-1 text-[11px] font-bold shadow-md cursor-pointer transition-all active:scale-95 shrink-0"
               title={isFullscreen ? 'Sair da tela cheia (F)' : 'Tela cheia (F)'}
             >
               {isFullscreen ? (
                 <>
-                  <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-                  <span className="hidden sm:inline">Normal</span>
+                  <Minimize2 className="w-3.5 h-3.5 text-amber-400" />
+                  {!modoCompacto && <span className="hidden xl:inline">Normal</span>}
                 </>
               ) : (
                 <>
-                  <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-                  <span className="hidden sm:inline">Tela Cheia</span>
+                  <Maximize2 className="w-3.5 h-3.5 text-amber-400" />
+                  {!modoCompacto && <span className="hidden xl:inline">Tela Cheia</span>}
                 </>
               )}
             </button>
