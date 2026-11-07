@@ -14,7 +14,7 @@ export const AnalyticsTracker: React.FC = () => {
   // 1. Inicializa imediatamente pelo cache local se já existir (para não esperar a RPC)
   useEffect(() => {
     try {
-      const cachedMeta = localStorage.getItem('app_meta_pixel_id');
+      const cachedMeta = localStorage.getItem('app_meta_pixel_id') || '1148159047650275';
       const cachedGoogle = localStorage.getItem('app_google_ads_id');
       const cachedGA4 = localStorage.getItem('app_google_analytics_id');
       const cachedTikTok = localStorage.getItem('app_tiktok_pixel_id');

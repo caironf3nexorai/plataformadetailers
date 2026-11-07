@@ -275,6 +275,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       },
     });
+    if (data?.user && data?.session) {
+      setUser(data.user);
+      await fetchUserData(data.user);
+    }
     return { data, error: error as Error | null };
   };
 

@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { AlertTriangle, Building2, LogOut, ShieldCheck } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
+import { trackCompleteRegistration } from '../../utils/pixel';
 
 export const NovaOficina: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +21,23 @@ export const NovaOficina: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+
+  // Confirmação redundante de disparo do CompleteRegistration (para WebViews como Instagram Ads)
+  useEffect(() => {
+    try {
+      const pendingReg = sessionStorage.getItem('pending_meta_complete_registration');
+      if (pendingReg) {
+        sessionStorage.removeItem('pending_meta_complete_registration');
+        let parsed: any = null;
+        try { parsed = JSON.parse(pendingReg); } catch {}
+        trackCompleteRegistration({
+          method: 'email',
+          email: parsed?.email,
+          origem: 'nova_oficina_confirmacao',
+        });
+      }
+    } catch {}
+  }, []);
 
   // Validação de sessão e convite pendente no carregamento da tela
   useEffect(() => {

@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, UserPlus, Mail, Rocket, Eye, EyeOff } from 'lucide-react';
+import { AlertTriangle, UserPlus, Rocket, Eye, EyeOff } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 import { trackCompleteRegistration } from '../../utils/pixel';
 
@@ -28,7 +28,6 @@ export const CriarConta: React.FC = () => {
   const [trialDiasPadrao, setTrialDiasPadrao] = useState<number>(15);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
 
   // Buscar configuração central da plataforma sobre Trial de Cadastro
@@ -160,47 +159,70 @@ export const CriarConta: React.FC = () => {
         return;
       }
 
-      // Dispara o evento de ouro de conversão para o Meta/Google Ads
+      // Dispara o evento de ouro de conversão para o Meta/Google Ads imediatamente
       trackCompleteRegistration({
         method: 'email',
+        email: email.trim().toLowerCase(),
+        phone: telefone?.replace(/\D/g, ''),
         convite: !!conviteToken,
         plano: campanhaInfo?.plano_nome || (trialCadastroAtivo ? 'Trial 15 Dias Pro' : 'Free'),
       });
 
-      // Verifica se houve criação de sessão ativa imediatamente
-      const activeSession = data?.session || (await supabase.auth.getSession()).data.session;
+      // Salva flag de garantia para redundância na tela de destino (/nova-oficina)
+      try {
+        sessionStorage.setItem(
+          'pending_meta_complete_registration',
+          JSON.stringify({
+            email: email.trim().toLowerCase(),
+            timestamp: Date.now(),
+          })
+        );
+      } catch {}
 
-      if (activeSession) {
-        if (conviteToken) {
-          // Aceite automático do convite após cadastro
-          try {
-            const { error: aceitarErr } = await supabase.rpc('aceitar_convite', { p_token: conviteToken });
-            if (aceitarErr) {
-              console.error('[Aceitar Convite RPC Error no Signup]:', aceitarErr);
-            }
-            await refetchTenantData();
-            navigate('/');
-            return;
-          } catch (err) {
-            console.error('[Aceitar Convite Exception no Signup]:', err);
+      // Garante sessão ativa imediatamente (como a confirmação de e-mail foi desativada no Supabase)
+      let activeSession = data?.session || (await supabase.auth.getSession()).data.session;
+
+      if (!activeSession) {
+        // Fallback instantâneo: autentica com senha para garantir sessão ativa sem delay
+        try {
+          const { data: signInData } = await supabase.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
+            password,
+          });
+          if (signInData?.session) {
+            activeSession = signInData.session;
           }
+        } catch (errSignIn) {
+          console.warn('[CriarConta] Tentativa de login imediato pós-signup:', errSignIn);
         }
-        // Sem convite: vai para o cadastro da nova oficina preservando parceiro/convite/campanha
-        const navParams = new URLSearchParams();
-        const pCod = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
-        const cCod = searchParams.get('convite') || localStorage.getItem('convite_codigo');
-        const campCod = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
-        if (pCod) navParams.set('parceiro', pCod);
-        if (cCod) navParams.set('convite', cCod);
-        if (campCod) navParams.set('campanha', campCod);
-
-        const qs = navParams.toString() ? `?${navParams.toString()}` : '';
-        navigate(`/nova-oficina${qs}`);
-      } else {
-        // Sem sessão: o projeto Supabase exige confirmação por e-mail
-        setEmailConfirmationRequired(true);
-        setLoading(false);
       }
+
+      if (conviteToken) {
+        // Aceite automático do convite após cadastro
+        try {
+          const { error: aceitarErr } = await supabase.rpc('aceitar_convite', { p_token: conviteToken });
+          if (aceitarErr) {
+            console.error('[Aceitar Convite RPC Error no Signup]:', aceitarErr);
+          }
+          await refetchTenantData();
+          navigate('/');
+          return;
+        } catch (err) {
+          console.error('[Aceitar Convite Exception no Signup]:', err);
+        }
+      }
+
+      // Redireciona diretamente para a criação da oficina sem nenhuma tela intermediária
+      const navParams = new URLSearchParams();
+      const pCod = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
+      const cCod = searchParams.get('convite') || localStorage.getItem('convite_codigo');
+      const campCod = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
+      if (pCod) navParams.set('parceiro', pCod);
+      if (cCod) navParams.set('convite', cCod);
+      if (campCod) navParams.set('campanha', campCod);
+
+      const qs = navParams.toString() ? `?${navParams.toString()}` : '';
+      navigate(`/nova-oficina${qs}`);
     } catch (err: any) {
       setErrorMsg(translateAuthError(err));
       setLoading(false);
@@ -239,28 +261,7 @@ export const CriarConta: React.FC = () => {
             </div>
           )}
 
-          {emailConfirmationRequired ? (
-            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded flex flex-col items-center text-center gap-4 text-amber-500">
-              <Mail size={40} className="shrink-0 text-amber-500" />
-              <div className="flex flex-col gap-1">
-                <span className="font-sans text-[16px] font-bold">Confirme seu e-mail</span>
-                <p className="font-sans text-[13px] text-vapor-400 leading-relaxed">
-                  Conta criada com sucesso! Enviamos um e-mail de confirmação para{' '}
-                  <strong className="text-vapor-100">{email}</strong>.
-                </p>
-                <p className="font-sans text-[12px] text-vapor-400 mt-2">
-                  Por favor, acesse sua caixa de entrada e clique no link de confirmação antes de entrar na plataforma.
-                </p>
-              </div>
-
-              <Link to={conviteToken ? `/entrar?convite=${conviteToken}` : '/entrar'} className="w-full mt-2">
-                <Button type="button" variant="primary" className="w-full min-h-[44px]">
-                  Ir para a tela de Login
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1">
                 <label className="font-sans text-[13px] text-vapor-400 font-medium">Nome completo *</label>
                 <Input
@@ -388,9 +389,7 @@ export const CriarConta: React.FC = () => {
                 )}
               </Button>
             </form>
-          )}
 
-          {!emailConfirmationRequired && (
             <div className="pt-4 border-t border-graphite-600 text-center">
               <p className="font-sans text-[13px] text-vapor-400">
                 Já possui uma conta?{' '}
@@ -402,7 +401,6 @@ export const CriarConta: React.FC = () => {
                 </Link>
               </p>
             </div>
-          )}
         </Card>
       </div>
     </PublicLayout>
