@@ -78,7 +78,8 @@ export function analisarUrlVideo(rawUrl: string, tempoInicial = 0): DadosVideoPa
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
     // controls=0 remove a barra e logo do YouTube. enablejsapi=1 permite controle via postMessage sem script externo
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : ''}`;
+    const originParam = typeof window !== 'undefined' && window.location && window.location.origin ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${originParam}${tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : ''}`;
     return {
       plataforma: 'youtube',
       videoId,
@@ -165,7 +166,6 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   const tempoAtualRef = useRef(tempoInicial || 0);
   const duracaoTotalRef = useRef(0);
   const estaReproduzindoRef = useRef(false);
-  const recebeuTelemetriaYoutubeRef = useRef(false);
   const ultimoSegundoNotificadoRef = useRef(-1);
 
   useEffect(() => {
@@ -191,15 +191,34 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
    * Envia comando direto via HTML5 postMessage para o iframe do YouTube
    * ZERO injecao de scripts externos no head (100% imune a violacoes de CSP)
    */
-  const enviarComandoIframe = useCallback((func: string, args: any = '') => {
+  const feedbackTimeoutRef = useRef<any>(null);
+  const dispararFeedback = useCallback((tipo: 'play' | 'pause') => {
+    setFeedbackCentral(tipo);
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+    }
+    feedbackTimeoutRef.current = setTimeout(() => {
+      setFeedbackCentral(null);
+    }, 600);
+  }, []);
+
+  /**
+   * Envia comando direto via HTML5 postMessage para o iframe do YouTube
+   * ZERO injecao de scripts externos no head (100% imune a violacoes de CSP)
+   */
+  const enviarComandoIframe = useCallback((func: string, args?: any) => {
     try {
       const iframe = iframeRef.current;
       if (iframe && iframe.contentWindow) {
+        const finalArgs = Array.isArray(args)
+          ? args
+          : (args !== undefined && args !== null && args !== '' ? [args] : []);
+
         iframe.contentWindow.postMessage(
           JSON.stringify({
             event: 'command',
             func,
-            args: args !== undefined ? args : '',
+            args: finalArgs,
           }),
           '*'
         );
@@ -314,7 +333,6 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
             const segs = Math.floor(data.info.currentTime);
             tempoAtualRef.current = segs;
             setTempoAtual(segs);
-            recebeuTelemetriaYoutubeRef.current = true;
             if (estaReproduzindoRef.current) {
               notificarProgresso(segs, duracaoTotalRef.current, true);
             }
@@ -344,24 +362,29 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [videoData.plataforma, desativarLegendas, notificarProgresso, onConcluido]);
 
-  // 2. DISPARO PERIODICO DO PROGRESSO ENQUANTO REPRODUZ (FALLBACK SE O YOUTUBE NAO ENVIAR INFODELIVERY)
+  // 2. HANDSHAKE INICIAL COM O YOUTUBE PARA GARANTIR CONEXAO DO POSTMESSAGE
   useEffect(() => {
-    if (!estaReproduzindo) return;
+    if (videoData.plataforma !== 'youtube') return;
 
-    const interval = setInterval(() => {
-      // Se ja estamos recebendo dados reais do YouTube via infoDelivery, nao adivinhamos o tempo
-      if (videoData.plataforma === 'youtube' && recebeuTelemetriaYoutubeRef.current) {
-        return;
+    let tentativas = 0;
+    const intervalListening = setInterval(() => {
+      tentativas++;
+      try {
+        const iframe = iframeRef.current;
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(
+            JSON.stringify({ event: 'listening', id: 'player_iframe' }),
+            '*'
+          );
+        }
+      } catch {}
+      if (tentativas >= 5) {
+        clearInterval(intervalListening);
       }
+    }, 400);
 
-      const prox = tempoAtualRef.current + 1;
-      tempoAtualRef.current = prox;
-      setTempoAtual(prox);
-      notificarProgresso(prox, duracaoTotalRef.current, true);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [estaReproduzindo, videoData.plataforma, notificarProgresso]);
+    return () => clearInterval(intervalListening);
+  }, [videoData.plataforma]);
 
   // 3. ENVIO DE MENSAGEM PARA INICIALIZAR TELEMETRIA QUANDO O IFRAME CARREGA
   const handleIframeLoaded = useCallback(() => {
@@ -404,30 +427,28 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         videoTagRef.current.play();
       }
       setEstaReproduzindo(true);
-      setFeedbackCentral('play');
+      dispararFeedback('play');
       return;
     }
 
     if (videoData.plataforma === 'youtube') {
       if (estaReproduzindo) {
         enviarComandoIframe('pauseVideo');
-        setEstaReproduzindo(false);
-        setFeedbackCentral('pause');
+        dispararFeedback('pause');
       } else {
         enviarComandoIframe('playVideo');
         desativarLegendas();
-        setEstaReproduzindo(true);
-        setFeedbackCentral('play');
+        dispararFeedback('play');
       }
     } else if (videoTagRef.current) {
       if (estaReproduzindo) {
         videoTagRef.current.pause();
         setEstaReproduzindo(false);
-        setFeedbackCentral('pause');
+        dispararFeedback('pause');
       } else {
         videoTagRef.current.play();
         setEstaReproduzindo(true);
-        setFeedbackCentral('play');
+        dispararFeedback('play');
       }
     }
 
@@ -633,6 +654,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   return (
     <div 
       ref={wrapperRef}
+      style={{ aspectRatio: isFullscreen ? undefined : '16 / 9' }}
       onMouseMove={resetarTemporizadorControles}
       onMouseEnter={() => setMostrarControles(true)}
       onContextMenu={(e) => {
@@ -653,22 +675,19 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
           <span>Sair da Tela Cheia</span>
         </button>
       )}
-      {/* 1. YOUTUBE COM SAFE-CROP E POINTER-EVENTS ISOLADO */}
+      {/* 1. YOUTUBE COM SAFE-CROP DIRETO NO IFRAME E PROPORCAO 16:9 PERFEITA */}
       {videoData.plataforma === 'youtube' && (
-        <div className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
-          {/* Iframe em escala 125% com overflow hidden: afasta logos e links das bordas */}
-          <div className={`w-full h-full pointer-events-none transform-gpu origin-center ${isFullscreen ? "scale-[1.08] sm:scale-[1.05]" : "scale-[1.3] sm:scale-[1.2]"}`}>
-            <iframe 
-              ref={iframeRef}
-              src={videoData.embedUrl}
-              title={titulo || 'Player de Video'}
-              onLoad={handleIframeLoaded}
-              className="w-full h-full border-0 pointer-events-none"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-          <div className="absolute bottom-0 inset-x-0 h-6 sm:h-8 bg-black pointer-events-none z-10" />
+        <div className="absolute inset-0 w-full h-full overflow-hidden flex items-center justify-center bg-black">
+          <iframe 
+            ref={iframeRef}
+            id="player_iframe"
+            src={videoData.embedUrl}
+            title={titulo || 'Player de Video'}
+            onLoad={handleIframeLoaded}
+            className="absolute inset-0 w-full h-full border-0 origin-center scale-[1.15]"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
         </div>
       )}
 
@@ -722,12 +741,12 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
 
       {/* 3. VIMEO */}
       {videoData.plataforma === 'vimeo' && (
-        <div className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
+        <div className="absolute inset-0 w-full h-full overflow-hidden flex items-center justify-center bg-black">
           <iframe
             ref={iframeRef}
             src={videoData.embedUrl}
             title={titulo || 'Player de Video'}
-            className="w-full h-full border-0 pointer-events-none"
+            className="absolute inset-0 w-full h-full border-0 origin-center scale-[1.05]"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
           />
@@ -738,7 +757,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       <div 
         onClick={alternarPlayPause}
         onDoubleClick={alternarFullscreen}
-        className="absolute inset-0 z-10 cursor-pointer flex items-center justify-center"
+        className="absolute inset-0 z-10 cursor-pointer flex items-center justify-center bg-transparent"
       >
         {/* BOTAO PLAY CENTRAL PULSANTE QUANDO PAUSADO */}
         {!estaReproduzindo && !estaConcluido && (
@@ -793,7 +812,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       {/* CONTROLES DA PLATAFORMA (RODAPE OPACO 100% ANTI-FUGA) */}
       <div 
         onClick={(e) => e.stopPropagation()}
-        className={`absolute bottom-0 inset-x-0 z-20 px-2 sm:px-4 py-1.5 sm:py-2.5 bg-[#0A0D12]/95 backdrop-blur-md border-t border-graphite-800 flex flex-col gap-1 sm:gap-2 transition-opacity duration-300 pointer-events-auto ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute bottom-0 inset-x-0 z-20 px-1.5 sm:px-4 py-1 sm:py-2.5 bg-[#0A0D12]/95 backdrop-blur-md border-t border-graphite-800 flex flex-col gap-1 sm:gap-2 transition-opacity duration-300 pointer-events-auto ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
         {/* LINHA 1: BARRA DE PROGRESSO COM SEEK SUAVE */}
         <div 
@@ -866,12 +885,12 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
                 max="100"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => alterarVolume(parseInt(e.target.value, 10))}
-                className="hidden md:block w-14 lg:w-18 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer"
+                className="hidden sm:block w-14 lg:w-18 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer shrink-0"
                 title={`Volume: ${isMuted ? 0 : volume}%`}
               />
             </div>
 
-            <div className="font-mono text-[10px] sm:text-xs text-vapor-300 shrink-0">
+            <div className="font-mono text-[9px] sm:text-xs text-vapor-300 shrink-0 select-none">
               <span className="text-amber-400 font-bold">{formatarTempoVideo(tempoAtual)}</span>
               <span className="text-vapor-500 mx-0.5 sm:mx-1">/</span>
               <span>{formatarTempoVideo(duracaoTotal || 223)}</span>
