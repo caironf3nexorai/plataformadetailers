@@ -8,6 +8,7 @@ export default {
     extend: {
       colors: {
         graphite: {
+          950: '#0A0D12',
           900: '#0F1216',
           800: '#171B21',
           700: '#1F242C',

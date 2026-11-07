@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Minimize2,
+  Maximize2,
+  ChevronDown,
+  ChevronUp,
   CheckCircle2,
   Sparkles,
   Clock,
@@ -12,7 +15,6 @@ import {
   QrCode,
   ShieldCheck,
   X,
-  Play,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -42,6 +44,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
     return modoSalvo || 'fechado';
   });
 
+  const [colapsado, setColapsado] = useState(false);
   const [carregandoConfig, setCarregandoConfig] = useState(true);
   const [salvandoConclusao, setSalvandoConclusao] = useState(false);
 
@@ -254,7 +257,7 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       if (dados.duracaoTotal > 0) {
         setDuracaoTotalSegundos(dados.duracaoTotal);
       }
-      if (storageKeyTempo && dados.segundosAssistidos > 0 && dados.segundosAssistidos % 3 === 0) {
+      if (storageKeyTempo && dados.segundosAssistidos > 0 && true) {
         localStorage.setItem(storageKeyTempo, dados.segundosAssistidos.toString());
       }
     },
@@ -270,6 +273,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Transição do modal para botão flutuante ao fechar ou minimizar
   const handleMinimizarParaFlutuante = () => {
+    if (storageKeyTempo && segundosAssistidos > 0) {
+      localStorage.setItem(storageKeyTempo, segundosAssistidos.toString());
+    }
     setModoVisual('flutuante');
     sessionStorage.setItem(storageKeyModo, 'flutuante');
   };
@@ -314,6 +320,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Atalho para navegar até as seções cruciais de configuração (minimiza para botão flutuante)
   const handleIrPara = (caminho: string) => {
+    if (storageKeyTempo && segundosAssistidos > 0) {
+      localStorage.setItem(storageKeyTempo, segundosAssistidos.toString());
+    }
     handleMinimizarParaFlutuante();
     navigate(caminho);
   };
@@ -384,38 +393,95 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   if (modoVisual === 'flutuante') {
     return (
       <aside
-        aria-label="Tutorial de Configuração da Plataforma"
-        className="fixed left-4 lg:left-[256px] bottom-[74px] lg:bottom-6 z-40 flex items-center gap-1.5 animate-fade-in pointer-events-auto select-none"
+        aria-label="Mini Player do Tutorial da Oficina"
+        className="fixed right-3 sm:right-6 bottom-[72px] lg:bottom-6 z-40 flex flex-col items-end pointer-events-auto select-none max-w-[94vw]"
       >
-        <button
-          type="button"
-          onClick={handleExpandirParaModal}
-          className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-graphite-900/95 hover:bg-graphite-850 border border-amber-500/60 hover:border-amber-400 text-vapor-100 shadow-2xl backdrop-blur-md transition-all hover:scale-[1.03] active:scale-[0.98] cursor-pointer"
-          title="Abrir Vídeo Tutorial de Configuração"
+        <div
+          className={`bg-graphite-900 border border-amber-500/50 shadow-2xl rounded-2xl overflow-hidden backdrop-blur-xl transition-all duration-300 ${
+            colapsado ? 'w-64 sm:w-72' : 'w-72 xs:w-80 sm:w-96'
+          }`}
         >
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-graphite-950 font-bold shadow-sm shrink-0">
-            <Play className="w-3 h-3 fill-current ml-0.5" />
-          </div>
-          <div className="text-left flex flex-col">
-            <span className="text-xs font-bold font-display text-amber-400 group-hover:text-amber-300 leading-tight flex items-center gap-1">
-              <span>Vídeo Tutorial</span>
-              <Sparkles className="w-3 h-3 text-amber-400" />
-            </span>
-            <span className="text-[10px] text-vapor-400 leading-tight">
-              Configuração da Oficina
-            </span>
-          </div>
-        </button>
+          {/* Barra de Título do Mini-Player */}
+          <div className="bg-[#0A0D12] px-3.5 py-2.5 flex items-center justify-between border-b border-graphite-800">
+            <div className="flex items-center gap-2 truncate pr-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <Sparkles className="w-3.5 h-3.5" />
+              </div>
+              <div className="truncate text-left">
+                <span className="text-xs font-bold text-vapor-100 truncate block font-display tracking-tight">
+                  Tutorial da Oficina
+                </span>
+                <span className="text-[10px] text-amber-400 font-semibold">
+                  {porcentagemAssistida}% assistido
+                </span>
+              </div>
+            </div>
 
-        {/* Botão sutil para dispensar o botão flutuante nesta sessão */}
-        <button
-          type="button"
-          onClick={handleDispensarBotao}
-          className="p-2 rounded-xl bg-graphite-900/90 hover:bg-graphite-800 text-vapor-400 hover:text-vapor-200 border border-graphite-700 hover:border-graphite-600 transition-colors shadow-lg cursor-pointer"
-          title="Ocultar botão nesta sessão (pode reabrir em Configurações)"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {/* Botão de Colapsar/Expandir Altura */}
+              <button
+                type="button"
+                onClick={() => setColapsado(!colapsado)}
+                className="p-1 rounded-md text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 transition-colors cursor-pointer"
+                title={colapsado ? 'Expandir Vídeo' : 'Recolher para barra'}
+              >
+                {colapsado ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+
+              {/* Botão de Maximizar para Modal Completo */}
+              <button
+                type="button"
+                onClick={handleExpandirParaModal}
+                className="p-1 rounded-md text-vapor-400 hover:text-vapor-100 hover:bg-graphite-800 transition-colors cursor-pointer"
+                title="Maximizar para tela cheia"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+
+              {/* Botão de Dispensar Mini Player */}
+              <button
+                type="button"
+                onClick={handleDispensarBotao}
+                className="p-1 rounded-md text-vapor-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                title="Ocultar nesta sessão"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Player de Vídeo Compacto (quando não colapsado) */}
+          {!colapsado && (
+            <div className="p-2.5 sm:p-3 space-y-2.5 bg-graphite-900">
+              <div className="rounded-xl overflow-hidden border border-graphite-800 shadow-md">
+                <PlayerVideoSeguro
+                  url={videoUrl}
+                  titulo={videoTitulo}
+                  tempoInicial={segundosAssistidos}
+                  onProgresso={handleProgressoVideo}
+                  onConcluido={handleConclusaoAutomatica}
+                  mostrarWatermark={false}
+                  className="rounded-lg"
+                />
+              </div>
+
+              {/* Barra de Progresso e Ações */}
+              <div className="flex items-center justify-between text-[11px] text-vapor-400 px-0.5">
+                <span className="flex items-center gap-1 text-vapor-300 font-mono">
+                  <Clock className="w-3 h-3 text-amber-400" />
+                  {formatarTempo(segundosAssistidos)} / {formatarTempo(duracaoTotalSegundos)}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleExpandirParaModal}
+                  className="text-amber-400 hover:text-amber-300 font-bold text-[10px] underline cursor-pointer"
+                >
+                  Ver etapas completas
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </aside>
     );
   }

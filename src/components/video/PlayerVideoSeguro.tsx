@@ -59,7 +59,7 @@ export function formatarTempoVideo(segundos: number): string {
 /**
  * Analisa e extrai informacoes essenciais do video, desativando controles nativos
  */
-export function analisarUrlVideo(rawUrl: string): DadosVideoParsed {
+export function analisarUrlVideo(rawUrl: string, tempoInicial = 0): DadosVideoParsed {
   if (!rawUrl || !rawUrl.trim()) {
     return {
       plataforma: 'desconhecido',
@@ -78,7 +78,7 @@ export function analisarUrlVideo(rawUrl: string): DadosVideoParsed {
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
     // controls=0 remove a barra e logo do YouTube. enablejsapi=1 permite controle via postMessage sem script externo
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off`;
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : ''}`;
     return {
       plataforma: 'youtube',
       videoId,
@@ -131,7 +131,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   onReady,
 }) => {
   const { tenant, user } = useAuth();
-  const videoData = analisarUrlVideo(url);
+  const videoData = analisarUrlVideo(url, tempoInicial);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -243,6 +243,9 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
             setEstaReproduzindo(true);
             setEstaConcluido(false);
             desativarLegendas();
+    if (tempoInicial && tempoInicial > 0) {
+      enviarComandoIframe("seekTo", [tempoInicial, true]);
+    }
           } else if (data.info === 2) {
             setEstaReproduzindo(false);
           } else if (data.info === 0) {
@@ -325,8 +328,11 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       }
     } catch {}
     desativarLegendas();
+    if (tempoInicial && tempoInicial > 0) {
+      enviarComandoIframe("seekTo", [tempoInicial, true]);
+    }
     onReady?.();
-  }, [desativarLegendas, onReady]);
+  }, [desativarLegendas, enviarComandoIframe, tempoInicial, onReady]);
 
   // PLAY / PAUSE
   const alternarPlayPause = useCallback(() => {
@@ -355,6 +361,9 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       } else {
         enviarComandoIframe('playVideo');
         desativarLegendas();
+    if (tempoInicial && tempoInicial > 0) {
+      enviarComandoIframe("seekTo", [tempoInicial, true]);
+    }
         setEstaReproduzindo(true);
         setFeedbackCentral('play');
       }
@@ -540,7 +549,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       {videoData.plataforma === 'youtube' && (
         <div className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
           {/* Iframe em escala 125% com overflow hidden: afasta logos e links das bordas */}
-          <div className="w-full h-full pointer-events-none scale-[1.25] transform-gpu origin-center">
+          <div className="w-full h-full pointer-events-none scale-[1.35] sm:scale-[1.25] transform-gpu origin-center">
             <iframe 
               ref={iframeRef}
               src={videoData.embedUrl}
@@ -551,6 +560,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
               allowFullScreen
             />
           </div>
+          <div className="absolute bottom-0 inset-x-0 h-12 sm:h-14 bg-black pointer-events-none z-10" />
         </div>
       )}
 
@@ -681,7 +691,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       {/* CONTROLES DA PLATAFORMA (RODAPE OPACO 100% ANTI-FUGA) */}
       <div 
         onClick={(e) => e.stopPropagation()}
-        className={`absolute bottom-0 inset-x-0 z-20 px-3 sm:px-4 py-2.5 bg-graphite-950 border-t border-graphite-800/90 flex flex-col gap-2 transition-opacity duration-300 pointer-events-auto ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute bottom-0 inset-x-0 z-20 px-3 sm:px-4 py-2.5 bg-[#0A0D12] border-t border-graphite-800 flex flex-col gap-2 transition-opacity duration-300 pointer-events-auto ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
         {/* LINHA 1: BARRA DE PROGRESSO COM SEEK SUAVE */}
         <div 
