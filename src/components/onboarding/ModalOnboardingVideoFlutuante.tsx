@@ -503,10 +503,10 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
   // Possui botões claros de Fechar (X) e Minimizar para navegar sem bloqueios.
   // =========================================================================
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-graphite-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
-      <div className="bg-graphite-900 border border-amber-500/40 rounded-2xl max-w-4xl w-full shadow-2xl flex flex-col my-auto max-h-[92vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-5 bg-graphite-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="bg-graphite-900 border border-amber-500/40 rounded-2xl max-w-4xl w-full shadow-2xl flex flex-col my-auto max-h-[96vh] sm:max-h-[92vh] overflow-hidden">
         {/* Cabeçalho do Modal */}
-        <div className="bg-graphite-950/90 px-4 sm:px-6 py-4 border-b border-graphite-700/60 flex items-center justify-between shrink-0">
+        <div className="bg-graphite-950/90 px-3.5 sm:px-6 py-3 sm:py-4 border-b border-graphite-700/60 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-graphite-950 shadow-md shadow-amber-500/20 shrink-0">
               <Sparkles className="w-5 h-5 font-bold" />
@@ -552,16 +552,30 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
         </div>
 
         {/* Corpo do Modal com Scroll Interno */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+        <div className="p-2.5 sm:p-6 overflow-y-auto space-y-3 sm:space-y-5">
           {/* Player do Vídeo Seguro com Camuflagem e Escudo Anti-Fuga */}
-          <PlayerVideoSeguro
-            url={videoUrl}
-            titulo={videoTitulo}
-            tempoInicial={segundosAssistidos}
-            onProgresso={handleProgressoVideo}
-            onConcluido={handleConclusaoAutomatica}
-            mostrarWatermark={true}
-          />
+          <div className="space-y-2">
+            <PlayerVideoSeguro
+              url={videoUrl}
+              titulo={videoTitulo}
+              tempoInicial={segundosAssistidos}
+              onProgresso={handleProgressoVideo}
+              onConcluido={handleConclusaoAutomatica}
+              mostrarWatermark={true}
+            />
+
+            {/* BOTÃO PROMINENTE DE TELA CHEIA (ESPECIALMENTE NO MOBILE) */}
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('abrir_player_fullscreen'));
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-amber-500/20 hover:from-amber-500/30 hover:to-amber-500/30 border border-amber-500/50 text-amber-300 hover:text-amber-200 font-bold text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer active:scale-[0.98] transition-all"
+            >
+              <Maximize2 className="w-4 h-4 text-amber-400" />
+              <span>Assistir em Tela Cheia (Modo Expandido)</span>
+            </button>
+          </div>
 
           {/* Régua de Progresso do Vídeo */}
           <div className="bg-graphite-950/60 p-3 rounded-xl border border-graphite-800 space-y-2">

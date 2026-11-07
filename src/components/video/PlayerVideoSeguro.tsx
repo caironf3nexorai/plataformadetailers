@@ -516,30 +516,66 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
     }
   };
 
-  // TELA CHEIA NATIVA NO ELEMENTO CONTAINER
+  // Alternar tela cheia (suporta iOS Safari, Android, Mac e Windows)
   const alternarFullscreen = useCallback(() => {
     resetarTemporizadorControles();
-    if (!wrapperRef.current) return;
 
-    if (!document.fullscreenElement) {
-      wrapperRef.current.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-      }).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => {
-        setIsFullscreen(false);
-      }).catch(() => {});
-    }
+    setIsFullscreen((antigo) => {
+      const novo = !antigo;
+
+      // Travar / destravar scroll do body
+      if (novo) {
+        document.body.style.overflow = 'hidden';
+      } else {
+        document.body.style.overflow = '';
+      }
+
+      // Tenta acionar a API nativa de fullscreen se disponivel no navegador (Desktop/Android)
+      try {
+        if (novo) {
+          if (wrapperRef.current && typeof wrapperRef.current.requestFullscreen === 'function') {
+            wrapperRef.current.requestFullscreen().catch(() => {});
+          }
+        } else {
+          if (document.fullscreenElement && typeof document.exitFullscreen === 'function') {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+      } catch {}
+
+      return novo;
+    });
   }, [resetarTemporizadorControles]);
 
   // Listener para sincronizar estado de fullscreen nativo
   useEffect(() => {
     const handleFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      if (!document.fullscreenElement && isFullscreen) {
+        setIsFullscreen(false);
+        document.body.style.overflow = '';
+      }
     };
     document.addEventListener('fullscreenchange', handleFsChange);
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, [isFullscreen]);
+
+  // Limpeza de overflow ao desmontar
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, []);
+
+  // Listener para disparo de fullscreen externo (ex: botao "Assistir em Tela Cheia" do modal)
+  useEffect(() => {
+    const handleAbrirFs = () => {
+      if (!isFullscreen) {
+        alternarFullscreen();
+      }
+    };
+    window.addEventListener('abrir_player_fullscreen', handleAbrirFs);
+    return () => window.removeEventListener('abrir_player_fullscreen', handleAbrirFs);
+  }, [isFullscreen, alternarFullscreen]);
 
   // ATALHOS DE TECLADO (Espaco, Setas, M, F)
   useEffect(() => {
@@ -590,6 +626,10 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
     ? Math.min(100, (tempoAtual / duracaoTotal) * 100) 
     : 0;
 
+  const wrapperClasses = isFullscreen
+    ? 'fixed inset-0 z-[99999] w-screen h-screen bg-black flex flex-col justify-center items-center overflow-hidden'
+    : `relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-graphite-800 select-none group font-sans ${className}`;
+
   return (
     <div 
       ref={wrapperRef}
@@ -600,13 +640,24 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         e.stopPropagation();
         return false;
       }}
-      className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-graphite-800 select-none group font-sans ${className}`}
+      className={wrapperClasses}
     >
+      {/* BOTAO PARA SAIR DA TELA CHEIA (FIXO NO TOPO DIREITO QUANDO EM FULLSCREEN) */}
+      {isFullscreen && (
+        <button
+          type="button"
+          onClick={alternarFullscreen}
+          className="absolute top-4 right-4 z-50 px-3.5 py-2 rounded-xl bg-graphite-900/90 hover:bg-black text-white text-xs font-bold flex items-center gap-2 border border-amber-500/40 shadow-2xl backdrop-blur-md cursor-pointer active:scale-95 transition-all"
+        >
+          <Minimize2 className="w-4 h-4 text-amber-400" />
+          <span>Sair da Tela Cheia</span>
+        </button>
+      )}
       {/* 1. YOUTUBE COM SAFE-CROP E POINTER-EVENTS ISOLADO */}
       {videoData.plataforma === 'youtube' && (
         <div className="w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
           {/* Iframe em escala 125% com overflow hidden: afasta logos e links das bordas */}
-          <div className="w-full h-full pointer-events-none scale-[1.35] sm:scale-[1.25] transform-gpu origin-center">
+          <div className={`w-full h-full pointer-events-none transform-gpu origin-center ${isFullscreen ? "scale-[1.08] sm:scale-[1.05]" : "scale-[1.3] sm:scale-[1.2]"}`}>
             <iframe 
               ref={iframeRef}
               src={videoData.embedUrl}
@@ -617,7 +668,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
               allowFullScreen
             />
           </div>
-          <div className="absolute bottom-0 inset-x-0 h-12 sm:h-14 bg-black pointer-events-none z-10" />
+          <div className="absolute bottom-0 inset-x-0 h-6 sm:h-8 bg-black pointer-events-none z-10" />
         </div>
       )}
 
@@ -716,21 +767,15 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         )}
       </div>
 
-      {/* ESCUDO DO TOPO: BLOQUEIA 100% DO TITULO E COMPARTILHAR DO YOUTUBE */}
+      {/* SELO DE SEGURANCA FLUTUANTE DISCRETO (NAO COME ALTURA DO VIDEO) */}
       <div 
         onClick={(e) => e.stopPropagation()}
-        className={`absolute top-0 inset-x-0 h-14 z-20 pointer-events-auto bg-graphite-950/95 backdrop-blur-md border-b border-graphite-800/80 flex items-center justify-between px-4 cursor-default select-none transition-opacity duration-300 ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute top-2.5 left-2.5 z-20 pointer-events-auto flex items-center gap-2 transition-opacity duration-300 ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
-        <div className="flex items-center gap-2 bg-graphite-900/90 px-2.5 py-1 rounded-lg border border-graphite-800 text-[10px] sm:text-xs font-mono font-semibold text-emerald-400 shadow">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="flex items-center gap-1.5 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 text-[9px] sm:text-[10px] font-mono font-semibold text-emerald-400 shadow">
+          <ShieldCheck className="w-3 h-3 text-emerald-400" />
           <span>REPRODUCAO SEGURA</span>
         </div>
-
-        {titulo && (
-          <span className="hidden sm:inline-block max-w-[55%] truncate text-xs font-semibold text-vapor-200 bg-graphite-900/90 px-2.5 py-1 rounded-lg border border-graphite-800 shadow">
-            {titulo}
-          </span>
-        )}
       </div>
 
       {/* MARCA D'AGUA ANTI-PIRATARIA TRANSLUCIDA */}
@@ -748,54 +793,58 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       {/* CONTROLES DA PLATAFORMA (RODAPE OPACO 100% ANTI-FUGA) */}
       <div 
         onClick={(e) => e.stopPropagation()}
-        className={`absolute bottom-0 inset-x-0 z-20 px-3 sm:px-4 py-2.5 bg-[#0A0D12] border-t border-graphite-800 flex flex-col gap-2 transition-opacity duration-300 pointer-events-auto ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute bottom-0 inset-x-0 z-20 px-2 sm:px-4 py-1.5 sm:py-2.5 bg-[#0A0D12]/95 backdrop-blur-md border-t border-graphite-800 flex flex-col gap-1 sm:gap-2 transition-opacity duration-300 pointer-events-auto ${mostrarControles || !estaReproduzindo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
         {/* LINHA 1: BARRA DE PROGRESSO COM SEEK SUAVE */}
         <div 
           ref={progressBarRef}
           onClick={handleSeek}
-          className="w-full h-2 group/bar hover:h-3 bg-white/20 hover:bg-white/30 rounded-full cursor-pointer relative transition-all overflow-visible flex items-center"
+          className="w-full h-2 group/bar hover:h-3 bg-white/20 hover:bg-white/30 rounded-full cursor-pointer relative transition-all overflow-visible flex items-center py-1"
           title="Clique para avancar ou retroceder"
         >
           <div 
             className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full relative transition-all duration-75"
             style={{ width: `${porcentagemProgresso}%` }}
           >
-            <div className="w-3.5 h-3.5 bg-amber-400 rounded-full shadow-lg border border-graphite-950 absolute -right-1.5 top-1/2 -translate-y-1/2 scale-0 group-hover/bar:scale-100 transition-transform" />
+            <div className="w-3.5 h-3.5 bg-amber-400 rounded-full shadow-lg border border-graphite-950 absolute -right-1.5 top-1/2 -translate-y-1/2 scale-100 sm:scale-0 sm:group-hover/bar:scale-100 transition-transform" />
           </div>
         </div>
 
-        {/* LINHA 2: BOTOES DE REPRODUCAO, TEMPO, VOLUME, VELOCIDADE E FULLSCREEN */}
-        <div className="flex items-center justify-between text-vapor-200 text-xs">
-          <div className="flex items-center gap-2 sm:gap-3">
+        {/* LINHA 2: BOTOES DE REPRODUCAO, TEMPO, VOLUME, VELOCIDADE E FULLSCREEN SEM OVERFLOW */}
+        <div className="flex items-center justify-between text-vapor-200 text-xs w-full gap-1">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             <button
               type="button"
               onClick={alternarPlayPause}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-vapor-100 hover:text-amber-400 transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-graphite-950 transition-all font-bold shrink-0 cursor-pointer shadow-md"
               title={estaReproduzindo ? 'Pausar (Espaco)' : 'Reproduzir (Espaco)'}
             >
-              {estaReproduzindo ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current" />}
+              {estaReproduzindo ? (
+                <Pause className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current" />
+              ) : (
+                <Play className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-current ml-0.5" />
+              )}
             </button>
 
             <button
               type="button"
               onClick={() => pularSegundos(-10)}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer"
+              className="hidden sm:flex p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer shrink-0"
               title="Voltar 10 segundos (Seta Esquerda)"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
 
             <button
               type="button"
               onClick={() => pularSegundos(10)}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer"
+              className="hidden sm:flex p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-amber-400 transition-colors cursor-pointer shrink-0"
               title="Avancar 10 segundos (Seta Direita)"
             >
-              <RotateCw className="w-4 h-4" />
+              <RotateCw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
 
-            <div className="flex items-center gap-1.5 group/vol">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 onClick={alternarMute}
@@ -803,11 +852,11 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
                 title={isMuted ? 'Desativar Mudo (M)' : 'Silenciar (M)'}
               >
                 {isMuted || volume === 0 ? (
-                  <VolumeX className="w-4 h-4 text-red-400" />
+                  <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400" />
                 ) : volume < 50 ? (
-                  <Volume1 className="w-4 h-4" />
+                  <Volume1 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 ) : (
-                  <Volume2 className="w-4 h-4" />
+                  <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 )}
               </button>
 
@@ -817,35 +866,47 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
                 max="100"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => alterarVolume(parseInt(e.target.value, 10))}
-                className="w-14 sm:w-18 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer"
+                className="hidden md:block w-14 lg:w-18 h-1 bg-white/20 accent-amber-500 rounded-lg cursor-pointer"
                 title={`Volume: ${isMuted ? 0 : volume}%`}
               />
             </div>
 
-            <div className="font-mono text-[11px] sm:text-xs text-vapor-300 ml-1">
+            <div className="font-mono text-[10px] sm:text-xs text-vapor-300 shrink-0">
               <span className="text-amber-400 font-bold">{formatarTempoVideo(tempoAtual)}</span>
-              <span className="text-vapor-500 mx-1">/</span>
+              <span className="text-vapor-500 mx-0.5 sm:mx-1">/</span>
               <span>{formatarTempoVideo(duracaoTotal || 223)}</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={cicloVelocidade}
-              className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-[11px] font-mono font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+              className="px-1.5 sm:px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-[10px] sm:text-[11px] font-mono font-bold text-amber-400 hover:text-amber-300 transition-colors cursor-pointer shrink-0"
               title="Alterar velocidade de reproducao"
             >
               {velocidade}x
             </button>
 
+            {/* BOTAO TELA CHEIA PROMINENTE (SEMPRE VISIVEL) */}
             <button
               type="button"
+              id="btn-fullscreen-player-seguro"
               onClick={alternarFullscreen}
-              className="p-1.5 rounded-lg hover:bg-white/10 text-vapor-300 hover:text-vapor-100 transition-colors cursor-pointer"
+              className="p-1.5 sm:px-2.5 sm:py-1 rounded-lg bg-amber-500/25 hover:bg-amber-500/35 text-amber-300 hover:text-amber-200 border border-amber-500/50 flex items-center gap-1 text-[11px] font-bold shadow-md cursor-pointer transition-all active:scale-95 shrink-0"
               title={isFullscreen ? 'Sair da tela cheia (F)' : 'Tela cheia (F)'}
             >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {isFullscreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                  <span className="hidden sm:inline">Normal</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                  <span className="hidden sm:inline">Tela Cheia</span>
+                </>
+              )}
             </button>
           </div>
         </div>
