@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   ShieldCheck, 
   Play, 
@@ -131,7 +131,23 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   onReady,
 }) => {
   const { tenant, user } = useAuth();
-  const videoData = analisarUrlVideo(url, tempoInicial);
+
+  // Armazena o tempo inicial apenas no momento de montagem do componente.
+  // Isso e CRUCIAL: impede que re-renderizacoes com progresso recalculado alterem a embedUrl
+  // e forcem o navegador a recarregar o iframe do YouTube continuamente a cada segundo.
+  const tempoInicialMontagemRef = useRef(tempoInicial || 0);
+  const jaFezSeekInicialRef = useRef(false);
+  const urlAnteriorRef = useRef(url);
+
+  if (urlAnteriorRef.current !== url) {
+    urlAnteriorRef.current = url;
+    tempoInicialMontagemRef.current = tempoInicial || 0;
+    jaFezSeekInicialRef.current = false;
+  }
+
+  const videoData = useMemo(() => {
+    return analisarUrlVideo(url, tempoInicialMontagemRef.current);
+  }, [url]);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -144,6 +160,17 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   const [tempoAtual, setTempoAtual] = useState(tempoInicial || 0);
   const [duracaoTotal, setDuracaoTotal] = useState(0);
   const [estaConcluido, setEstaConcluido] = useState(false);
+
+  // Refs de rastreamento para evitar loops e condicoes de corrida
+  const tempoAtualRef = useRef(tempoInicial || 0);
+  const duracaoTotalRef = useRef(0);
+  const estaReproduzindoRef = useRef(false);
+  const recebeuTelemetriaYoutubeRef = useRef(false);
+  const ultimoSegundoNotificadoRef = useRef(-1);
+
+  useEffect(() => {
+    estaReproduzindoRef.current = estaReproduzindo;
+  }, [estaReproduzindo]);
 
   // Controles de audio e UI
   const [volume, setVolume] = useState(100);
@@ -220,6 +247,34 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
     }, 3500);
   }, []);
 
+  /**
+   * Dispara notificacao de progresso para o componente pai de forma segura e sincronizada
+   */
+  const notificarProgresso = useCallback(
+    (segundos: number, duracao: number, reproduzindo: boolean) => {
+      const segs = Math.floor(segundos);
+      if (segs === ultimoSegundoNotificadoRef.current) return;
+      ultimoSegundoNotificadoRef.current = segs;
+
+      const dur = duracao > 0 ? duracao : 223;
+      const pct = Math.min(100, Math.round((segs / dur) * 100));
+
+      onProgresso?.({
+        segundosAssistidos: segs,
+        duracaoTotal: dur,
+        porcentagem: pct,
+        estaReproduzindo: reproduzindo,
+      });
+
+      if (duracao > 0 && segs >= duracao) {
+        setEstaReproduzindo(false);
+        setEstaConcluido(true);
+        onConcluido?.();
+      }
+    },
+    [onProgresso, onConcluido]
+  );
+
   // 1. ESCUTA TELEMETRIA E MENSAGENS POSTMESSAGE DO PLAYER
   useEffect(() => {
     if (videoData.plataforma !== 'youtube') return;
@@ -243,9 +298,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
             setEstaReproduzindo(true);
             setEstaConcluido(false);
             desativarLegendas();
-    if (tempoInicial && tempoInicial > 0) {
-      enviarComandoIframe("seekTo", [tempoInicial, true]);
-    }
+            // NUNCA chamar seekTo aqui! Chamar seekTo aqui gera loop recursivo infinito!
           } else if (data.info === 2) {
             setEstaReproduzindo(false);
           } else if (data.info === 0) {
@@ -259,10 +312,17 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         if (data.event === 'infoDelivery' && data.info) {
           if (typeof data.info.currentTime === 'number') {
             const segs = Math.floor(data.info.currentTime);
+            tempoAtualRef.current = segs;
             setTempoAtual(segs);
+            recebeuTelemetriaYoutubeRef.current = true;
+            if (estaReproduzindoRef.current) {
+              notificarProgresso(segs, duracaoTotalRef.current, true);
+            }
           }
           if (typeof data.info.duration === 'number' && data.info.duration > 0) {
-            setDuracaoTotal(Math.floor(data.info.duration));
+            const dur = Math.floor(data.info.duration);
+            duracaoTotalRef.current = dur;
+            setDuracaoTotal(dur);
           }
           if (typeof data.info.playerState === 'number') {
             if (data.info.playerState === 1) {
@@ -282,36 +342,26 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [videoData.plataforma, onConcluido]);
+  }, [videoData.plataforma, desativarLegendas, notificarProgresso, onConcluido]);
 
-  // 2. DISPARO PERIODICO DO PROGRESSO ENQUANTO REPRODUZ (TELEMETRIA ATIVA)
+  // 2. DISPARO PERIODICO DO PROGRESSO ENQUANTO REPRODUZ (FALLBACK SE O YOUTUBE NAO ENVIAR INFODELIVERY)
   useEffect(() => {
     if (!estaReproduzindo) return;
 
     const interval = setInterval(() => {
-      setTempoAtual((ant) => {
-        const prox = ant + 1;
-        const dur = duracaoTotal > 0 ? duracaoTotal : 223; // fallback ~3m43s
-        const pct = Math.min(100, Math.round((prox / dur) * 100));
+      // Se ja estamos recebendo dados reais do YouTube via infoDelivery, nao adivinhamos o tempo
+      if (videoData.plataforma === 'youtube' && recebeuTelemetriaYoutubeRef.current) {
+        return;
+      }
 
-        onProgresso?.({
-          segundosAssistidos: prox,
-          duracaoTotal: dur,
-          porcentagem: pct,
-          estaReproduzindo: true,
-        });
-
-        if (duracaoTotal > 0 && prox >= duracaoTotal) {
-          setEstaReproduzindo(false);
-          setEstaConcluido(true);
-          onConcluido?.();
-        }
-        return prox;
-      });
+      const prox = tempoAtualRef.current + 1;
+      tempoAtualRef.current = prox;
+      setTempoAtual(prox);
+      notificarProgresso(prox, duracaoTotalRef.current, true);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [estaReproduzindo, duracaoTotal, onProgresso, onConcluido]);
+  }, [estaReproduzindo, videoData.plataforma, notificarProgresso]);
 
   // 3. ENVIO DE MENSAGEM PARA INICIALIZAR TELEMETRIA QUANDO O IFRAME CARREGA
   const handleIframeLoaded = useCallback(() => {
@@ -328,11 +378,15 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       }
     } catch {}
     desativarLegendas();
-    if (tempoInicial && tempoInicial > 0) {
-      enviarComandoIframe("seekTo", [tempoInicial, true]);
+
+    // Executa seekTo inicial UMA UNICA VEZ se tempoInicial for maior que 0
+    if (tempoInicialMontagemRef.current > 0 && !jaFezSeekInicialRef.current) {
+      jaFezSeekInicialRef.current = true;
+      enviarComandoIframe('seekTo', [tempoInicialMontagemRef.current, true]);
     }
+
     onReady?.();
-  }, [desativarLegendas, enviarComandoIframe, tempoInicial, onReady]);
+  }, [desativarLegendas, enviarComandoIframe, onReady]);
 
   // PLAY / PAUSE
   const alternarPlayPause = useCallback(() => {
@@ -340,6 +394,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
 
     if (estaConcluido) {
       setEstaConcluido(false);
+      tempoAtualRef.current = 0;
       setTempoAtual(0);
       if (videoData.plataforma === 'youtube') {
         enviarComandoIframe('seekTo', [0, true]);
@@ -361,9 +416,6 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
       } else {
         enviarComandoIframe('playVideo');
         desativarLegendas();
-    if (tempoInicial && tempoInicial > 0) {
-      enviarComandoIframe("seekTo", [tempoInicial, true]);
-    }
         setEstaReproduzindo(true);
         setFeedbackCentral('play');
       }
@@ -382,37 +434,41 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
     setTimeout(() => {
       setFeedbackCentral(null);
     }, 600);
-  }, [estaConcluido, videoData.plataforma, estaReproduzindo, enviarComandoIframe, resetarTemporizadorControles]);
+  }, [estaConcluido, videoData.plataforma, estaReproduzindo, enviarComandoIframe, desativarLegendas, resetarTemporizadorControles]);
 
   // PULAR SEGUNDOS (-10s / +10s)
   const pularSegundos = useCallback((delta: number) => {
     resetarTemporizadorControles();
-    const dur = duracaoTotal > 0 ? duracaoTotal : 9999;
-    const novo = Math.max(0, Math.min(dur, tempoAtual + delta));
+    const dur = duracaoTotalRef.current > 0 ? duracaoTotalRef.current : (duracaoTotal > 0 ? duracaoTotal : 9999);
+    const novo = Math.max(0, Math.min(dur, tempoAtualRef.current + delta));
+
+    tempoAtualRef.current = Math.floor(novo);
+    setTempoAtual(Math.floor(novo));
 
     if (videoData.plataforma === 'youtube') {
       enviarComandoIframe('seekTo', [novo, true]);
-      setTempoAtual(Math.floor(novo));
     } else if (videoTagRef.current) {
       videoTagRef.current.currentTime = novo;
-      setTempoAtual(Math.floor(novo));
     }
-  }, [duracaoTotal, tempoAtual, videoData.plataforma, enviarComandoIframe, resetarTemporizadorControles]);
+  }, [duracaoTotal, videoData.plataforma, enviarComandoIframe, resetarTemporizadorControles]);
 
   // SEEK VIA BARRA DE PROGRESSO
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     resetarTemporizadorControles();
-    if (!progressBarRef.current || duracaoTotal <= 0) return;
+    const dur = duracaoTotalRef.current > 0 ? duracaoTotalRef.current : duracaoTotal;
+    if (!progressBarRef.current || dur <= 0) return;
     const rect = progressBarRef.current.getBoundingClientRect();
     const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const novoTempo = Math.floor(pos * duracaoTotal);
+    const novoTempo = Math.floor(pos * dur);
+
+    tempoAtualRef.current = novoTempo;
+    setTempoAtual(novoTempo);
 
     if (videoData.plataforma === 'youtube') {
       enviarComandoIframe('seekTo', [novoTempo, true]);
     } else if (videoTagRef.current) {
       videoTagRef.current.currentTime = novoTempo;
     }
-    setTempoAtual(novoTempo);
   };
 
   // MUTE / UNMUTE
@@ -518,6 +574,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   // REINICIAR VIDEO
   const reiniciarVideo = useCallback(() => {
     setEstaConcluido(false);
+    tempoAtualRef.current = 0;
     setTempoAtual(0);
     if (videoTagRef.current) {
       videoTagRef.current.currentTime = 0;
@@ -577,8 +634,8 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
             if (el.duration && el.duration > 0) {
               setDuracaoTotal(Math.round(el.duration));
             }
-            if (tempoInicial && tempoInicial > 0) {
-              el.currentTime = tempoInicial;
+            if (tempoInicialMontagemRef.current && tempoInicialMontagemRef.current > 0) {
+              el.currentTime = tempoInicialMontagemRef.current;
             }
             onReady?.();
           }}
@@ -640,10 +697,10 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
               e.stopPropagation();
               alternarPlayPause();
             }}
-            className="w-20 h-20 rounded-full bg-gradient-to-tr from-amber-500 to-amber-400 text-graphite-950 flex items-center justify-center shadow-2xl shadow-amber-500/40 hover:scale-110 active:scale-95 transition-all duration-200 border-2 border-white/20 cursor-pointer"
+            className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-amber-500 to-amber-400 text-graphite-950 flex items-center justify-center shadow-2xl shadow-amber-500/40 hover:scale-110 active:scale-95 transition-all duration-200 border-2 border-white/20 cursor-pointer"
             title="Reproduzir video"
           >
-            <Play className="w-9 h-9 fill-current ml-1" />
+            <Play className="w-6 h-6 sm:w-9 sm:h-9 fill-current ml-0.5 sm:ml-1" />
           </button>
         )}
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Minimize2,
@@ -54,6 +54,11 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Rastreamento de progresso (% assistida)
   const [segundosAssistidos, setSegundosAssistidos] = useState(0);
+  const segundosAssistidosRef = useRef(0);
+
+  useEffect(() => {
+    segundosAssistidosRef.current = segundosAssistidos;
+  }, [segundosAssistidos]);
   const [duracaoTotalSegundos, setDuracaoTotalSegundos] = useState(300); // 5 min padrão
 
   // Função auxiliar robusta para verificar se o usuário autenticado é Super Admin / Platform Admin
@@ -253,11 +258,12 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
       porcentagem: number;
       estaReproduzindo: boolean;
     }) => {
+      segundosAssistidosRef.current = dados.segundosAssistidos;
       setSegundosAssistidos(dados.segundosAssistidos);
       if (dados.duracaoTotal > 0) {
         setDuracaoTotalSegundos(dados.duracaoTotal);
       }
-      if (storageKeyTempo && dados.segundosAssistidos > 0 && true) {
+      if (storageKeyTempo && dados.segundosAssistidos > 0) {
         localStorage.setItem(storageKeyTempo, dados.segundosAssistidos.toString());
       }
     },
@@ -273,8 +279,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Transição do modal para botão flutuante ao fechar ou minimizar
   const handleMinimizarParaFlutuante = () => {
-    if (storageKeyTempo && segundosAssistidos > 0) {
-      localStorage.setItem(storageKeyTempo, segundosAssistidos.toString());
+    const tempoAtual = segundosAssistidosRef.current || segundosAssistidos;
+    if (storageKeyTempo && tempoAtual > 0) {
+      localStorage.setItem(storageKeyTempo, tempoAtual.toString());
     }
     setModoVisual('flutuante');
     sessionStorage.setItem(storageKeyModo, 'flutuante');
@@ -282,6 +289,10 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Reabertura do modal completo ao clicar no botão flutuante
   const handleExpandirParaModal = () => {
+    const tempoAtual = segundosAssistidosRef.current || segundosAssistidos;
+    if (storageKeyTempo && tempoAtual > 0) {
+      localStorage.setItem(storageKeyTempo, tempoAtual.toString());
+    }
     setModoVisual('modal');
     sessionStorage.setItem(storageKeyModo, 'modal');
   };
@@ -320,8 +331,9 @@ export const ModalOnboardingVideoFlutuante: React.FC<ModalOnboardingVideoFlutuan
 
   // Atalho para navegar até as seções cruciais de configuração (minimiza para botão flutuante)
   const handleIrPara = (caminho: string) => {
-    if (storageKeyTempo && segundosAssistidos > 0) {
-      localStorage.setItem(storageKeyTempo, segundosAssistidos.toString());
+    const tempoAtual = segundosAssistidosRef.current || segundosAssistidos;
+    if (storageKeyTempo && tempoAtual > 0) {
+      localStorage.setItem(storageKeyTempo, tempoAtual.toString());
     }
     handleMinimizarParaFlutuante();
     navigate(caminho);
