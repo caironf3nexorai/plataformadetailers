@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { analisarUrlVideo, formatarTempoVideo } from './PlayerVideoSeguro';
 
 describe('PlayerVideoSeguro - Utilitários de Segurança e Extração de URL', () => {

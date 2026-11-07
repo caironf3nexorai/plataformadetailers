@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Extrator de URL de Vídeo para Módulo de Treinamento e Aulas
  * Suporta links normais, encurtados, embed do YouTube, Vimeo e Arquivos Nativos Diretos (.mp4 / Storage).
  * 

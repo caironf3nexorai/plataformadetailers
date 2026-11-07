@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { parseVideoUrl, getEmbedUrl } from './videoExtractor';
 
 describe('videoExtractor - Suporte Híbrido: YouTube, Vimeo e Arquivos Nativos MP4', () => {

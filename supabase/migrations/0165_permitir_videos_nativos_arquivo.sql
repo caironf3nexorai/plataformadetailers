@@ -1,4 +1,4 @@
-﻿-- ==============================================================================
+-- ==============================================================================
 -- MIGRACAO 0165: SUPORTE A VIDEOS NATIVOS HOSPEDADOS (MP4/WEBM/STORAGE)
 -- ==============================================================================
 -- Permite que videos de treinamento sejam hospedados nativamente na plataforma
