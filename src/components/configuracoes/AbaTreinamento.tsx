@@ -108,8 +108,8 @@ export const AbaTreinamento: React.FC = () => {
         return;
       }
 
-      // 2. Fallback direto via tabelas se a RPC nÃ£o responder
-      console.warn('[AbaTreinamento] RPC falhou ou nÃ£o existe, realizando consulta direta:', rpcErr?.message);
+      // 2. Fallback direto via tabelas se a RPC não responder
+      console.warn('[AbaTreinamento] RPC falhou ou não existe, realizando consulta direta:', rpcErr?.message);
 
       const { data: vids, error: vidsErr } = await supabase
         .from('treinamentos')
@@ -170,7 +170,7 @@ export const AbaTreinamento: React.FC = () => {
     if (e) e.stopPropagation();
     const novoStatus = !treinamento.concluido;
 
-    // AtualizaÃ§Ã£o otimista na UI
+    // Atualização otimista na UI
     setTreinamentos(prev => prev.map(item => 
       item.id === treinamento.id ? { ...item, concluido: novoStatus } : item
     ));
@@ -207,7 +207,7 @@ export const AbaTreinamento: React.FC = () => {
     }
   };
 
-  // Filtra apenas vÃ­deos disponÃ­veis para o plano atual para calcular a barra de progresso
+  // Filtra apenas vídeos disponíveis para o plano atual para calcular a barra de progresso
   const disponiveis = treinamentos.filter(t => t.disponivel_no_plano_atual);
   const concluidosCount = disponiveis.filter(t => t.concluido).length;
   const progressoPercent = disponiveis.length > 0 ? Math.round((concluidosCount / disponiveis.length) * 100) : 0;
@@ -217,9 +217,9 @@ export const AbaTreinamento: React.FC = () => {
     return (
       <Card className="p-8 bg-graphite-900 border-graphite-800 text-center flex flex-col items-center justify-center gap-3">
         <Lock size={48} className="text-amber-500" />
-        <h3 className="text-base font-bold text-vapor-200">MÃ³dulo de Treinamentos Bloqueado</h3>
+        <h3 className="text-base font-bold text-vapor-200">Módulo de Treinamentos Bloqueado</h3>
         <p className="text-xs text-vapor-400 max-w-md">
-          A Ã¡rea de treinamentos e capacitaÃ§Ã£o nÃ£o estÃ¡ habilitada para o plano atual da sua oficina ({nomePlano}). FaÃ§a upgrade do plano para liberar acesso a todas as videoaulas.
+          A área de treinamentos e capacitação não está habilitada para o plano atual da sua oficina ({nomePlano}). Faça upgrade do plano para liberar acesso a todas as videoaulas.
         </p>
       </Card>
     );
@@ -227,16 +227,16 @@ export const AbaTreinamento: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* CabeÃ§alho do MÃ³dulo & Barra de Progresso */}
+      {/* Cabeçalho do Módulo & Barra de Progresso */}
       <div className="bg-graphite-800 p-5 rounded-2xl border border-graphite-600 space-y-4 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
             <h3 className="font-display text-lg text-vapor-100 font-bold flex items-center gap-2">
               <Tv className="text-amber-500" size={20} />
-              <span>Treinamentos e CapacitaÃ§Ã£o da Oficina</span>
+              <span>Treinamentos e Capacitação da Oficina</span>
             </h3>
             <p className="text-vapor-400 text-xs leading-relaxed">
-              Aprenda a utilizar os mÃ³dulos do sistema e capacite sua equipe para acelerar os resultados da oficina.
+              Aprenda a utilizar os módulos do sistema e capacite sua equipe para acelerar os resultados da oficina.
             </p>
           </div>
 
@@ -250,7 +250,7 @@ export const AbaTreinamento: React.FC = () => {
           <div className="space-y-1.5 bg-graphite-900 p-4 rounded-xl border border-graphite-700/60">
             <div className="flex justify-between items-center text-xs font-mono">
               <span className="text-vapor-300 font-medium">Seu Progresso nos Treinamentos:</span>
-              <span className="text-amber-400 font-bold">{concluidosCount} de {disponiveis.length} concluÃ­dos ({progressoPercent}%)</span>
+              <span className="text-amber-400 font-bold">{concluidosCount} de {disponiveis.length} concluídos ({progressoPercent}%)</span>
             </div>
 
             <div className="w-full h-2.5 bg-graphite-800 rounded-full overflow-hidden border border-graphite-700">
@@ -271,14 +271,14 @@ export const AbaTreinamento: React.FC = () => {
 
       {loading ? (
         <Card className="p-12 text-center text-vapor-400 font-mono bg-graphite-800 border-graphite-600">
-          Carregando catÃ¡logo de treinamentos...
+          Carregando catálogo de treinamentos...
         </Card>
       ) : treinamentos.length === 0 ? (
         <Card className="p-8 text-center bg-graphite-800 border-graphite-600 space-y-3">
           <Info size={32} className="mx-auto text-amber-500" />
-          <h4 className="font-display font-bold text-vapor-100 text-base">Nenhum treinamento disponÃ­vel no momento</h4>
+          <h4 className="font-display font-bold text-vapor-100 text-base">Nenhum treinamento disponível no momento</h4>
           <p className="text-vapor-400 text-xs max-w-md mx-auto">
-            Os vÃ­deos de capacitaÃ§Ã£o estÃ£o sendo preparados pela nossa equipe. Em breve novos conteÃºdos estarÃ£o disponÃ­veis aqui.
+            Os vídeos de capacitação estão sendo preparados pela nossa equipe. Em breve novos conteúdos estarão disponíveis aqui.
           </p>
         </Card>
       ) : (
@@ -306,7 +306,7 @@ export const AbaTreinamento: React.FC = () => {
           )}
         </div>
 
-        {/* PÃ­lulas de Categoria */}
+        {/* Pílulas de Categoria */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           <button
             type="button"
@@ -407,12 +407,12 @@ export const AbaTreinamento: React.FC = () => {
                               </h5>
                             </div>
 
-                            {/* Marca de ConcluÃ­do Toggle */}
+                            {/* Marca de Concluído Toggle */}
                             {!bloquado && (
                               <button
                                 type="button"
                                 onClick={(e) => handleToggleConcluido(item, e)}
-                                title={item.concluido ? 'Marcar como nÃ£o assistido' : 'Marcar como assistido'}
+                                title={item.concluido ? 'Marcar como não assistido' : 'Marcar como assistido'}
                                 className={`p-1.5 rounded-lg border transition-colors shrink-0 ${
                                   item.concluido
                                     ? 'bg-mint-500/10 text-mint-400 border-mint-500/40'
@@ -431,7 +431,7 @@ export const AbaTreinamento: React.FC = () => {
                           )}
                         </div>
 
-                        {/* RodapÃ© do Card do VÃ­deo */}
+                        {/* Rodapé do Card do Vídeo */}
                         <div className="flex items-center justify-between text-[11px] font-mono text-vapor-400 pt-2 border-t border-graphite-700/60">
                           <div className="flex items-center gap-3">
                             <span className="flex items-center gap-1">
@@ -447,7 +447,7 @@ export const AbaTreinamento: React.FC = () => {
 
                           {bloquado ? (
                             <span className="text-amber-400 font-bold flex items-center gap-1">
-                              <span>DisponÃ­vel no plano superior</span>
+                              <span>Disponível no plano superior</span>
                               <Lock size={12} />
                             </span>
                           ) : item.concluido ? (
@@ -473,7 +473,7 @@ export const AbaTreinamento: React.FC = () => {
       </>
       )}
 
-      {/* MODAL PLAYER DE VÃDEO (DOMÃNIO SEM COOKIES) */}
+      {/* MODAL PLAYER DE VÍDEO (DOMÍNIO SEM COOKIES) */}
       {activeVideo && (
         <div className="fixed inset-0 bg-graphite-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="bg-graphite-800 border border-graphite-600 rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-2xl relative">
@@ -487,7 +487,7 @@ export const AbaTreinamento: React.FC = () => {
                     </span>
                   )}
                 </h4>
-                <p className="text-vapor-400 text-xs">{activeVideo.categoria} â€¢ {activeVideo.duracao_minutos} minutos</p>
+                <p className="text-vapor-400 text-xs">{activeVideo.categoria} • {activeVideo.duracao_minutos} minutos</p>
               </div>
 
               <button 
@@ -498,7 +498,7 @@ export const AbaTreinamento: React.FC = () => {
               </button>
             </div>
 
-            {/* Player do VÃ­deo Seguro com Camuflagem e Escudo Anti-Fuga */}
+            {/* Player do Vídeo Seguro com Camuflagem e Escudo Anti-Fuga */}
             <PlayerVideoSeguro
               url={activeVideo.url || (activeVideo.plataforma === 'youtube' ? `https://www.youtube.com/watch?v=${activeVideo.video_id}` : activeVideo.video_id || '')}
               titulo={activeVideo.titulo}
@@ -531,11 +531,11 @@ export const AbaTreinamento: React.FC = () => {
                 }`}
               >
                 <CheckCircle2 size={16} />
-                <span>{activeVideo.concluido ? 'ConcluÃ­do (Clique para desmarcar)' : 'Marcar como Assistido'}</span>
+                <span>{activeVideo.concluido ? 'Concluído (Clique para desmarcar)' : 'Marcar como Assistido'}</span>
               </button>
 
               <Button variant="secondary" onClick={() => setActiveVideo(null)} className="text-xs">
-                Fechar VÃ­deo
+                Fechar Vídeo
               </Button>
             </div>
           </div>
@@ -562,13 +562,13 @@ export const AbaTreinamento: React.FC = () => {
                 Treinamento Exclusivo para Planos Avancados
               </h4>
               <p className="text-vapor-400 text-xs leading-relaxed">
-                O vÃ­deo <strong>"{upgradeModal.titulo}"</strong> estÃ¡ disponÃ­vel para oficinas nos planos Pro ou Studio.
+                O vídeo <strong>"{upgradeModal.titulo}"</strong> está disponível para oficinas nos planos Pro ou Studio.
               </p>
             </div>
 
             <div className="bg-graphite-900 p-4 rounded-xl border border-graphite-700 text-xs text-vapor-300 text-left space-y-1">
               <p className="font-bold text-amber-400">Por que fazer upgrade?</p>
-              <p>AlÃ©m de treinamentos avanÃ§ados de gestÃ£o, vocÃª libera ferramentas de cronÃ´metro com mÃºltiplos operadores, relatÃ³rios financeiros detalhados e WhatsApp ilimitado.</p>
+              <p>Além de treinamentos avançados de gestão, você libera ferramentas de cronômetro com múltiplos operadores, relatórios financeiros detalhados e WhatsApp ilimitado.</p>
             </div>
 
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2">

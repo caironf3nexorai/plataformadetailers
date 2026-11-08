@@ -25,12 +25,12 @@ import { PlayerVideoSeguro } from '../../components/video/PlayerVideoSeguro';
 import { AdminAbaMateriaisDidaticos } from '../../components/admin/AdminAbaMateriaisDidaticos';
 
 export const CATEGORIAS_PADRAO_ACADEMIA = [
-  'InÃ­cio / Primeiros Passos',
-  'Curso de RestauraÃ§Ã£o de Farol',
+  'Início / Primeiros Passos',
+  'Curso de Restauração de Farol',
   'Curso de Polimento Automotivo',
-  'VitrificaÃ§Ã£o & ProteÃ§Ã£o',
-  'HigienizaÃ§Ã£o Interna',
-  'GestÃ£o, Vendas & PrecificaÃ§Ã£o',
+  'Vitrificação & Proteção',
+  'Higienização Interna',
+  'Gestão, Vendas & Precificação',
   'Geral'
 ];
 
@@ -79,7 +79,7 @@ export const AdminTreinamentos: React.FC = () => {
   // Video Preview
   const [previewVideo, setPreviewVideo] = useState<AdminTreinamentoItem | null>(null);
 
-  // Modal de ExclusÃ£o Segura
+  // Modal de Exclusão Segura
   const [treinamentoParaExcluir, setTreinamentoParaExcluir] = useState<AdminTreinamentoItem | null>(null);
   const [deletandoTreinamento, setDeletandoTreinamento] = useState(false);
 
@@ -150,12 +150,12 @@ export const AdminTreinamentos: React.FC = () => {
     setSubmitting(true);
     setMsg(null);
 
-    // Valida extraÃ§Ã£o de vÃ­deo do YouTube/Vimeo
+    // Valida extração de vídeo do YouTube/Vimeo
     let parsed: { plataforma: 'youtube' | 'vimeo' | 'arquivo'; video_id: string };
     try {
       parsed = parseVideoUrl(url);
     } catch (err: any) {
-      setUrlParseError(err.message || 'Link de vÃ­deo nÃ£o reconhecido. Por favor, insira um link vÃ¡lido do YouTube ou Vimeo.');
+      setUrlParseError(err.message || 'Link de vídeo não reconhecido. Por favor, insira um link válido do YouTube ou Vimeo.');
       setSubmitting(false);
       return;
     }
@@ -236,7 +236,7 @@ export const AdminTreinamentos: React.FC = () => {
         p_treinamento_id: treinamentoParaExcluir.id
       });
       if (error) throw error;
-      setMsg({ type: 'success', text: `Treinamento "${treinamentoParaExcluir.titulo}" excluÃ­do com sucesso!` });
+      setMsg({ type: 'success', text: `Treinamento "${treinamentoParaExcluir.titulo}" excluído com sucesso!` });
       setTreinamentoParaExcluir(null);
       await fetchTreinamentos();
     } catch (err: any) {
@@ -254,10 +254,10 @@ export const AdminTreinamentos: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold font-heading text-white flex items-center gap-2">
             <Tv className="text-amber-500" />
-            <span>Academia Detailer & CapacitaÃ§Ã£o</span>
+            <span>Academia Detailer & Capacitação</span>
           </h1>
           <p className="text-slate-400 text-sm">
-            Gerencie aulas em vÃ­deo, e-books e materiais didÃ¡ticos para as oficinas assinantes da plataforma.
+            Gerencie aulas em vídeo, e-books e materiais didáticos para as oficinas assinantes da plataforma.
           </p>
         </div>
 
@@ -284,7 +284,7 @@ export const AdminTreinamentos: React.FC = () => {
           }`}
         >
           <Tv className="w-4 h-4" />
-          <span>Aulas em VÃ­deo ({treinamentos.length})</span>
+          <span>Aulas em Vídeo ({treinamentos.length})</span>
         </button>
 
         <button
@@ -296,7 +296,7 @@ export const AdminTreinamentos: React.FC = () => {
           }`}
         >
           <BookOpen className="w-4 h-4" />
-          <span>Materiais DidÃ¡ticos & E-books (PDF)</span>
+          <span>Materiais Didáticos & E-books (PDF)</span>
         </button>
       </div>
 
@@ -304,14 +304,14 @@ export const AdminTreinamentos: React.FC = () => {
         <AdminAbaMateriaisDidaticos isReadOnly={isReadOnly} />
       ) : (
         <>
-          {/* Nota de SeguranÃ§a sobre VÃ­deos NÃ£o Listados */}
+          {/* Nota de Segurança sobre Vídeos Não Listados */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-slate-300 text-xs sm:text-sm space-y-1">
             <p className="font-bold text-amber-400 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4" />
-              <span>Nota sobre VÃ­deos NÃ£o Listados (YouTube / Vimeo):</span>
+              <span>Nota sobre Vídeos Não Listados (YouTube / Vimeo):</span>
             </p>
             <p className="text-slate-400 leading-relaxed">
-              VÃ­deos marcados como "NÃ£o Listados" no YouTube ou Vimeo nÃ£o aparecem em pesquisas pÃºblicas, mas qualquer pessoa com o link tem acesso ao conteÃºdo. Este formato Ã© ideal para tutoriais e treinamentos operacionais do sistema.
+              Vídeos marcados como "Não Listados" no YouTube ou Vimeo não aparecem em pesquisas públicas, mas qualquer pessoa com o link tem acesso ao conteúdo. Este formato é ideal para tutoriais e treinamentos operacionais do sistema.
             </p>
           </div>
 
@@ -357,7 +357,7 @@ export const AdminTreinamentos: React.FC = () => {
       {loading ? (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500 mx-auto mb-3"></div>
-          <p className="text-sm">Carregando catÃ¡logo de treinamentos...</p>
+          <p className="text-sm">Carregando catálogo de treinamentos...</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -372,7 +372,7 @@ export const AdminTreinamentos: React.FC = () => {
             </span>
           </div>
 
-          {/* VersÃ£o em Cards para Mobile (< md) */}
+          {/* Versão em Cards para Mobile (< md) */}
           <div className="md:hidden space-y-3">
             {treinamentos.filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin).length === 0 ? (
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-500 font-mono text-xs">
@@ -383,7 +383,7 @@ export const AdminTreinamentos: React.FC = () => {
                 .filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin)
                 .map((item) => (
                   <div key={item.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-md">
-                    {/* Topo do Card: Ordem, TÃ­tulo e Essencial */}
+                    {/* Topo do Card: Ordem, Título e Essencial */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -398,11 +398,11 @@ export const AdminTreinamentos: React.FC = () => {
                           )}
                         </div>
                         <p className="text-xs text-slate-400 font-mono">
-                          {item.categoria} â€¢ {item.plataforma.toUpperCase()}
+                          {item.categoria} • {item.plataforma.toUpperCase()}
                         </p>
                       </div>
 
-                      {/* BotÃµes Reordenar */}
+                      {/* Botões Reordenar */}
                       <div className="flex items-center gap-1 font-mono text-xs bg-slate-950 p-1 rounded-lg border border-slate-800">
                         <button
                           onClick={() => handleReorder(item, -1)}
@@ -423,7 +423,7 @@ export const AdminTreinamentos: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Metadados: DuraÃ§Ã£o, Planos e Oficinas */}
+                    {/* Metadados: Duração, Planos e Oficinas */}
                     <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-800/80">
                       <div className="flex items-center gap-1.5 text-slate-300 font-mono">
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
@@ -439,7 +439,7 @@ export const AdminTreinamentos: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* RodapÃ© do Card: Status e AÃ§Ãµes */}
+                    {/* Rodapé do Card: Status e Ações */}
                     <div className="flex items-center justify-between pt-1">
                       <div className="flex items-center gap-2">
                         <button
@@ -473,7 +473,7 @@ export const AdminTreinamentos: React.FC = () => {
                         <button
                           onClick={() => setPreviewVideo(item)}
                           className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium flex items-center space-x-1 transition"
-                          title="Visualizar VÃ­deo"
+                          title="Visualizar Vídeo"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>Assistir</span>
@@ -502,7 +502,7 @@ export const AdminTreinamentos: React.FC = () => {
             )}
           </div>
 
-          {/* VersÃ£o em Tabela Completa (RolÃ¡vel em Desktop/Tablet) */}
+          {/* Versão em Tabela Completa (Rolável em Desktop/Tablet) */}
           <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
             <div className="overflow-x-auto -webkit-overflow-scrolling-touch scrollbar-thin">
               <table className="w-full min-w-[760px] text-left text-sm text-slate-300">
@@ -510,11 +510,11 @@ export const AdminTreinamentos: React.FC = () => {
                   <tr>
                     <th className="px-4 py-4 text-center">Ordem</th>
                     <th className="px-6 py-4">Treinamento / Categoria</th>
-                    <th className="px-4 py-4">DuraÃ§Ã£o</th>
+                    <th className="px-4 py-4">Duração</th>
                     <th className="px-4 py-4">Planos Permitidos</th>
                     <th className="px-6 py-4 text-center">Oficinas Engajadas</th>
                     <th className="px-4 py-4">Status</th>
-                    <th className="px-6 py-4 text-right">AÃ§Ãµes</th>
+                    <th className="px-6 py-4 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
@@ -529,7 +529,7 @@ export const AdminTreinamentos: React.FC = () => {
                       .filter((t) => !filtroCategoriaAdmin || (t.categoria || 'Geral') === filtroCategoriaAdmin)
                       .map((item) => (
                       <tr key={item.id} className="hover:bg-slate-800/40 transition">
-                        {/* BotÃµes de Reordenamento */}
+                        {/* Botões de Reordenamento */}
                         <td className="px-4 py-4 text-center">
                           <div className="flex flex-col items-center justify-center gap-1 font-mono text-xs">
                             <button
@@ -552,7 +552,7 @@ export const AdminTreinamentos: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* TÃ­tulo e Categoria */}
+                        {/* Título e Categoria */}
                         <td className="px-6 py-4">
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
@@ -564,12 +564,12 @@ export const AdminTreinamentos: React.FC = () => {
                               )}
                             </div>
                             <p className="text-xs text-slate-400 font-mono">
-                              Categoria: <span className="text-slate-300">{item.categoria}</span> â€¢ {item.plataforma.toUpperCase()} ({item.video_id})
+                              Categoria: <span className="text-slate-300">{item.categoria}</span> • {item.plataforma.toUpperCase()} ({item.video_id})
                             </p>
                           </div>
                         </td>
 
-                        {/* DuraÃ§Ã£o */}
+                        {/* Duração */}
                         <td className="px-4 py-4 font-mono text-xs text-slate-300 whitespace-nowrap">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5 text-slate-400" />
@@ -588,7 +588,7 @@ export const AdminTreinamentos: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* MÃ©trica: Oficinas Distintas Assistiram */}
+                        {/* Métrica: Oficinas Distintas Assistiram */}
                         <td className="px-6 py-4 text-center">
                           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-emerald-400 font-mono text-xs font-bold">
                             <Building2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -621,13 +621,13 @@ export const AdminTreinamentos: React.FC = () => {
                           </button>
                         </td>
 
-                        {/* AÃ§Ãµes */}
+                        {/* Ações */}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end space-x-2">
                             <button
                               onClick={() => setPreviewVideo(item)}
                               className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
-                              title="Visualizar VÃ­deo"
+                              title="Visualizar Vídeo"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
@@ -659,7 +659,7 @@ export const AdminTreinamentos: React.FC = () => {
         </div>
       )}
 
-      {/* Modal FormulÃ¡rio (Novo / Editar) */}
+      {/* Modal Formulário (Novo / Editar) */}
       {showModal && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto overflow-x-hidden my-auto">
@@ -686,19 +686,19 @@ export const AdminTreinamentos: React.FC = () => {
 
             <form onSubmit={handleSave} className="space-y-4 text-sm">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">TÃ­tulo do Treinamento *</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Título do Treinamento *</label>
                 <input
                   type="text"
                   required
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ex: Como Configurar a Tabela de ServiÃ§os e PreÃ§os"
+                  placeholder="Ex: Como Configurar a Tabela de Serviços e Preços"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Link do VÃ­deo (YouTube ou Vimeo) *</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Link do Vídeo (YouTube ou Vimeo) *</label>
                 <input
                   type="url"
                   required
@@ -711,7 +711,7 @@ export const AdminTreinamentos: React.FC = () => {
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
                 />
                 <span className="text-[11px] text-slate-500 mt-1 block">
-                  Aceita URLs normais, encurtadas (youtu.be), embed ou vimeo.com. O identificador Ã© extraÃ­do automaticamente.
+                  Aceita URLs normais, encurtadas (youtu.be), embed ou vimeo.com. O identificador é extraído automaticamente.
                 </span>
               </div>
 
@@ -747,7 +747,7 @@ export const AdminTreinamentos: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">DuraÃ§Ã£o (Minutos) *</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Duração (Minutos) *</label>
                   <input
                     type="number"
                     min={1}
@@ -759,7 +759,7 @@ export const AdminTreinamentos: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Ordem de ExibiÃ§Ã£o</label>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Ordem de Exibição</label>
                   <input
                     type="number"
                     min={0}
@@ -771,19 +771,19 @@ export const AdminTreinamentos: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">DescriÃ§Ã£o / O que o aluno vai aprender</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Descrição / O que o aluno vai aprender</label>
                 <textarea
                   rows={3}
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
-                  placeholder="Resumo do conteÃºdo apresentado na aula..."
+                  placeholder="Resumo do conteúdo apresentado na aula..."
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
                 />
               </div>
 
               {/* Escolha de Planos Permitidos */}
               <div className="space-y-1.5 p-3 bg-slate-950 border border-slate-800 rounded-lg">
-                <label className="block text-xs font-bold text-slate-300">Planos onde o vÃ­deo fica disponÃ­vel:</label>
+                <label className="block text-xs font-bold text-slate-300">Planos onde o vídeo fica disponível:</label>
                 <div className="flex items-center gap-4 text-xs font-mono text-slate-300 pt-1">
                   {['free', 'pro', 'studio'].map((planoCod) => (
                     <label key={planoCod} className="flex items-center gap-2 cursor-pointer uppercase select-none">
@@ -818,11 +818,11 @@ export const AdminTreinamentos: React.FC = () => {
                     onChange={(e) => setAtivo(e.target.checked)}
                     className="w-4 h-4 accent-amber-500 rounded"
                   />
-                  <span>Ativo no catÃ¡logo</span>
+                  <span>Ativo no catálogo</span>
                 </label>
               </div>
 
-              {/* AÃ§Ãµes do RodapÃ© (Alinhados Ã  direita e sem corte de margem) */}
+              {/* Ações do Rodapé (Alinhados à direita e sem corte de margem) */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -845,7 +845,7 @@ export const AdminTreinamentos: React.FC = () => {
         document.body
       )}
 
-      {/* Modal Preview VÃ­deo */}
+      {/* Modal Preview Vídeo */}
       {previewVideo && createPortal(
         <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto overflow-x-hidden animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-2xl relative my-auto">
@@ -860,7 +860,7 @@ export const AdminTreinamentos: React.FC = () => {
               </button>
             </div>
 
-            {/* Player do VÃ­deo Seguro com Camuflagem e Escudo Anti-Fuga */}
+            {/* Player do Vídeo Seguro com Camuflagem e Escudo Anti-Fuga */}
               <PlayerVideoSeguro
                 url={previewVideo.url || (previewVideo.plataforma === 'youtube' ? `https://www.youtube.com/watch?v=${previewVideo.video_id}` : previewVideo.video_id || '')}
                 titulo={previewVideo.titulo}
@@ -871,7 +871,7 @@ export const AdminTreinamentos: React.FC = () => {
         document.body
       )}
 
-      {/* Modal de ConfirmaÃ§Ã£o de ExclusÃ£o */}
+      {/* Modal de Confirmação de Exclusão */}
       {treinamentoParaExcluir && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative my-auto">
@@ -880,14 +880,14 @@ export const AdminTreinamentos: React.FC = () => {
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white font-heading">Excluir Aula em VÃ­deo?</h3>
-                <p className="text-xs text-slate-400">Esta aÃ§Ã£o nÃ£o poderÃ¡ ser revertida.</p>
+                <h3 className="text-lg font-bold text-white font-heading">Excluir Aula em Vídeo?</h3>
+                <p className="text-xs text-slate-400">Esta ação não poderá ser revertida.</p>
               </div>
             </div>
 
             <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs">
               <div className="text-slate-300">
-                <span className="text-slate-500">TÃ­tulo:</span>{' '}
+                <span className="text-slate-500">Título:</span>{' '}
                 <strong className="text-white">{treinamentoParaExcluir.titulo}</strong>
               </div>
               <div className="text-slate-300">
@@ -895,7 +895,7 @@ export const AdminTreinamentos: React.FC = () => {
                 <span className="text-amber-400">{treinamentoParaExcluir.categoria}</span>
               </div>
               <div className="text-slate-400 text-[11px] pt-1 border-t border-slate-800/80">
-                O vÃ­deo serÃ¡ removido permanentemente da Academia do Detailer e deixarÃ¡ de aparecer para todas as oficinas assinantes.
+                O vídeo será removido permanentemente da Academia do Detailer e deixará de aparecer para todas as oficinas assinantes.
               </div>
             </div>
 
@@ -919,7 +919,7 @@ export const AdminTreinamentos: React.FC = () => {
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    <span>Confirmar ExclusÃ£o</span>
+                    <span>Confirmar Exclusão</span>
                   </>
                 )}
               </button>
