@@ -13,42 +13,71 @@ declare global {
   }
 }
 
-let metaInitialized = false;
+const initializedMetaPixels = new Set<string>();
 let googleInitialized = false;
 let tiktokInitialized = false;
 
 /**
- * Inicializa dinamicamente o Meta (Facebook) Pixel
+ * Retorna os IDs de Meta Pixel já inicializados na sessão
  */
-export function initMetaPixel(pixelId: string | null | undefined): void {
-  if (!pixelId || typeof window === 'undefined') return;
-  const cleanId = pixelId.trim();
-  if (!cleanId || metaInitialized) return;
+export function getInitializedMetaPixels(): string[] {
+  return Array.from(initializedMetaPixels);
+}
+
+/**
+ * Inicializa dinamicamente o Meta (Facebook) Pixel.
+ * Suporta um único ID, múltiplos IDs separados por vírgula/espaço/ponto-e-vírgula, ou array de IDs.
+ * Quando múltiplos pixels são inicializados, a biblioteca nativa do Meta (fbq)
+ * envia os eventos (PageView, CompleteRegistration, Lead, Purchase, etc.) simultaneamente para todas as contas de anúncio.
+ */
+export function initMetaPixel(pixelInput: string | string[] | null | undefined): void {
+  if (!pixelInput || typeof window === 'undefined') return;
+
+  const rawList = Array.isArray(pixelInput)
+    ? pixelInput
+    : String(pixelInput).split(/[,;\s]+/);
+
+  const cleanIds = rawList
+    .map((id) => (id ? String(id).trim() : ''))
+    .filter((id) => id.length > 0 && /^\d+$/.test(id));
+
+  if (cleanIds.length === 0) return;
 
   try {
     /* eslint-disable */
-    (function (f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
-      if (f.fbq) return;
-      n = f.fbq = function () {
-        n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
-      };
-      if (!f._fbq) f._fbq = n;
-      n.push = n;
-      n.loaded = !0;
-      n.version = '2.0';
-      n.queue = [];
-      t = b.createElement(e);
-      t.async = !0;
-      t.src = v;
-      s = b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t, s);
-    })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    if (!window.fbq) {
+      (function (f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
+        if (f.fbq) return;
+        n = f.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = !0;
+        n.version = '2.0';
+        n.queue = [];
+        t = b.createElement(e);
+        t.async = !0;
+        t.src = v;
+        s = b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t, s);
+      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    }
     /* eslint-enable */
 
-    window.fbq('init', cleanId);
-    window.fbq('track', 'PageView');
-    metaInitialized = true;
-    console.log(`[Marketing] Meta Pixel ${cleanId} inicializado com sucesso.`);
+    let novosInicializados = 0;
+    for (const id of cleanIds) {
+      if (!initializedMetaPixels.has(id)) {
+        window.fbq('init', id);
+        initializedMetaPixels.add(id);
+        novosInicializados++;
+        console.log(`[Marketing] Meta Pixel ${id} inicializado com sucesso.`);
+      }
+    }
+
+    if (novosInicializados > 0) {
+      window.fbq('track', 'PageView');
+    }
   } catch (err) {
     console.warn('[Marketing] Falha ao inicializar Meta Pixel:', err);
   }

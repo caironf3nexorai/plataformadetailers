@@ -539,17 +539,17 @@ export const AdminCampanhas: React.FC = () => {
                     <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                     Meta Pixel ID (Facebook / Instagram Ads)
                   </label>
-                  <span className="text-[10px] font-mono text-slate-500">Ex: 948123049182301</span>
+                  <span className="text-[10px] font-mono text-slate-500">Suporta múltiplos IDs (separados por vírgula)</span>
                 </div>
                 <input
                   type="text"
-                  placeholder="Cole aqui o ID do Pixel do Facebook..."
+                  placeholder="Ex: 1148159047650275, 987654321012345"
                   value={metaPixelId}
                   onChange={(e) => setMetaPixelId(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
                 />
                 <span className="text-[10px] text-slate-400">
-                  Dispara automaticamente <strong>CompleteRegistration</strong> no cadastro de novas contas.
+                  Insira um ou mais IDs separados por vírgula. Os eventos (<strong>PageView</strong>, <strong>CompleteRegistration</strong>) serão enviados para todas as contas simultaneamente.
                 </span>
               </div>
 
