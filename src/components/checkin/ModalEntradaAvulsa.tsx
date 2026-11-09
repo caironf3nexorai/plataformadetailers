@@ -593,7 +593,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
                 />
                 <input
                   type="text"
-                  placeholder="Telefone (WhatsApp)"
+                  placeholder="Telefone / WhatsApp (opcional)"
                   value={novoClienteTelefone}
                   onChange={(e) => setNovoClienteTelefone(e.target.value)}
                   className="bg-graphite-950 border border-graphite-700 rounded p-2.5 text-vapor-100 font-sans text-[14px]"

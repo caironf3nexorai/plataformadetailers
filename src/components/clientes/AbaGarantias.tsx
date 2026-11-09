@@ -43,7 +43,7 @@ interface GarantiaItem {
   cliente?: {
     id: string;
     nome: string;
-    telefone: string;
+    telefone?: string | null;
     documento?: string | null;
   } | null;
   veiculo?: {
@@ -221,7 +221,7 @@ export const AbaGarantias: React.FC<AbaGarantiasProps> = ({ onTotalGarantiasChan
     return (
       g.codigo.toLowerCase().includes(q) ||
       g.cliente?.nome.toLowerCase().includes(q) ||
-      g.cliente?.telefone.includes(q) ||
+      g.cliente?.telefone?.includes(q) ||
       g.veiculo?.modelo.toLowerCase().includes(q) ||
       g.veiculo?.placa.toLowerCase().includes(q) ||
       g.servico_nome.toLowerCase().includes(q) ||

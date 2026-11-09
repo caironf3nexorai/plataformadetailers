@@ -39,7 +39,7 @@ export interface GarantiaItem {
   cliente?: {
     id: string;
     nome: string;
-    telefone: string;
+    telefone?: string | null;
     documento?: string | null;
   } | null;
   veiculo?: {

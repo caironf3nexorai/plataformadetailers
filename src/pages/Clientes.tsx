@@ -88,7 +88,7 @@ export const Clientes: React.FC = () => {
         if (rawData) {
           const filtered = (rawData as Cliente[]).filter((c) => {
             const matchesNome = c.nome.toLowerCase().includes(q);
-            const matchesTel = cleanDigits ? c.telefone.replace(/\D/g, '').includes(cleanDigits) : false;
+            const matchesTel = cleanDigits ? (c.telefone || '').replace(/\D/g, '').includes(cleanDigits) : false;
             const matchesPlaca = c.veiculos?.some((v) =>
               v.placa.toUpperCase().includes(cleanPlaca)
             );
@@ -320,7 +320,9 @@ export const Clientes: React.FC = () => {
 
                   <div className="flex items-center gap-2 text-vapor-400 font-mono text-[13px]">
                     <Phone size={14} className="shrink-0 text-vapor-400" />
-                    <span>{cliente.telefone}</span>
+                    <span className={cliente.telefone ? '' : 'italic text-vapor-500'}>
+                      {cliente.telefone || 'Sem telefone'}
+                    </span>
                   </div>
                 </div>
 

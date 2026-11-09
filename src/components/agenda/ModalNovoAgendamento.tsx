@@ -495,7 +495,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
         .insert({
           tenant_id: tenant.id,
           nome: novoClienteNome.trim(),
-          telefone: novoClienteTelefone.trim()
+          telefone: novoClienteTelefone.trim() || null
         })
         .select('id, nome, telefone, veiculos(id, placa, modelo, marca, cor, categoria_id, categorias_veiculo(id, nome))')
         .single();
@@ -625,7 +625,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                   />
                   <input
                     type="text"
-                    placeholder="Telefone (com DDD)"
+                    placeholder="Telefone / WhatsApp (opcional)"
                     value={novoClienteTelefone}
                     onChange={(e) => setNovoClienteTelefone(e.target.value)}
                     className="w-full bg-graphite-900 border border-graphite-700 rounded px-3 py-2 text-vapor-100 font-sans text-[13px] outline-none focus:border-amber-500 min-h-[44px]"

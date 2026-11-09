@@ -12,7 +12,7 @@ export interface Cliente {
   id: string;
   tenant_id: string;
   nome: string;
-  telefone: string;
+  telefone?: string | null;
   email?: string | null;
   documento?: string | null;
   observacoes?: string | null;

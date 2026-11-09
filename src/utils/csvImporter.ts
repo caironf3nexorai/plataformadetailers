@@ -118,7 +118,7 @@ export function removerAcentosECharsEspeciais(str: string): string {
     .trim();
 }
 
-export function normalizarTelefoneCSV(tel: string): string {
+export function normalizarTelefoneCSV(tel?: string | null): string {
   if (!tel) return '';
   let digits = tel.replace(/\D/g, '');
   if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {

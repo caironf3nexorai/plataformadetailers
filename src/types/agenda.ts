@@ -91,7 +91,7 @@ export interface Agendamento {
   cliente?: {
     id: string;
     nome: string;
-    telefone: string;
+    telefone?: string | null;
   };
   veiculo?: {
     id: string;

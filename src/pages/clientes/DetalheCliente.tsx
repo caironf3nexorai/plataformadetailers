@@ -41,6 +41,7 @@ export const DetalheCliente: React.FC = () => {
   // Form de edição do cliente
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [semCelular, setSemCelular] = useState(false);
   const [email, setEmail] = useState('');
   const [documento, setDocumento] = useState('');
   const [observacoes, setObservacoes] = useState('');
@@ -84,6 +85,7 @@ export const DetalheCliente: React.FC = () => {
       setCliente(clientObj);
       setNome(clientObj.nome);
       setTelefone(formatTelefone(clientObj.telefone));
+      setSemCelular(!clientObj.telefone);
       setEmail(clientObj.email || '');
       setDocumento(docVal);
       setObservacoes(clientObj.observacoes || '');
@@ -134,6 +136,23 @@ export const DetalheCliente: React.FC = () => {
   const handleSalvarCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOperador || !cliente) return;
+
+    const telTrim = semCelular ? '' : telefone.trim();
+    const telDigits = telTrim.replace(/\D/g, '');
+
+    if (!nome.trim()) {
+      setFeedbackMsg({ type: 'error', text: 'Nome do cliente é obrigatório.' });
+      return;
+    }
+
+    if (telTrim && telDigits.length < 8) {
+      setFeedbackMsg({
+        type: 'error',
+        text: 'Informe um telefone / WhatsApp válido (mín. 8 dígitos) ou marque que não possui celular.',
+      });
+      return;
+    }
+
     setSavingCliente(true);
     setFeedbackMsg(null);
 
@@ -142,7 +161,7 @@ export const DetalheCliente: React.FC = () => {
         .from('clientes')
         .update({
           nome: nome.trim(),
-          telefone: telefone.trim(),
+          telefone: telTrim || null,
           email: email.trim() || null,
           documento: documento.trim() || null,
           observacoes: observacoes.trim() || null,
@@ -204,12 +223,13 @@ export const DetalheCliente: React.FC = () => {
 
       const { data: _vId, error } = await supabase.rpc('cadastro_rapido', {
         p_nome: cliente.nome,
-        p_telefone: cliente.telefone,
+        p_telefone: cliente.telefone || null,
         p_placa: cleanPlaca,
         p_categoria: vCategoriaId,
         p_marca: vMarca.trim() || null,
         p_modelo: vModelo.trim() || null,
         p_cor: vCor.trim() || null,
+        p_cliente_id: cliente.id,
       });
 
       if (error) {
@@ -270,7 +290,9 @@ export const DetalheCliente: React.FC = () => {
       {/* Header com Ações Rápida (WhatsApp, Desativar) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-graphite-800 border border-graphite-600 rounded-lg shadow-md">
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[16px] text-amber-500 font-bold">{cliente.telefone}</span>
+          <span className={`font-mono font-bold ${cliente.telefone ? 'text-[16px] text-amber-500' : 'text-[14px] text-vapor-400 italic font-normal'}`}>
+            {cliente.telefone || 'Sem telefone cadastrado'}
+          </span>
           <Badge tone={cliente.origem === 'online' ? 'mint' : 'glass'}>
             {cliente.origem.toUpperCase()}
           </Badge>
@@ -333,16 +355,34 @@ export const DetalheCliente: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="font-sans text-[13px] text-vapor-400 font-medium">Telefone / WhatsApp *</label>
+            <label className="font-sans text-[13px] text-vapor-400 font-medium">Telefone / WhatsApp (Opcional)</label>
             <Input
               type="tel"
               inputMode="tel"
+              placeholder={semCelular ? 'Sem celular / WhatsApp' : '(11) 99999-9999'}
               value={telefone}
               onChange={(e) => setTelefone(formatTelefone(e.target.value))}
-              disabled={isOperador || savingCliente}
-              required
-              className="min-h-[44px] font-mono"
+              disabled={isOperador || savingCliente || semCelular}
+              className="min-h-[44px] font-mono disabled:opacity-50"
             />
+            {!isOperador && (
+              <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                <input
+                  type="checkbox"
+                  checked={semCelular}
+                  disabled={savingCliente}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSemCelular(checked);
+                    if (checked) setTelefone('');
+                  }}
+                  className="w-4 h-4 accent-amber-500 rounded bg-graphite-900 border-graphite-600"
+                />
+                <span className="font-sans text-[12px] text-vapor-300">
+                  Cliente não possui celular / WhatsApp
+                </span>
+              </label>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">

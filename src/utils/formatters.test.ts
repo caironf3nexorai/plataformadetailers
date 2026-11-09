@@ -29,11 +29,23 @@ describe('formatTelefone', () => {
   it('deve formatar telefones fixos de 10 dígitos', () => {
     expect(formatTelefone('1133334444')).toBe('(11) 3333-4444');
   });
+
+  it('deve lidar com valores nulos, indefinidos ou vazios sem erro', () => {
+    expect(formatTelefone('')).toBe('');
+    expect(formatTelefone(null)).toBe('');
+    expect(formatTelefone(undefined)).toBe('');
+  });
 });
 
 describe('cleanTelefone', () => {
   it('deve remover caracteres não numéricos', () => {
     expect(cleanTelefone('(11) 99999-8888')).toBe('11999998888');
+  });
+
+  it('deve retornar string vazia para valores nulos, indefinidos ou vazios', () => {
+    expect(cleanTelefone('')).toBe('');
+    expect(cleanTelefone(null)).toBe('');
+    expect(cleanTelefone(undefined)).toBe('');
   });
 });
 

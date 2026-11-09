@@ -35,11 +35,28 @@ import { formatarTelefoneWhatsapp } from '../utils/whatsapp';
 import { getFotoPublicUrl } from '../utils/imagens';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../utils/pdfOrcamento';
 import { gerarQrCodeUrl } from '../utils/qrCodeSvg';
-import { 
-  TERMO_RESPONSABILIDADE_PADRAO, 
-  gerarTermoDinamicoServicos, 
-  type ServicoParaTermo 
+import {
+  TERMO_RESPONSABILIDADE_PADRAO,
+  gerarTermoDinamicoServicos,
+  type ServicoParaTermo,
 } from '../types/termos';
+import { isNomeClienteValido, obterNomePreferencialPublico } from '../utils/orcamento';
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Falha ao processar imagem da assinatura.'));
+    reader.readAsDataURL(blob);
+  });
+
+const shouldUpgradeShortName = (current: string, incoming: string): boolean => {
+  const cur = current.trim();
+  const inc = incoming.trim();
+  if (!isNomeClienteValido(inc)) return false;
+  if (!isNomeClienteValido(cur)) return true;
+  return !cur.includes(' ') && inc.includes(' ') && inc.toLowerCase().startsWith(`${cur.toLowerCase()} `);
+};
 
 export const OrcamentoPublico: React.FC = () => {
   const { token } = useParams<{ token: string }>();
@@ -73,6 +90,7 @@ export const OrcamentoPublico: React.FC = () => {
   // Dados complementares para Opção B (quando orçamento foi criado sem cliente cadastrado)
   const [clienteNomePublico, setClienteNomePublico] = useState<string>('');
   const [clienteTelefonePublico, setClienteTelefonePublico] = useState<string>('');
+  const [semCelularPublico, setSemCelularPublico] = useState<boolean>(false);
   const [veiculoModeloPublico, setVeiculoModeloPublico] = useState<string>('');
   const [veiculoPlacaPublico, setVeiculoPlacaPublico] = useState<string>('');
 
@@ -90,11 +108,13 @@ export const OrcamentoPublico: React.FC = () => {
   // Estados de Assinatura Digital no Aceite
   const [showModalAceiteAssinatura, setShowModalAceiteAssinatura] = useState<boolean>(false);
   const [nivelPendenteAceite, setNivelPendenteAceite] = useState<TipoNivelOrcamento | null>(null);
+  const [erroModalAssinatura, setErroModalAssinatura] = useState<string | null>(null);
   const [gerandoPDF, setGerandoPDF] = useState<boolean>(false);
 
   // Estados de Assinatura Digital de Alteração
   const [nomeAssinante, setNomeAssinante] = useState<string>('');
   const [assinando, setAssinando] = useState<boolean>(false);
+  const [erroAssinaturaAlteracao, setErroAssinaturaAlteracao] = useState<string | null>(null);
 
   // Helper para sanitização e validação de token UUID
   const sanitizeToken = (t?: string): string => (t ?? '').trim();
@@ -179,13 +199,17 @@ export const OrcamentoPublico: React.FC = () => {
         if (parsed.status === 'aprovado' && parsed.nivel_aprovado) {
           setEscolhaSucesso(parsed.nivel_aprovado);
         }
-        const nomeInicial = parsed.cliente_primeiro_nome || parsed.cliente_nome_avulso || '';
-        if (nomeInicial && !nomeAssinante) {
-          setNomeAssinante(nomeInicial);
+        const nomePreferencial = obterNomePreferencialPublico(parsed);
+        if (nomePreferencial) {
+          setNomeAssinante((prev) => (shouldUpgradeShortName(prev, nomePreferencial) ? nomePreferencial : prev));
         }
         if (parsed.tem_cliente_cadastrado === false) {
-          setClienteNomePublico((prev) => prev || parsed.cliente_nome_avulso || parsed.cliente_primeiro_nome || '');
-          setClienteTelefonePublico((prev) => prev || parsed.cliente_telefone_avulso || parsed.cliente_telefone || '');
+          if (nomePreferencial) {
+            setClienteNomePublico((prev) => (shouldUpgradeShortName(prev, nomePreferencial) ? nomePreferencial : prev));
+          }
+          if (!semCelularPublico) {
+            setClienteTelefonePublico((prev) => prev || parsed.cliente_telefone_avulso || parsed.cliente_telefone || '');
+          }
           setVeiculoModeloPublico((prev) => prev || parsed.veiculo_descricao_avulsa || '');
         }
         if (parsed.incluir_fotos) {
@@ -213,6 +237,10 @@ export const OrcamentoPublico: React.FC = () => {
 
     if (aceite) {
       // Abre modal para coletar assinatura e nome antes de aprovar
+      setErroModalAssinatura(null);
+      if (!isNomeClienteValido(nomeAssinante) && isNomeClienteValido(clienteNomePublico)) {
+        setNomeAssinante(clienteNomePublico.trim());
+      }
       setNivelPendenteAceite(nivel);
       setShowModalAceiteAssinatura(true);
       return;
@@ -240,79 +268,119 @@ export const OrcamentoPublico: React.FC = () => {
   const handleConfirmarAceiteComAssinatura = async (blob: Blob) => {
     const tokenLimpo = sanitizeToken(token);
     if (!tokenLimpo || !isUuid(tokenLimpo) || !nivelPendenteAceite) return;
+
+    const nomeDigitado = nomeAssinante.trim();
+    const nomeFallback = [
+      clienteNomePublico,
+      data?.cliente_nome,
+      data?.cliente_nome_avulso,
+      data?.assinatura_nome,
+      data?.cliente_primeiro_nome,
+    ].find((n) => isNomeClienteValido(n));
+
+    if (data?.tem_cliente_cadastrado === false && !isNomeClienteValido(nomeDigitado)) {
+      setErroModalAssinatura('Informe seu nome completo acima antes de confirmar a assinatura.');
+      return;
+    }
+
+    const nomeParaAssinar = isNomeClienteValido(nomeDigitado)
+      ? nomeDigitado
+      : nomeFallback?.trim() || 'Cliente';
+
+    setErroModalAssinatura(null);
     setResponding(true);
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        try {
-          const base64data = reader.result as string;
-          const nomeParaAssinar =
-            nomeAssinante.trim() ||
-            data?.cliente_nome_avulso ||
-            data?.cliente_primeiro_nome ||
-            'Cliente';
+      const base64data = await blobToDataUrl(blob);
 
-          const { error } = await supabase.rpc('responder_orcamento', {
-            p_token: tokenLimpo,
-            p_nivel: nivelPendenteAceite,
-            p_aceite: true,
-            p_assinatura_base64: base64data,
-            p_nome_assinante: nomeParaAssinar,
-          });
+      const { error } = await supabase.rpc('responder_orcamento', {
+        p_token: tokenLimpo,
+        p_nivel: nivelPendenteAceite,
+        p_aceite: true,
+        p_assinatura_base64: base64data,
+        p_nome_assinante: nomeParaAssinar,
+      });
 
-          if (error) throw error;
+      if (error) throw error;
 
-          if (data?.tem_cliente_cadastrado === false && !clienteNomePublico.trim() && nomeAssinante.trim()) {
-            setClienteNomePublico(nomeAssinante.trim());
-          }
-
-          // Se o cliente já tinha selecionado data e horário no calendário, conclui o agendamento se dados estiverem válidos
-          if (dataSelecionada && horarioSelecionado) {
-            if (isTransbordoSlot && !transbordoAceito) {
-              setErroAgendamento('Você precisa aceitar os termos de permanência do veículo para continuar.');
-              return;
-            }
-            const nomeFinalAgend = (clienteNomePublico.trim() || nomeAssinante.trim() || data?.cliente_nome_avulso || '').trim();
-            const telFinalAgend = (clienteTelefonePublico.trim() || data?.cliente_telefone_avulso || data?.cliente_telefone || '').trim();
-            const podeAgendarAgora =
-              data?.tem_cliente_cadastrado !== false ||
-              (nomeFinalAgend.length >= 2 && telFinalAgend.replace(/\D/g, '').length >= 8);
-
-            if (podeAgendarAgora) {
-              const inicioIso = montarTimestampLocal(dataSelecionada, horarioSelecionado);
-              const { error: agErr } = await supabase.rpc('agendar_orcamento_publico', {
-                p_token: tokenLimpo,
-                p_inicio: inicioIso,
-                p_transbordo_aceito: isTransbordoSlot ? transbordoAceito : false,
-                p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-                p_ip: null,
-                p_cliente_nome: data?.tem_cliente_cadastrado === false ? nomeFinalAgend : null,
-                p_cliente_telefone: data?.tem_cliente_cadastrado === false ? telFinalAgend : null,
-                p_veiculo_modelo: data?.tem_cliente_cadastrado === false ? (veiculoModeloPublico.trim() || data?.veiculo_descricao_avulsa || null) : null,
-                p_veiculo_placa: data?.tem_cliente_cadastrado === false ? (veiculoPlacaPublico.trim().toUpperCase() || null) : null,
-              });
-              if (agErr) {
-                setErroAgendamento(agErr.message || 'Erro ao concluir o agendamento.');
-              }
-            }
-          }
-
-          setEscolhaSucesso(nivelPendenteAceite);
-          setShowModalAceiteAssinatura(false);
-          setNivelPendenteAceite(null);
-          await fetchOrcamentoPublico();
-        } catch (innerErr: any) {
-          console.error('[OrcamentoPublico] Erro ao confirmar aceite com assinatura:', innerErr);
-          setErroAgendamento(innerErr.message || 'Erro ao confirmar aceite. Tente novamente.');
-        } finally {
-          setResponding(false);
+      const nomeCapturado = isNomeClienteValido(nomeParaAssinar) ? nomeParaAssinar : '';
+      if (nomeCapturado) {
+        setNomeAssinante(nomeCapturado);
+        if (data?.tem_cliente_cadastrado === false) {
+          setClienteNomePublico((prev) => (shouldUpgradeShortName(prev, nomeCapturado) ? nomeCapturado : prev));
         }
-      };
+        setData((prev) =>
+          prev
+            ? {
+                ...prev,
+                assinatura_nome: nomeCapturado,
+                cliente_nome_avulso:
+                  prev.tem_cliente_cadastrado === false &&
+                  shouldUpgradeShortName(prev.cliente_nome_avulso || '', nomeCapturado)
+                    ? nomeCapturado
+                    : prev.cliente_nome_avulso,
+                cliente_primeiro_nome: !isNomeClienteValido(prev.cliente_primeiro_nome)
+                  ? nomeCapturado.split(/\s+/)[0]
+                  : prev.cliente_primeiro_nome,
+              }
+            : prev
+        );
+      }
+
+      // Se o cliente já tinha selecionado data e horário no calendário, conclui o agendamento se dados estiverem válidos
+      if (dataSelecionada && horarioSelecionado) {
+        if (isTransbordoSlot && !transbordoAceito) {
+          setErroAgendamento('Você precisa aceitar os termos de permanência do veículo para continuar.');
+          return;
+        }
+        const nomeFinalAgend = (
+          clienteNomePublico.trim() ||
+          nomeCapturado ||
+          data?.cliente_nome_avulso ||
+          ''
+        ).trim();
+        const telFinalAgend = semCelularPublico
+          ? ''
+          : (clienteTelefonePublico.trim() || data?.cliente_telefone_avulso || data?.cliente_telefone || '').trim();
+        const podeAgendarAgora =
+          data?.tem_cliente_cadastrado !== false ||
+          (isNomeClienteValido(nomeFinalAgend) && (semCelularPublico || telFinalAgend.replace(/\D/g, '').length >= 8));
+
+        if (podeAgendarAgora) {
+          const inicioIso = montarTimestampLocal(dataSelecionada, horarioSelecionado);
+          const { error: agErr } = await supabase.rpc('agendar_orcamento_publico', {
+            p_token: tokenLimpo,
+            p_inicio: inicioIso,
+            p_transbordo_aceito: isTransbordoSlot ? transbordoAceito : false,
+            p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+            p_ip: null,
+            p_cliente_nome: data?.tem_cliente_cadastrado === false ? nomeFinalAgend : null,
+            p_cliente_telefone: data?.tem_cliente_cadastrado === false ? telFinalAgend : null,
+            p_veiculo_modelo:
+              data?.tem_cliente_cadastrado === false
+                ? veiculoModeloPublico.trim() || data?.veiculo_descricao_avulsa || null
+                : null,
+            p_veiculo_placa:
+              data?.tem_cliente_cadastrado === false
+                ? veiculoPlacaPublico.trim().toUpperCase() || null
+                : null,
+          });
+          if (agErr) {
+            setErroAgendamento(agErr.message || 'Erro ao concluir o agendamento.');
+          }
+        }
+      }
+
+      setEscolhaSucesso(nivelPendenteAceite);
+      setShowModalAceiteAssinatura(false);
+      setNivelPendenteAceite(null);
+      await fetchOrcamentoPublico();
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao confirmar aceite com assinatura:', err);
-      setErroAgendamento(err.message || 'Erro ao confirmar aceite. Tente novamente.');
+      const msgErro = err?.message || 'Erro ao confirmar aceite. Tente novamente.';
+      setErroModalAssinatura(msgErro);
+      setErroAgendamento(msgErro);
+    } finally {
       setResponding(false);
     }
   };
@@ -344,7 +412,7 @@ export const OrcamentoPublico: React.FC = () => {
           nomeEmpresa: data.oficina?.razao_social || data.oficina?.nome || 'Oficina Especializada',
           prazoGarantia: `${data.garantia_meses || 3} meses`,
           servicoContratado: servicos.map((s) => s.nome).join(', '),
-          clienteNome: (data as any)?.cliente_nome || data.cliente_nome_avulso || data.cliente_primeiro_nome || '',
+          clienteNome: obterNomePreferencialPublico(data),
           clienteCpf: data.cliente_documento || '',
           veiculoPlaca: veicStr,
           data: data.enviado_em ? formatarData(data.enviado_em) : new Date().toLocaleDateString('pt-BR'),
@@ -470,7 +538,7 @@ export const OrcamentoPublico: React.FC = () => {
       return;
     }
 
-    // Opção B: se o orçamento foi criado sem cliente cadastrado, exige Nome e WhatsApp para fechar OS/agendamento
+    // Opção B: se o orçamento foi criado sem cliente cadastrado, exige Nome e (WhatsApp ou confirmação de que não possui celular)
     if (data?.tem_cliente_cadastrado === false) {
       const nomeTrim = clienteNomePublico.trim();
       const telDigitos = clienteTelefonePublico.replace(/\D/g, '');
@@ -478,8 +546,8 @@ export const OrcamentoPublico: React.FC = () => {
         setErroAgendamento('Informe seu nome completo para concluir o agendamento.');
         return;
       }
-      if (telDigitos.length < 8) {
-        setErroAgendamento('Informe um WhatsApp ou telefone válido (com DDD) para concluir o agendamento.');
+      if (!semCelularPublico && telDigitos.length < 8) {
+        setErroAgendamento('Informe um WhatsApp ou telefone válido (com DDD) ou marque que não possui celular.');
         return;
       }
       if (!nomeAssinante.trim()) {
@@ -489,6 +557,10 @@ export const OrcamentoPublico: React.FC = () => {
 
     // Se o orçamento ainda não possui assinatura registrada no banco, exige a assinatura primeiro!
     if (!data?.assinatura_url) {
+      setErroModalAssinatura(null);
+      if (data?.tem_cliente_cadastrado === false && isNomeClienteValido(clienteNomePublico) && shouldUpgradeShortName(nomeAssinante, clienteNomePublico)) {
+        setNomeAssinante(clienteNomePublico.trim());
+      }
       setNivelPendenteAceite(data?.nivel_aprovado || 'recomendado');
       setShowModalAceiteAssinatura(true);
       return;
@@ -507,7 +579,7 @@ export const OrcamentoPublico: React.FC = () => {
         p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
         p_ip: null,
         p_cliente_nome: data?.tem_cliente_cadastrado === false ? clienteNomePublico.trim() : null,
-        p_cliente_telefone: data?.tem_cliente_cadastrado === false ? clienteTelefonePublico.trim() : null,
+        p_cliente_telefone: data?.tem_cliente_cadastrado === false ? (semCelularPublico ? '' : clienteTelefonePublico.trim()) : null,
         p_veiculo_modelo: data?.tem_cliente_cadastrado === false ? (veiculoModeloPublico.trim() || null) : null,
         p_veiculo_placa: data?.tem_cliente_cadastrado === false ? (veiculoPlacaPublico.trim().toUpperCase() || null) : null,
       });
@@ -534,26 +606,47 @@ export const OrcamentoPublico: React.FC = () => {
   const handleSalvarAssinaturaAlteracao = async (blob: Blob) => {
     const tokenLimpo = sanitizeToken(token);
     if (!tokenLimpo || !isUuid(tokenLimpo)) return;
+
+    const nomeDigitado = nomeAssinante.trim();
+    if (data?.tem_cliente_cadastrado === false && !isNomeClienteValido(nomeDigitado)) {
+      setErroAssinaturaAlteracao('Informe seu nome completo antes de confirmar a assinatura.');
+      return;
+    }
+
+    const fallbackNome = [
+      data?.cliente_nome,
+      data?.cliente_nome_avulso,
+      data?.assinatura_nome,
+      data?.cliente_primeiro_nome,
+    ].find((n) => isNomeClienteValido(n));
+
+    const nomeFinalAssinante = isNomeClienteValido(nomeDigitado)
+      ? nomeDigitado
+      : fallbackNome?.trim() || 'Cliente';
+
+    setErroAssinaturaAlteracao(null);
     setAssinando(true);
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        const base64data = reader.result as string;
-        console.log('token:', JSON.stringify(tokenLimpo), 'tipo:', typeof tokenLimpo);
-        const { error } = await supabase.rpc('confirmar_alteracao_orcamento', {
-          p_token: tokenLimpo,
-          p_assinatura_base64: base64data,
-          p_nome_assinante: nomeAssinante || data?.cliente_primeiro_nome || 'Cliente',
-        });
+      const base64data = await blobToDataUrl(blob);
+      const { error } = await supabase.rpc('confirmar_alteracao_orcamento', {
+        p_token: tokenLimpo,
+        p_assinatura_base64: base64data,
+        p_nome_assinante: nomeFinalAssinante,
+      });
 
-        if (error) throw error;
-        await fetchOrcamentoPublico();
-      };
+      if (error) throw error;
+
+      if (data?.tem_cliente_cadastrado === false && isNomeClienteValido(nomeFinalAssinante)) {
+        setClienteNomePublico((prev) =>
+          shouldUpgradeShortName(prev, nomeFinalAssinante) ? nomeFinalAssinante : prev
+        );
+      }
+
+      await fetchOrcamentoPublico();
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao assinar alteração:', err);
-      setErroAgendamento('Erro ao confirmar assinatura: ' + (err.message || 'Tente novamente.'));
+      setErroAssinaturaAlteracao('Erro ao confirmar assinatura: ' + (err.message || 'Tente novamente.'));
     } finally {
       setAssinando(false);
     }
@@ -601,7 +694,15 @@ export const OrcamentoPublico: React.FC = () => {
   const isExpirado = data.status === 'expirado';
   const isAprovado = data.status === 'aprovado' || escolhaSucesso !== null;
   const isRecusado = data.status === 'recusado' && !isAprovado;
-  const isAgendado = !!data.agendamento;
+  const isAgendado = !!data.agendamento && data.agendamento.status !== 'cancelado';
+
+  const nomePreferencialPublico = obterNomePreferencialPublico(data);
+  const primeiroNomeSaudacao =
+    data.tem_cliente_cadastrado && isNomeClienteValido(data.cliente_primeiro_nome)
+      ? data.cliente_primeiro_nome!.trim()
+      : isNomeClienteValido(nomePreferencialPublico)
+        ? nomePreferencialPublico.split(/\s+/)[0]
+        : '';
 
   // Permite responder OU TROCAR de pacote enquanto o agendamento NÃO estiver finalizado
   const podeTrocarOuResponder = !isExpirado && !isRecusado && !isAgendado;
@@ -672,8 +773,8 @@ export const OrcamentoPublico: React.FC = () => {
         {/* SAUDAÇÃO E INFORMAÇÕES DO VEÍCULO */}
         <div className="flex flex-col gap-2 text-center sm:text-left">
           <h2 className="font-display text-[24px] sm:text-[30px] uppercase tracking-wide text-vapor-100">
-            Olá{data.cliente_primeiro_nome ? (
-              <>, <span className="text-amber-400">{data.cliente_primeiro_nome}</span></>
+            Olá{primeiroNomeSaudacao ? (
+              <>, <span className="text-amber-400">{primeiroNomeSaudacao}</span></>
             ) : null}!
           </h2>
           <p className="font-sans text-[15px] text-vapor-300">
@@ -774,11 +875,21 @@ export const OrcamentoPublico: React.FC = () => {
                 <input
                   type="text"
                   value={nomeAssinante}
-                  onChange={(e) => setNomeAssinante(e.target.value)}
+                  onChange={(e) => {
+                    setNomeAssinante(e.target.value);
+                    if (erroAssinaturaAlteracao) setErroAssinaturaAlteracao(null);
+                  }}
                   placeholder="Digite seu nome completo"
                   className="w-full bg-graphite-950 border border-graphite-700 rounded-xl px-4 py-3 text-vapor-100 font-sans text-[14px] focus:outline-none focus:border-amber-500 min-h-[48px]"
                 />
               </div>
+
+              {erroAssinaturaAlteracao && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 font-sans text-[13px] flex items-center gap-2">
+                  <AlertTriangle size={16} className="shrink-0 text-rose-400" />
+                  <span>{erroAssinaturaAlteracao}</span>
+                </div>
+              )}
 
               <div className="flex flex-col gap-2">
                 <label className="font-sans text-[13px] font-bold text-vapor-200 flex items-center gap-1.5">
@@ -795,7 +906,7 @@ export const OrcamentoPublico: React.FC = () => {
         )}
 
         {/* MENSAGEM DE AGENDAMENTO CONCLUÍDO E SINAL PIX */}
-        {isAprovado && data.agendamento && (
+        {isAprovado && isAgendado && data.agendamento && (
           <Card className="p-6 bg-graphite-900 border-2 border-emerald-500/50 rounded-2xl flex flex-col items-center text-center gap-4 shadow-2xl">
             <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center text-emerald-400">
               <CheckCircle2 size={36} />
@@ -1286,7 +1397,7 @@ export const OrcamentoPublico: React.FC = () => {
         )}
 
         {/* PARTE 2: AGENDAMENTO ONLINE DE HORÁRIO PELO CLIENTE (EXIBIDO APÓS APROVAÇÃO E SE AINDA NÃO AGENDOU) */}
-        {isAprovado && !data.agendamento && data.oficina?.orcamento_agendamento_cliente !== false && (() => {
+        {isAprovado && !isAgendado && data.oficina?.orcamento_agendamento_cliente !== false && (() => {
           const nivelAprovado = data.niveis?.find((n) => n.nivel === (data.nivel_aprovado || escolhaSucesso)) || data.niveis?.[0];
           const itensLocais: ItemAgendamentoPublico[] =
             nivelAprovado?.itens?.map((i) => ({
@@ -1358,18 +1469,40 @@ export const OrcamentoPublico: React.FC = () => {
 
                     <div className="flex flex-col gap-1">
                       <label className="font-sans text-[12px] font-bold text-vapor-200">
-                        WhatsApp / Telefone <span className="text-amber-400">*</span>
+                        WhatsApp / Telefone{' '}
+                        {semCelularPublico ? (
+                          <span className="text-vapor-400 font-normal">(Opcional)</span>
+                        ) : (
+                          <span className="text-amber-400">*</span>
+                        )}
                       </label>
                       <input
                         type="tel"
                         value={clienteTelefonePublico}
+                        disabled={semCelularPublico}
                         onChange={(e) => {
                           setClienteTelefonePublico(e.target.value);
                           if (erroAgendamento) setErroAgendamento(null);
                         }}
-                        placeholder="(11) 99999-9999"
-                        className="w-full bg-graphite-900 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
+                        placeholder={semCelularPublico ? 'Sem celular / WhatsApp' : '(11) 99999-9999'}
+                        className="w-full bg-graphite-900 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500 min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
                       />
+                      <label className="flex items-center gap-2 cursor-pointer select-none mt-1">
+                        <input
+                          type="checkbox"
+                          checked={semCelularPublico}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSemCelularPublico(checked);
+                            if (checked) setClienteTelefonePublico('');
+                            if (erroAgendamento) setErroAgendamento(null);
+                          }}
+                          className="w-4 h-4 accent-amber-500 rounded bg-graphite-900 border-graphite-600"
+                        />
+                        <span className="font-sans text-[11.5px] text-vapor-300">
+                          Não possuo celular / WhatsApp
+                        </span>
+                      </label>
                     </div>
 
                     {!data.veiculo && (
@@ -1481,14 +1614,25 @@ export const OrcamentoPublico: React.FC = () => {
         maxWidth="lg"
       >
         <div className="flex flex-col gap-4">
+          {erroModalAssinatura && (
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 font-sans text-[13px] flex items-center gap-2">
+              <AlertTriangle size={16} className="shrink-0 text-rose-400" />
+              <span>{erroModalAssinatura}</span>
+            </div>
+          )}
+
           <div className="flex flex-col gap-1.5">
             <label className="font-sans text-[13px] font-medium text-vapor-300">
-              Nome Completo do Assinante
+              Nome Completo do Assinante{' '}
+              {data.tem_cliente_cadastrado === false && <span className="text-amber-400">*</span>}
             </label>
             <input
               type="text"
               value={nomeAssinante}
-              onChange={(e) => setNomeAssinante(e.target.value)}
+              onChange={(e) => {
+                setNomeAssinante(e.target.value);
+                if (erroModalAssinatura) setErroModalAssinatura(null);
+              }}
               placeholder="Digite seu nome completo"
               className="bg-graphite-900 border border-graphite-700 rounded-lg px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500"
             />
@@ -1533,6 +1677,7 @@ export const OrcamentoPublico: React.FC = () => {
             <CanvasAssinatura
               onSaveSignature={handleConfirmarAceiteComAssinatura}
               saveButtonText="Aprovar Proposta com Assinatura"
+              disabled={responding}
             />
           </div>
         </div>

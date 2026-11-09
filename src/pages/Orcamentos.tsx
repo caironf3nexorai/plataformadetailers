@@ -30,7 +30,12 @@ import { ModalBibliotecaTermos } from '../components/termos/ModalBibliotecaTermo
 import { usePlano } from '../hooks/usePlano';
 import type { Orcamento } from '../types/orcamento';
 import type { Cliente, Veiculo, CategoriaVeiculo } from '../types/clientes';
-import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../utils/orcamento';
+import {
+  getLabelFromStatusOrcamento,
+  getBadgeToneFromStatusOrcamento,
+  obterNomeClienteOrcamento,
+  isAgendamentoOrcamentoAtivo,
+} from '../utils/orcamento';
 import { formatarData } from '../utils/datas';
 import { formatarCodigoProposta, formatarMoeda } from '../utils/formatters';
 import { formatarDuracao } from '../utils/duracao';
@@ -67,6 +72,7 @@ export const Orcamentos: React.FC = () => {
   const [modoOrcamento, setModoOrcamento] = useState<'3_niveis' | 'simples'>(temTresNiveis ? '3_niveis' : 'simples');
   const [novoNome, setNovoNome] = useState<string>('');
   const [novoTelefone, setNovoTelefone] = useState<string>('');
+  const [novoSemCelular, setNovoSemCelular] = useState<boolean>(false);
   const [novoModelo, setNovoModelo] = useState<string>('');
   const [novaCor, setNovaCor] = useState<string>('');
   const [novaPlaca, setNovaPlaca] = useState<string>('');
@@ -93,6 +99,7 @@ export const Orcamentos: React.FC = () => {
           cliente:clientes(id, nome, telefone),
           veiculo:veiculos(id, placa, modelo, marca, cor),
           categoria:categorias_veiculo(id, nome),
+          agendamento:agendamentos(id, inicio, status, numero_os),
           niveis:orcamento_niveis(id, nivel, titulo, valor_total, duracao_total, destaque)
         `)
         .eq('tenant_id', tenant.id)
@@ -216,10 +223,17 @@ export const Orcamentos: React.FC = () => {
 
       if (modoEntrada === 'rapido') {
         const temNome = Boolean(novoNome.trim());
-        const temTelefone = Boolean(novoTelefone.trim());
+        const telTrim = novoSemCelular ? '' : novoTelefone.trim();
+        const temTelefone = Boolean(telTrim);
         const temVeiculoParaCadastrar = Boolean(novoModelo.trim() || novaPlaca.trim());
 
-        if (temNome && temTelefone) {
+        if (temTelefone && telTrim.replace(/\D/g, '').length < 8) {
+          showError('Informe um WhatsApp / telefone válido (mín. 8 dígitos) ou deixe em branco.');
+          setCreating(false);
+          return;
+        }
+
+        if (temNome && (temTelefone || novoSemCelular)) {
           let cleanPlaca: string | null = null;
           if (temVeiculoParaCadastrar) {
             const rawPlaca = novaPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
@@ -231,7 +245,7 @@ export const Orcamentos: React.FC = () => {
 
           const { data: cadData, error: cadErr } = await supabase.rpc('cadastro_rapido', {
             p_nome: novoNome.trim(),
-            p_telefone: novoTelefone.trim(),
+            p_telefone: telTrim || null,
             p_placa: cleanPlaca,
             p_categoria: cleanPlaca ? finalCategoriaId : null,
             p_marca: null,
@@ -268,7 +282,7 @@ export const Orcamentos: React.FC = () => {
         p_categoria: finalCategoriaId,
         p_titulo: titulo.trim() || null,
         p_cliente_nome_avulso: !finalClienteId ? (novoNome.trim() || null) : null,
-        p_cliente_telefone_avulso: !finalClienteId ? (novoTelefone.trim() || null) : null,
+        p_cliente_telefone_avulso: !finalClienteId ? (novoSemCelular ? null : (novoTelefone.trim() || null)) : null,
         p_veiculo_descricao_avulsa: !finalVeiculoId ? (veiculoDescAvulsa || null) : null,
         p_tenant: tenant.id,
       });
@@ -322,7 +336,7 @@ export const Orcamentos: React.FC = () => {
     : '0.0';
 
   const aprovadosAguardandoAgendamento = orcamentos.filter(
-    (o) => o.status === 'aprovado' && !o.agendamento_id
+    (o) => o.status === 'aprovado' && !isAgendamentoOrcamentoAtivo(o)
   );
 
   // Filtragem da Lista
@@ -337,7 +351,7 @@ export const Orcamentos: React.FC = () => {
       const q = busca.toLowerCase().trim();
       const numStr = o.numero.toString();
       const osNumStr = o.numero_os ? o.numero_os.toString() : '';
-      const clienteNome = (o.cliente?.nome || o.cliente_nome_avulso || '').toLowerCase();
+      const clienteNome = obterNomeClienteOrcamento(o, '').toLowerCase();
       const clienteTel = (o.cliente?.telefone || o.cliente_telefone_avulso || '').toLowerCase();
       const veiculoPlaca = (o.veiculo?.placa || o.veiculo_descricao_avulsa || '').toLowerCase();
       const tituloStr = o.titulo?.toLowerCase() || '';
@@ -379,6 +393,7 @@ export const Orcamentos: React.FC = () => {
                 setTitulo('');
                 setNovoNome('');
                 setNovoTelefone('');
+                setNovoSemCelular(false);
                 setNovoModelo('');
                 setNovaCor('');
                 setNovaPlaca('');
@@ -585,7 +600,7 @@ export const Orcamentos: React.FC = () => {
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-sans text-[15px] font-bold text-vapor-100 group-hover:text-amber-400 transition-colors">
-                        {orc.cliente?.nome || orc.cliente_nome_avulso || 'Cliente não informado'}
+                        {obterNomeClienteOrcamento(orc, 'Cliente não informado')}
                       </span>
                       {!orc.cliente_id && (
                         <Badge tone="amber">Dados parciais</Badge>
@@ -622,9 +637,18 @@ export const Orcamentos: React.FC = () => {
                 {/* Lado Direito: Status, Valor de Referência e Setinha */}
                 <div className="flex items-center gap-4 shrink-0 justify-between sm:justify-end">
                   <div className="flex flex-col items-end gap-1">
-                    <Badge tone={getBadgeToneFromStatusOrcamento(orc.status)}>
-                      {getLabelFromStatusOrcamento(orc.status)}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      <Badge tone={getBadgeToneFromStatusOrcamento(orc.status)}>
+                        {getLabelFromStatusOrcamento(orc.status)}
+                      </Badge>
+                      {orc.status === 'aprovado' && (
+                        isAgendamentoOrcamentoAtivo(orc) ? (
+                          <Badge tone="cyan">OS Agendada</Badge>
+                        ) : (
+                          <Badge tone="amber">Aguardando agenda</Badge>
+                        )
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-1 font-mono text-[13px] text-vapor-300">
                       <span>{labelValor}</span>
@@ -732,7 +756,7 @@ export const Orcamentos: React.FC = () => {
                   <option value="">Sem cliente definido (preencher depois)...</option>
                   {clientes.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.nome} {c.telefone ? `(${c.telefone})` : ''}
+                      {c.nome} {c.telefone ? `(${c.telefone})` : '(Sem telefone)'}
                     </option>
                   ))}
                 </select>
@@ -788,11 +812,25 @@ export const Orcamentos: React.FC = () => {
                   <label className="text-xs text-vapor-300 font-medium">Telefone / WhatsApp (Opcional)</label>
                   <input
                     type="tel"
-                    placeholder="(00) 00000-0000"
+                    placeholder={novoSemCelular ? 'Sem celular / WhatsApp' : '(00) 00000-0000'}
                     value={novoTelefone}
+                    disabled={novoSemCelular}
                     onChange={(e) => setNovoTelefone(e.target.value)}
-                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
+                    className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none mt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={novoSemCelular}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setNovoSemCelular(checked);
+                        if (checked) setNovoTelefone('');
+                      }}
+                      className="w-3.5 h-3.5 accent-amber-500 rounded bg-graphite-900 border-graphite-600"
+                    />
+                    <span className="text-[11px] text-vapor-400">Cliente não possui celular / WhatsApp</span>
+                  </label>
                 </div>
               </div>
 

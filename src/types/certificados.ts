@@ -59,7 +59,7 @@ export interface CertificadoPublicoData {
   };
   cliente: {
     nome: string;
-    telefone: string;
+    telefone?: string | null;
   };
   veiculo: {
     marca?: string | null;

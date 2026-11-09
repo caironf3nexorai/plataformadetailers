@@ -15,7 +15,7 @@ export interface OportunidadeRetorno {
   agendamento_id: string;
   cliente_id: string;
   cliente_nome: string;
-  cliente_telefone: string;
+  cliente_telefone?: string | null;
   veiculo_id: string;
   veiculo_modelo: string;
   veiculo_placa: string;

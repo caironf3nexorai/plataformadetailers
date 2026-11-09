@@ -109,6 +109,12 @@ export interface Orcamento {
     id: string;
     nome: string;
   };
+  agendamento?: {
+    id: string;
+    inicio?: string;
+    status?: string;
+    numero_os?: number | null;
+  } | null;
   niveis?: OrcamentoNivel[];
 }
 
@@ -209,6 +215,7 @@ export interface OrcamentoPublicoData {
     pdf_texto_observacoes_orcamento?: string | null;
   };
   tem_cliente_cadastrado?: boolean;
+  cliente_nome?: string | null;
   cliente_primeiro_nome?: string | null;
   cliente_nome_avulso?: string | null;
   cliente_telefone_avulso?: string | null;

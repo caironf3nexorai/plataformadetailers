@@ -38,6 +38,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
   const { consultarLimiteAoVivo, nomePlano } = usePlano();
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
+  const [semCelular, setSemCelular] = useState(false);
 
   // Modal de Limite Atingido do Plano
   const [limiteModalInfo, setLimiteModalInfo] = useState<{
@@ -86,6 +87,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
     // Reset estados
     setNome('');
     setTelefone('');
+    setSemCelular(false);
     setIncluirVeiculo(false);
     setPlaca('');
     setMarca('');
@@ -164,8 +166,16 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!nome.trim() || !telefone.trim()) {
-      setErrorMsg('Nome e telefone são obrigatórios.');
+    const telTrim = semCelular ? '' : telefone.trim();
+    const telDigits = telTrim.replace(/\D/g, '');
+
+    if (!nome.trim()) {
+      setErrorMsg('Nome do cliente é obrigatório.');
+      return;
+    }
+
+    if (telTrim && telDigits.length < 8) {
+      setErrorMsg('Informe um telefone / WhatsApp válido (mín. 8 dígitos) ou marque que não possui celular.');
       return;
     }
 
@@ -181,7 +191,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
 
       const { data, error } = await supabase.rpc('cadastro_rapido', {
         p_nome: nome.trim(),
-        p_telefone: telefone.trim(),
+        p_telefone: telTrim || null,
         p_placa: cleanPlaca,
         p_categoria: incluirVeiculo ? categoriaId : null,
         p_marca: incluirVeiculo && marca.trim() ? marca.trim() : null,
@@ -290,17 +300,32 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="font-sans text-[13px] text-vapor-400 font-medium">Telefone / WhatsApp *</label>
+          <div className="flex flex-col gap-1.5">
+            <label className="font-sans text-[13px] text-vapor-400 font-medium">Telefone / WhatsApp (Opcional)</label>
             <Input
               type="tel"
               inputMode="tel"
-              placeholder="(11) 99999-9999"
+              placeholder={semCelular ? 'Sem celular / WhatsApp' : '(11) 99999-9999'}
               value={telefone}
+              disabled={semCelular}
               onChange={(e) => setTelefone(formatTelefone(e.target.value))}
-              required
-              className="min-h-[48px] font-mono"
+              className="min-h-[48px] font-mono disabled:opacity-50"
             />
+            <label className="flex items-center gap-2 cursor-pointer select-none mt-0.5">
+              <input
+                type="checkbox"
+                checked={semCelular}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setSemCelular(checked);
+                  if (checked) setTelefone('');
+                }}
+                className="w-4 h-4 accent-amber-500 rounded bg-graphite-900 border-graphite-600"
+              />
+              <span className="font-sans text-[12px] text-vapor-300">
+                Cliente não possui celular / WhatsApp
+              </span>
+            </label>
           </div>
         </div>
 

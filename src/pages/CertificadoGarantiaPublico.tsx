@@ -347,7 +347,7 @@ export const CertificadoGarantiaPublico: React.FC = () => {
                 {cliente.nome}
               </div>
               <p className="text-xs text-vapor-400">
-                Contato Registrado: <span className="font-mono text-vapor-300">{cliente.telefone}</span>
+                Contato Registrado: <span className="font-mono text-vapor-300">{cliente.telefone || 'Não informado'}</span>
               </p>
               <p className="text-[11px] text-vapor-500 pt-0.5">
                 Certificado intransferível vinculado ao chassi/placa do veículo.

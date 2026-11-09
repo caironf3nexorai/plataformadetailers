@@ -65,13 +65,21 @@ import {
   obterClausulasDetectadas,
   mesclarClausulasComTextoExistente,
 } from '../../types/termos';
-import { getLabelFromStatusOrcamento, getBadgeToneFromStatusOrcamento } from '../../utils/orcamento';
+import {
+  getLabelFromStatusOrcamento,
+  getBadgeToneFromStatusOrcamento,
+  isNomeClienteValido,
+  obterNomeClienteOrcamento,
+  obterPrimeiroNomeClienteOrcamento,
+  resolverAgendamentoVinculadoOrcamento,
+} from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
-import { formatarDuracao } from '../../utils/agenda';
+import { formatarDuracao, getLabelFromStatus } from '../../utils/agenda';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../../utils/pdfOrcamento';
 import { getFotoPublicUrl } from '../../utils/imagens';
 import { uploadOrcamentoFoto, getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
 import { formatarDataHora } from '../../utils/datas';
+import { obterLinkAtendimento } from '../../utils/navegacaoAtendimento';
 import { CanvasAssinatura } from '../../components/checkin/CanvasAssinatura';
 import { ModalServicoRapido } from '../../components/orcamentos/ModalServicoRapido';
 
@@ -87,6 +95,62 @@ interface ServicoAvulsoItem {
   preco: number;
   duracao_minutos: number;
 }
+
+const formatarHorasInput = (minutos: number): string => {
+  const h = Math.round(((Number(minutos) || 0) / 60) * 100) / 100;
+  return h > 0 ? String(h) : '1';
+};
+
+const InputHorasAvulso: React.FC<{
+  duracaoMinutos: number;
+  onCommitMinutos: (mins: number) => void;
+}> = ({ duracaoMinutos, onCommitMinutos }) => {
+  const [focused, setFocused] = useState(false);
+  const [texto, setTexto] = useState(() => formatarHorasInput(duracaoMinutos));
+
+  useEffect(() => {
+    if (!focused) {
+      setTexto(formatarHorasInput(duracaoMinutos));
+    }
+  }, [duracaoMinutos, focused]);
+
+  return (
+    <div
+      className="flex items-center gap-1 text-vapor-300"
+      title={`Equivale a ${formatarDuracao(duracaoMinutos)}`}
+    >
+      <Clock size={11} className="text-cyan-400 shrink-0" />
+      <input
+        type="text"
+        inputMode="decimal"
+        value={texto}
+        onFocus={() => setFocused(true)}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (!/^\d*([.,]\d*)?$/.test(val.trim())) return;
+          setTexto(val);
+          const num = parseFloat(val.replace(',', '.'));
+          if (!isNaN(num) && num > 0) {
+            const mins = Math.max(5, Math.round(num * 60));
+            onCommitMinutos(mins);
+          }
+        }}
+        onBlur={() => {
+          setFocused(false);
+          const num = parseFloat(texto.replace(',', '.'));
+          const mins =
+            !isNaN(num) && num > 0
+              ? Math.max(5, Math.round(num * 60))
+              : Math.max(5, duracaoMinutos || 60);
+          onCommitMinutos(mins);
+          setTexto(formatarHorasInput(mins));
+        }}
+        className="w-12 bg-graphite-950/80 border border-cyan-500/30 rounded px-1.5 py-0.5 text-center text-vapor-100 font-mono text-[11px] outline-none focus:border-cyan-400"
+      />
+      <span className="text-vapor-400 text-[10px]">h</span>
+    </div>
+  );
+};
 
 const normalizarTextoBusca = (texto: string): string =>
   (texto || '')
@@ -128,6 +192,7 @@ export const DetalheOrcamento: React.FC = () => {
   // Modal de Troca / Preenchimento de Cliente / Veículo
   const [showModalTrocarCliente, setShowModalTrocarCliente] = useState<boolean>(false);
   const [modoModalTrocarCliente, setModoModalTrocarCliente] = useState<'selecionar' | 'cadastrar' | 'editar'>('selecionar');
+  const [abrirAgendaAposCliente, setAbrirAgendaAposCliente] = useState<boolean>(false);
 
   const handleExcluirOrcamento = async () => {
     if (!orcamento) return;
@@ -197,7 +262,7 @@ export const DetalheOrcamento: React.FC = () => {
   const [showModalServicoUnico, setShowModalServicoUnico] = useState<boolean>(false);
   const [suNome, setSuNome] = useState<string>('');
   const [suValor, setSuValor] = useState<string>('');
-  const [suDuracao, setSuDuracao] = useState<string>('60');
+  const [suDuracao, setSuDuracao] = useState<string>('1');
   const [suNiveisDestino, setSuNiveisDestino] = useState<Record<TipoNivelOrcamento, boolean>>({
     essencial: false,
     recomendado: true,
@@ -374,7 +439,7 @@ export const DetalheOrcamento: React.FC = () => {
     const dadosSubst = {
       nomeEmpresa,
       prazoGarantia: prazoTexto,
-      clienteNome: orcData?.cliente?.nome || orcData?.cliente_nome_avulso || undefined,
+      clienteNome: obterNomeClienteOrcamento(orcData, '') || undefined,
       veiculoPlaca: veicIdent,
     };
 
@@ -387,6 +452,7 @@ export const DetalheOrcamento: React.FC = () => {
     tenant?.nome,
     (orcamento as any)?.cliente?.nome,
     (orcamento as any)?.cliente_nome_avulso,
+    (orcamento as any)?.assinatura_nome,
     (orcamento as any)?.veiculo?.modelo,
     (orcamento as any)?.veiculo?.placa,
     (orcamento as any)?.veiculo_descricao_avulsa,
@@ -408,8 +474,8 @@ export const DetalheOrcamento: React.FC = () => {
   // Aceite Manual do Orçamento Impresso
   const [aceitandoManual, setAceitandoManual] = useState<boolean>(false);
 
-  const fetchOrcamentoEDados = async () => {
-    if (!id || !tenant) return;
+  const fetchOrcamentoEDados = async (): Promise<Orcamento | null> => {
+    if (!id || !tenant) return null;
     if (!orcamento) {
       setLoading(true);
     }
@@ -423,6 +489,7 @@ export const DetalheOrcamento: React.FC = () => {
           cliente:clientes(id, nome, telefone, email, documento),
           veiculo:veiculos(id, placa, modelo, marca, cor, ano),
           categoria:categorias_veiculo(id, nome),
+          agendamento:agendamentos(id, inicio, status, numero_os),
           niveis:orcamento_niveis(
             *,
             itens:orcamento_nivel_itens(
@@ -438,7 +505,7 @@ export const DetalheOrcamento: React.FC = () => {
       if (quoteError || !quoteData) {
         showError('Orçamento não encontrado.');
         navigate('/orcamentos');
-        return;
+        return null;
       }
 
       if (quoteData?.agendamento_id) {
@@ -752,8 +819,11 @@ export const DetalheOrcamento: React.FC = () => {
       setTimeout(() => {
         isLoadedRef.current = true;
       }, 300);
+
+      return quote;
     } catch (err) {
       console.error('[DetalheOrcamento] Erro ao carregar dados:', err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -964,7 +1034,7 @@ export const DetalheOrcamento: React.FC = () => {
     const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
     setSuNome(nomeInicial);
     setSuValor('');
-    setSuDuracao('60');
+    setSuDuracao('1');
     if (isSimples || !nivelAlvo) {
       setSuNiveisDestino({
         essencial: true,
@@ -985,7 +1055,7 @@ export const DetalheOrcamento: React.FC = () => {
     e.preventDefault();
     const nomeLimpo = suNome.trim();
     const valorNum = parseFloat(suValor.replace(',', '.'));
-    const duracaoNum = parseInt(suDuracao, 10);
+    const horasNum = parseFloat(suDuracao.replace(',', '.'));
 
     if (!nomeLimpo) {
       showError('Informe o nome do serviço único.');
@@ -995,10 +1065,11 @@ export const DetalheOrcamento: React.FC = () => {
       showError('Informe um valor válido para o serviço.');
       return;
     }
-    if (isNaN(duracaoNum) || duracaoNum < 5) {
-      showError('Informe um tempo de execução válido (mínimo 5 min).');
+    if (isNaN(horasNum) || horasNum <= 0) {
+      showError('Informe um tempo de execução válido em horas (ex: 1 ou 1,5).');
       return;
     }
+    const duracaoNum = Math.max(5, Math.round(horasNum * 60));
 
     const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
     const niveisAlvo: TipoNivelOrcamento[] = isSimples
@@ -1215,8 +1286,7 @@ export const DetalheOrcamento: React.FC = () => {
       const link = `${window.location.origin}/orcamento/${token || orcamento.token_publico}`;
       setLinkPublico(link);
 
-      const nomeBruto = orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso;
-      const clienteNome = nomeBruto ? nomeBruto.split(' ')[0] : 'Cliente';
+      const clienteNome = obterPrimeiroNomeClienteOrcamento(orcamento, 'Cliente');
       const veiculoModelo = orcamento.veiculo?.modelo || (orcamento as any).veiculo_descricao_avulsa || 'seu veículo';
       const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
 
@@ -1265,8 +1335,7 @@ export const DetalheOrcamento: React.FC = () => {
       const link = `${window.location.origin}/orcamento/${orcamento.token_publico}`;
       setLinkPublico(link);
 
-      const nomeBruto = orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso;
-      const clienteNome = nomeBruto ? nomeBruto.split(' ')[0] : 'Cliente';
+      const clienteNome = obterPrimeiroNomeClienteOrcamento(orcamento, 'Cliente');
       const veiculoModelo = orcamento.veiculo?.modelo || (orcamento as any).veiculo_descricao_avulsa || 'seu veículo';
 
       const mensagem = `Olá ${clienteNome}! Atualizamos os detalhes e valores do orçamento do seu ${veiculoModelo}. Por favor, acesse o link a seguir para conferir a alteração e realizar sua assinatura digital de confirmação: ${link}`;
@@ -1345,8 +1414,15 @@ export const DetalheOrcamento: React.FC = () => {
     e.preventDefault();
     if (!orcamento || !dataAgendamento || !horaAgendamento) return;
 
+    if (resolverAgendamentoVinculadoOrcamento(orcamento)) {
+      setShowAgendarModal(false);
+      showToast('Este orçamento já possui um agendamento/OS ativo.', 'info');
+      return;
+    }
+
     if (!orcamento.cliente_id) {
       setShowAgendarModal(false);
+      setAbrirAgendaAposCliente(true);
       showToast('Preencha e vincule o cliente antes de converter em agendamento/OS.', 'warning');
       setModoModalTrocarCliente('cadastrar');
       setShowModalTrocarCliente(true);
@@ -1357,12 +1433,30 @@ export const DetalheOrcamento: React.FC = () => {
     try {
       const dataHoraIso = `${dataAgendamento}T${horaAgendamento}:00`;
 
-      const { error } = await supabase.rpc('converter_orcamento_em_agendamento', {
+      const { data: novoAgendamentoId, error } = await supabase.rpc('converter_orcamento_em_agendamento', {
         p_orcamento: orcamento.id,
         p_inicio: dataHoraIso,
       });
 
       if (error) throw error;
+
+      const agendamentoIdCriado = typeof novoAgendamentoId === 'string' && novoAgendamentoId ? novoAgendamentoId : null;
+      if (agendamentoIdCriado) {
+        setOrcamento((prev) =>
+          prev
+            ? {
+                ...prev,
+                agendamento_id: agendamentoIdCriado,
+                agendamento: {
+                  id: agendamentoIdCriado,
+                  inicio: dataHoraIso,
+                  status: 'agendado',
+                  numero_os: prev.numero_os ?? null,
+                },
+              }
+            : null
+        );
+      }
 
       setShowAgendarModal(false);
       showSuccess('Orçamento convertido em agendamento com sucesso!');
@@ -1534,16 +1628,27 @@ export const DetalheOrcamento: React.FC = () => {
       const signedUrl = await getEvidenciaSignedUrl(path);
 
       if (assinandoTipo === 'cliente') {
+        const assinaturaTrim = nomeSignatario.trim();
+        const capturarNomeAvulso =
+          !orcamento.cliente_id &&
+          isNomeClienteValido(assinaturaTrim) &&
+          !isNomeClienteValido((orcamento as any).cliente_nome_avulso);
+
+        const updatePayload: any = {
+          assinatura_path: path,
+          assinatura_nome: assinaturaTrim,
+          assinatura_data: agora,
+          status: 'aprovado',
+          nivel_aprovado: orcamento.nivel_aprovado || 'recomendado',
+          updated_at: agora,
+        };
+        if (capturarNomeAvulso) {
+          updatePayload.cliente_nome_avulso = assinaturaTrim;
+        }
+
         await supabase
           .from('orcamentos')
-          .update({
-            assinatura_path: path,
-            assinatura_nome: nomeSignatario.trim(),
-            assinatura_data: agora,
-            status: 'aprovado',
-            nivel_aprovado: orcamento.nivel_aprovado || 'recomendado',
-            updated_at: agora,
-          })
+          .update(updatePayload)
           .eq('id', orcamento.id);
 
         setOrcamento((prev) =>
@@ -1553,8 +1658,9 @@ export const DetalheOrcamento: React.FC = () => {
                 status: 'aprovado',
                 nivel_aprovado: prev.nivel_aprovado || 'recomendado',
                 assinatura_path: path,
-                assinatura_nome: nomeSignatario.trim(),
+                assinatura_nome: assinaturaTrim,
                 assinatura_data: agora,
+                ...(capturarNomeAvulso ? { cliente_nome_avulso: assinaturaTrim } : {}),
               } as any
             : null
         );
@@ -1714,7 +1820,7 @@ export const DetalheOrcamento: React.FC = () => {
       nomeEmpresa: tenant?.nome || tenant?.razao_social || 'Oficina Especializada',
       prazoGarantia: `${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'}`,
       servicoContratado: servicosAtivosNoOrcamento.map((s) => s.nome).join(', ') || 'Procedimentos Especializados',
-      clienteNome: orcamento?.cliente?.nome || (orcamento as any)?.cliente_nome_avulso || '',
+      clienteNome: obterNomeClienteOrcamento(orcamento, ''),
       clienteCpf: (orcamento?.cliente as any)?.documento || (orcamento?.cliente as any)?.cpf_cnpj || '',
       veiculoPlaca: veicStr,
       data: new Date().toLocaleDateString('pt-BR'),
@@ -2039,7 +2145,7 @@ export const DetalheOrcamento: React.FC = () => {
           validade_dias: diasVal,
           data_validade_limite: dataValidadeLimiteStr,
           observacoes: observacoes || orcamento.observacoes,
-          clienteNome: orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'Não informado',
+          clienteNome: obterNomeClienteOrcamento(orcamento, 'Não informado'),
           clienteTelefone: orcamento.cliente?.telefone || (orcamento as any).cliente_telefone_avulso || undefined,
           clienteEmail: (orcamento.cliente as any)?.email,
           clienteCpfCnpj: (orcamento.cliente as any)?.documento || (orcamento.cliente as any)?.cpf_cnpj,
@@ -2130,6 +2236,8 @@ export const DetalheOrcamento: React.FC = () => {
   }
 
   const isAprovado = orcamento.status === 'aprovado';
+  const agendamentoAtivo = resolverAgendamentoVinculadoOrcamento(orcamento);
+  const temAgendamentoAtivo = Boolean(agendamentoAtivo);
 
   return (
     <div className="flex flex-col gap-6 pb-52 xl:pb-40 relative max-w-full overflow-x-hidden">
@@ -2176,15 +2284,16 @@ export const DetalheOrcamento: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
-                {orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'Cliente não informado'}
+                {obterNomeClienteOrcamento(orcamento, 'Cliente não informado')}
               </h1>
               {!orcamento.cliente_id && (
                 <Badge tone="amber">Dados parciais</Badge>
               )}
-              {!orcamento.agendamento_id && (
+              {!temAgendamentoAtivo && (
                 <button
                   type="button"
                   onClick={() => {
+                    setAbrirAgendaAposCliente(false);
                     setModoModalTrocarCliente(!orcamento.cliente_id ? 'cadastrar' : 'selecionar');
                     setShowModalTrocarCliente(true);
                   }}
@@ -2302,7 +2411,7 @@ export const DetalheOrcamento: React.FC = () => {
             size="sm"
             onClick={() => {
               setAssinandoTipo('cliente');
-              setNomeSignatario(orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
+              setNomeSignatario(obterNomeClienteOrcamento(orcamento, ''));
               setShowAssinaturaModal(true);
             }}
             className="flex items-center gap-1.5 min-h-[44px]"
@@ -2360,12 +2469,13 @@ export const DetalheOrcamento: React.FC = () => {
             </Button>
           )}
 
-          {isAprovado && (
+          {isAprovado && !temAgendamentoAtivo && (
             <Button
               tone="cyan"
               size="sm"
               onClick={() => {
                 if (!orcamento.cliente_id) {
+                  setAbrirAgendaAposCliente(true);
                   showToast('Preencha e vincule o cliente antes de converter em agendamento/OS.', 'warning');
                   setModoModalTrocarCliente('cadastrar');
                   setShowModalTrocarCliente(true);
@@ -2379,6 +2489,21 @@ export const DetalheOrcamento: React.FC = () => {
             >
               <Calendar size={16} />
               <span>Converter em Agendamento</span>
+            </Button>
+          )}
+
+          {isAprovado && temAgendamentoAtivo && (
+            <Button
+              tone="emerald"
+              size="sm"
+              onClick={() => {
+                const link = obterLinkAtendimento(null, agendamentoAtivo?.id || orcamento.agendamento_id);
+                navigate(link || '/agenda');
+              }}
+              className="flex items-center gap-1.5 min-h-[44px]"
+            >
+              <CheckCircle2 size={16} />
+              <span>Ver OS / Atendimento</span>
             </Button>
           )}
         </div>
@@ -2429,36 +2554,81 @@ export const DetalheOrcamento: React.FC = () => {
 
       {/* AVISO DE ORÇAMENTO APROVADO */}
       {isAprovado && (
-        <Card className="p-4 bg-emerald-500/10 border-emerald-500/40 flex items-center justify-between gap-4">
+        <Card className="p-4 bg-emerald-500/10 border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Check size={24} className="text-emerald-400 shrink-0" />
-            <div className="flex flex-col">
-              <span className="font-sans font-bold text-[14px] text-emerald-400">
-                Orçamento Aprovado pelo Cliente (Nível {orcamento.nivel_aprovado?.toUpperCase()})
-              </span>
-              <span className="font-sans text-[12px] text-vapor-300">
-                O cliente escolheu esta proposta! Clique no botão ao lado para agendar a execução.
-              </span>
+            <div className="flex flex-col gap-0.5">
+              {temAgendamentoAtivo ? (
+                <>
+                  <span className="font-sans font-bold text-[14px] text-emerald-400">
+                    Orçamento Aprovado e Já Agendado
+                    {(agendamentoAtivo?.numero_os || orcamento.numero_os)
+                      ? ` — OS #${String(agendamentoAtivo?.numero_os || orcamento.numero_os).padStart(4, '0')}`
+                      : ''}
+                  </span>
+                  <span className="font-sans text-[12px] text-vapor-300">
+                    {agendamentoAtivo?.inicio
+                      ? `Atendimento marcado para ${formatarDataHora(agendamentoAtivo.inicio)}`
+                      : 'Este orçamento já foi convertido em Ordem de Serviço / Agendamento'}
+                    {agendamentoAtivo?.status
+                      ? ` • Status: ${getLabelFromStatus(agendamentoAtivo.status as any)}`
+                      : ''}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="font-sans font-bold text-[14px] text-emerald-400">
+                    Orçamento Aprovado pelo Cliente (Nível {orcamento.nivel_aprovado?.toUpperCase()})
+                  </span>
+                  <span className="font-sans text-[12px] text-vapor-300">
+                    O cliente escolheu esta proposta! Clique no botão ao lado para agendar a execução.
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          <Button
-            tone="emerald"
-            size="sm"
-            onClick={() => {
-              if (!orcamento.cliente_id) {
-                showToast('Preencha e vincule o cliente antes de agendar a OS.', 'warning');
-                setModoModalTrocarCliente('cadastrar');
-                setShowModalTrocarCliente(true);
-                return;
-              }
-              const hoje = new Date().toISOString().split('T')[0];
-              setDataAgendamento(hoje);
-              setShowAgendarModal(true);
-            }}
-          >
-            Agendar Agora
-          </Button>
+          {temAgendamentoAtivo ? (
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <Button
+                tone="emerald"
+                size="sm"
+                onClick={() => {
+                  const link = obterLinkAtendimento(null, agendamentoAtivo?.id || orcamento.agendamento_id);
+                  navigate(link || '/agenda');
+                }}
+              >
+                Ver Atendimento / OS
+              </Button>
+              <Button
+                tone="graphite"
+                size="sm"
+                onClick={() => navigate('/agenda')}
+              >
+                Ver na Agenda
+              </Button>
+            </div>
+          ) : (
+            <Button
+              tone="emerald"
+              size="sm"
+              onClick={() => {
+                if (!orcamento.cliente_id) {
+                  setAbrirAgendaAposCliente(true);
+                  showToast('Preencha e vincule o cliente antes de agendar a OS.', 'warning');
+                  setModoModalTrocarCliente('cadastrar');
+                  setShowModalTrocarCliente(true);
+                  return;
+                }
+                const hoje = new Date().toISOString().split('T')[0];
+                setDataAgendamento(hoje);
+                setShowAgendarModal(true);
+              }}
+              className="shrink-0"
+            >
+              Agendar Agora
+            </Button>
+          )}
         </Card>
       )}
 
@@ -3133,21 +3303,28 @@ export const DetalheOrcamento: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setAssinandoTipo('cliente');
-                  setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
+                  setNomeSignatario(
+                    (isNomeClienteValido((orcamento as any).assinatura_nome) ? (orcamento as any).assinatura_nome : '') ||
+                      obterNomeClienteOrcamento(orcamento, '')
+                  );
                   setRecriarAssinaturaCliente(false);
                   setShowAssinaturaModal(true);
                 }}
                 className="inline-flex items-center gap-1.5 text-emerald-400 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/20 transition cursor-pointer"
                 title="Clique para ver ou assinar novamente"
               >
-                <Check size={13} /> {(orcamento as any).assinatura_nome || 'Cliente'} em {formatarDataHora((orcamento as any).assinatura_data)}
+                <Check size={13} />{' '}
+                {(isNomeClienteValido((orcamento as any).assinatura_nome)
+                  ? (orcamento as any).assinatura_nome
+                  : obterNomeClienteOrcamento(orcamento, 'Cliente'))}{' '}
+                em {formatarDataHora((orcamento as any).assinatura_data)}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => {
                   setAssinandoTipo('cliente');
-                  setNomeSignatario(orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
+                  setNomeSignatario(obterNomeClienteOrcamento(orcamento, ''));
                   setRecriarAssinaturaCliente(true);
                   setShowAssinaturaModal(true);
                 }}
@@ -3159,7 +3336,7 @@ export const DetalheOrcamento: React.FC = () => {
             {assinaturaClienteUrl && (
               <button
                 type="button"
-                onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'cliente'}.png`)}
+                onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${obterNomeClienteOrcamento(orcamento, 'cliente')}.png`)}
                 className="p-1 text-vapor-400 hover:text-amber-400 hover:bg-graphite-800 rounded transition"
                 title="Baixar Assinatura do Cliente"
               >
@@ -3507,21 +3684,14 @@ export const DetalheOrcamento: React.FC = () => {
                         </div>
 
                         <div className="flex items-center justify-between pt-1.5 border-t border-cyan-500/20 text-[11px] font-mono gap-2">
-                          <div className="flex items-center gap-1 text-vapor-300">
-                            <Clock size={11} className="text-cyan-400" />
-                            <input
-                              type="number"
-                              min="5"
-                              step="5"
-                              value={av.duracao_minutos}
-                              onChange={(e) => {
-                                const mins = Math.max(5, parseInt(e.target.value, 10) || 5);
+                          <InputHorasAvulso
+                            duracaoMinutos={av.duracao_minutos}
+                            onCommitMinutos={(mins) => {
+                              if (mins !== av.duracao_minutos) {
                                 handleAtualizarServicoUnico(nivelKey, av.uid, { duracao_minutos: mins });
-                              }}
-                              className="w-14 bg-graphite-950/80 border border-cyan-500/30 rounded px-1.5 py-0.5 text-center text-vapor-100 font-mono text-[11px] outline-none focus:border-cyan-400"
-                            />
-                            <span className="text-vapor-400 text-[10px]">min</span>
-                          </div>
+                              }
+                            }}
+                          />
 
                           <div className="flex items-center gap-1 bg-graphite-950/80 px-2 py-0.5 rounded border border-cyan-500/40">
                             <span className="text-cyan-300 font-bold text-[11px]">R$</span>
@@ -4148,34 +4318,56 @@ export const DetalheOrcamento: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="font-sans text-[13px] font-bold text-vapor-200">
-                Tempo de execução (min) <span className="text-amber-500">*</span>
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="font-sans text-[13px] font-bold text-vapor-200">
+                  Tempo de execução (horas) <span className="text-amber-500">*</span>
+                </label>
+                {(() => {
+                  const hParsed = parseFloat(suDuracao.replace(',', '.'));
+                  if (!isNaN(hParsed) && hParsed > 0) {
+                    const minsPreview = Math.max(5, Math.round(hParsed * 60));
+                    return (
+                      <span className="font-mono text-[11px] text-cyan-300/90">
+                        = {formatarDuracao(minsPreview)}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
               <input
-                type="number"
-                min="5"
-                step="5"
+                type="text"
+                inputMode="decimal"
                 value={suDuracao}
-                onChange={(e) => setSuDuracao(e.target.value)}
-                placeholder="Ex: 60"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (/^\d*([.,]\d*)?$/.test(val.trim())) {
+                    setSuDuracao(val);
+                  }
+                }}
+                placeholder="Ex: 1 ou 1,5"
                 required
                 className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-vapor-100 font-mono text-[14px] focus:border-cyan-400 focus:outline-none min-h-[44px]"
               />
               <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                {[30, 60, 90, 120, 180].map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setSuDuracao(String(m))}
-                    className={`px-2 py-0.5 rounded text-[10.5px] font-mono border transition-colors ${
-                      Number(suDuracao) === m
-                        ? 'bg-cyan-500 text-graphite-950 font-bold border-cyan-400'
-                        : 'bg-graphite-950 text-vapor-400 border-graphite-800 hover:text-vapor-200'
-                    }`}
-                  >
-                    {m < 60 ? `${m}m` : `${m / 60}h`}
-                  </button>
-                ))}
+                {[0.5, 1, 1.5, 2, 3, 4].map((h) => {
+                  const isAtivo =
+                    Math.abs((parseFloat(suDuracao.replace(',', '.')) || 0) - h) < 0.01;
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => setSuDuracao(String(h))}
+                      className={`px-2 py-0.5 rounded text-[10.5px] font-mono border transition-colors ${
+                        isAtivo
+                          ? 'bg-cyan-500 text-graphite-950 font-bold border-cyan-400'
+                          : 'bg-graphite-950 text-vapor-400 border-graphite-800 hover:text-vapor-200'
+                      }`}
+                    >
+                      {String(h).replace('.', ',')}h
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -4250,7 +4442,10 @@ export const DetalheOrcamento: React.FC = () => {
               type="button"
               onClick={() => {
                 setAssinandoTipo('cliente');
-                setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
+                setNomeSignatario(
+                  (isNomeClienteValido((orcamento as any).assinatura_nome) ? (orcamento as any).assinatura_nome : '') ||
+                    obterNomeClienteOrcamento(orcamento, '')
+                );
               }}
               className={`flex-1 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1.5 transition ${
                 assinandoTipo === 'cliente' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400 hover:text-vapor-100'
@@ -4297,7 +4492,9 @@ export const DetalheOrcamento: React.FC = () => {
                 )}
                 <div className="flex flex-col gap-0.5 text-xs">
                   <span className="font-semibold text-vapor-100">
-                    {orcamento.assinatura_nome || orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'Cliente'}
+                    {isNomeClienteValido(orcamento.assinatura_nome)
+                      ? orcamento.assinatura_nome
+                      : obterNomeClienteOrcamento(orcamento, 'Cliente')}
                   </span>
                   {orcamento.assinatura_data && (
                     <span className="font-mono text-[11px] text-vapor-400">
@@ -4311,7 +4508,7 @@ export const DetalheOrcamento: React.FC = () => {
                       type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'cliente'}.png`)}
+                      onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${obterNomeClienteOrcamento(orcamento, 'cliente')}.png`)}
                       className="text-xs h-8 px-3 flex items-center gap-1.5 text-amber-400 border-graphite-700 hover:bg-graphite-800"
                       title="Baixar imagem da assinatura do cliente"
                     >
@@ -4499,19 +4696,30 @@ export const DetalheOrcamento: React.FC = () => {
       {/* Modal Alterar Cliente / Veículo do Orçamento */}
       <ModalAlterarClienteOrcamento
         isOpen={showModalTrocarCliente}
-        onClose={() => setShowModalTrocarCliente(false)}
+        onClose={() => {
+          setShowModalTrocarCliente(false);
+          setAbrirAgendaAposCliente(false);
+        }}
         orcamentoId={orcamento.id}
         clienteAtualId={orcamento.cliente_id}
         veiculoAtualId={orcamento.veiculo_id}
         categoriaAtualId={orcamento.categoria_id}
         modoInicial={modoModalTrocarCliente}
         dadosAvulsosInicial={{
-          nome: (orcamento as any).cliente_nome_avulso || '',
+          nome: obterNomeClienteOrcamento(orcamento, ''),
           telefone: (orcamento as any).cliente_telefone_avulso || '',
           veiculoDescricao: (orcamento as any).veiculo_descricao_avulsa || '',
         }}
-        onSuccess={() => {
-          fetchOrcamentoEDados();
+        onSuccess={async () => {
+          const quoteAtualizado = await fetchOrcamentoEDados();
+          if (abrirAgendaAposCliente) {
+            setAbrirAgendaAposCliente(false);
+            if (quoteAtualizado?.cliente_id && !resolverAgendamentoVinculadoOrcamento(quoteAtualizado)) {
+              const hoje = new Date().toISOString().split('T')[0];
+              setDataAgendamento(hoje);
+              setShowAgendarModal(true);
+            }
+          }
         }}
       />
 

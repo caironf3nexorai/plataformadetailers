@@ -469,7 +469,7 @@ export const DetalheVeiculo: React.FC = () => {
                       {(h.cliente as any)?.nome || 'Cliente não encontrado'}
                     </span>
                     <span className="font-mono text-[12px] text-vapor-400">
-                      {(h.cliente as any)?.telefone}
+                      {(h.cliente as any)?.telefone || 'Sem telefone'}
                     </span>
                   </div>
 
@@ -590,7 +590,7 @@ export const DetalheVeiculo: React.FC = () => {
             >
               {clientesDisponiveis.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nome} ({c.telefone})
+                  {c.nome} {c.telefone ? `(${c.telefone})` : '(Sem telefone)'}
                 </option>
               ))}
             </select>

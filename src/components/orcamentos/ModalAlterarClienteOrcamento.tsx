@@ -19,7 +19,7 @@ interface ModalAlterarClienteOrcamentoProps {
     veiculoDescricao?: string | null;
   };
   modoInicial?: 'selecionar' | 'cadastrar' | 'editar';
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
 }
 
 type AbaModal = 'selecionar' | 'cadastrar' | 'editar';
@@ -77,6 +77,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
   // Campos para cadastro de novo cliente completo
   const [cadNome, setCadNome] = useState('');
   const [cadTelefone, setCadTelefone] = useState('');
+  const [cadSemCelular, setCadSemCelular] = useState(false);
   const [cadDocumento, setCadDocumento] = useState('');
   const [cadModelo, setCadModelo] = useState('');
   const [cadCor, setCadCor] = useState('');
@@ -85,6 +86,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
   // Campos para edição do cliente atualmente vinculado
   const [editNome, setEditNome] = useState('');
   const [editTelefone, setEditTelefone] = useState('');
+  const [editSemCelular, setEditSemCelular] = useState(false);
   const [editDocumento, setEditDocumento] = useState('');
 
   // Novo veículo inline para cliente existente / em edição
@@ -117,6 +119,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
     const parsedVeiculo = parseVeiculoDescricaoAvulsa(dadosAvulsosInicial?.veiculoDescricao);
     setCadNome(dadosAvulsosInicial?.nome || '');
     setCadTelefone(dadosAvulsosInicial?.telefone || '');
+    setCadSemCelular(false);
     setCadDocumento('');
     setCadModelo(parsedVeiculo.modelo);
     setCadCor(parsedVeiculo.cor);
@@ -161,6 +164,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
           if (clienteAtual) {
             setEditNome(clienteAtual.nome || '');
             setEditTelefone(clienteAtual.telefone || '');
+            setEditSemCelular(!clienteAtual.telefone);
             setEditDocumento(clienteAtual.documento || '');
           } else {
             const { data: cSingle } = await supabase
@@ -171,7 +175,10 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
             if (cSingle) {
               setEditNome(cSingle.nome || '');
               setEditTelefone(cSingle.telefone || '');
+              setEditSemCelular(!cSingle.telefone);
               setEditDocumento(cSingle.documento || '');
+            } else {
+              setEditSemCelular(false);
             }
           }
 
@@ -185,6 +192,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
         } else {
           setEditNome('');
           setEditTelefone('');
+          setEditSemCelular(false);
           setEditDocumento('');
           setVeiculos([]);
         }
@@ -368,9 +376,10 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
         if (!cadNome.trim()) {
           throw new Error('Informe o nome completo do cliente.');
         }
-        const telDigits = cadTelefone.replace(/\D/g, '');
-        if (telDigits.length < 8) {
-          throw new Error('Informe um telefone / WhatsApp válido (mín. 8 dígitos).');
+        const telLimpo = cadSemCelular ? '' : cadTelefone.trim();
+        const telDigits = telLimpo.replace(/\D/g, '');
+        if (telLimpo && telDigits.length < 8) {
+          throw new Error('Informe um telefone / WhatsApp válido (mín. 8 dígitos) ou deixe em branco.');
         }
 
         const temVeiculo = Boolean(cadModelo.trim() || cadPlaca.trim() || cadCor.trim());
@@ -385,7 +394,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
 
         const { data: cadData, error: cadErr } = await supabase.rpc('cadastro_rapido', {
           p_nome: cadNome.trim(),
-          p_telefone: cadTelefone.trim(),
+          p_telefone: telLimpo || null,
           p_placa: cleanPlaca,
           p_categoria: cleanPlaca ? finalCatId : null,
           p_marca: null,
@@ -433,15 +442,17 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
         if (!editNome.trim()) {
           throw new Error('O nome do cliente é obrigatório.');
         }
-        if (editTelefone.replace(/\D/g, '').length < 8) {
-          throw new Error('Informe um telefone / WhatsApp válido.');
+        const editTelLimpo = editSemCelular ? '' : editTelefone.trim();
+        const editTelDigits = editTelLimpo.replace(/\D/g, '');
+        if (editTelLimpo && editTelDigits.length < 8) {
+          throw new Error('Informe um telefone / WhatsApp válido (mín. 8 dígitos) ou deixe em branco.');
         }
 
         const { error: updCliErr } = await supabase
           .from('clientes')
           .update({
             nome: editNome.trim(),
-            telefone: editTelefone.trim(),
+            telefone: editTelLimpo || null,
             documento: editDocumento.trim() || null,
             updated_at: new Date().toISOString(),
           })
@@ -483,7 +494,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
         showSuccess('Cliente e veículo do orçamento atualizados com sucesso!');
       }
 
-      onSuccess();
+      await onSuccess();
       onClose();
     } catch (err: any) {
       console.error('[ModalAlterarClienteOrcamento] Erro ao salvar:', err);
@@ -588,7 +599,7 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
                 <option value="">Selecione um cliente...</option>
                 {clientesFiltrados.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.nome} {c.telefone ? `(${c.telefone})` : ''}
+                    {c.nome} {c.telefone ? `(${c.telefone})` : '(Sem telefone)'}
                   </option>
                 ))}
               </select>
@@ -683,15 +694,28 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-vapor-300">WhatsApp / Telefone *</label>
+                <label className="text-xs font-semibold text-vapor-300">WhatsApp / Telefone (Opcional)</label>
                 <input
                   type="tel"
-                  placeholder="(00) 00000-0000"
+                  placeholder={cadSemCelular ? 'Sem celular / WhatsApp' : '(00) 00000-0000'}
                   value={cadTelefone}
+                  disabled={cadSemCelular}
                   onChange={(e) => setCadTelefone(e.target.value)}
-                  required
-                  className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-cyan-500"
+                  className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
+                <label className="flex items-center gap-1.5 cursor-pointer select-none mt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={cadSemCelular}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setCadSemCelular(checked);
+                      if (checked) setCadTelefone('');
+                    }}
+                    className="w-3.5 h-3.5 accent-cyan-500 rounded bg-graphite-900 border-graphite-600"
+                  />
+                  <span className="text-[11px] text-vapor-400">Cliente não possui celular / WhatsApp</span>
+                </label>
               </div>
             </div>
 
@@ -758,14 +782,28 @@ export const ModalAlterarClienteOrcamento: React.FC<ModalAlterarClienteOrcamento
                 />
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-vapor-300">WhatsApp / Telefone *</label>
+                <label className="text-xs font-semibold text-vapor-300">WhatsApp / Telefone (Opcional)</label>
                 <input
                   type="tel"
+                  placeholder={editSemCelular ? 'Sem celular / WhatsApp' : '(00) 00000-0000'}
                   value={editTelefone}
+                  disabled={editSemCelular}
                   onChange={(e) => setEditTelefone(e.target.value)}
-                  required
-                  className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-cyan-500"
+                  className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
+                <label className="flex items-center gap-1.5 cursor-pointer select-none mt-0.5">
+                  <input
+                    type="checkbox"
+                    checked={editSemCelular}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEditSemCelular(checked);
+                      if (checked) setEditTelefone('');
+                    }}
+                    className="w-3.5 h-3.5 accent-cyan-500 rounded bg-graphite-900 border-graphite-600"
+                  />
+                  <span className="text-[11px] text-vapor-400">Cliente não possui celular / WhatsApp</span>
+                </label>
               </div>
             </div>
             <div className="flex flex-col gap-1">
