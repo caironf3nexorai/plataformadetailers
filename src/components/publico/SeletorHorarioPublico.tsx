@@ -6,8 +6,9 @@ import { AvisoPernoite } from '../compartilhado/AvisoPernoite';
 import { traduzirMotivoIndisponivel } from '../../utils/agenda';
 
 export interface ItemAgendamentoPublico {
-  servico_id: string;
+  servico_id: string | null;
   combo_id?: string | null;
+  duracao_minutos?: number | null;
 }
 
 export interface SlotHorarioPublico {
@@ -87,10 +88,11 @@ export const SeletorHorarioPublico: React.FC<SeletorHorarioPublicoProps> = ({
       setLoading(true);
       setErro(null);
 
-      // Prepara os itens para a RPC (garantindo servico_id e combo_id no payload jsonb)
+      // Prepara os itens para a RPC (garantindo servico_id, combo_id e duracao_minutos para Serviços Únicos)
       const payloadItens = itens.map((item) => ({
         servico_id: item.servico_id,
-        combo_id: item.combo_id || null
+        combo_id: item.combo_id || null,
+        duracao_minutos: item.duracao_minutos || null
       }));
 
       try {

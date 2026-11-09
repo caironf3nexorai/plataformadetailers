@@ -114,7 +114,14 @@ export const FormularioCheckin: React.FC = () => {
     const veicModelo = agendamento?.veiculo?.modelo || '';
     const veicPlaca = agendamento?.veiculo?.placa || '';
     const veicIdent = veicModelo && veicPlaca ? `${veicModelo} (${veicPlaca})` : (veicPlaca || veicModelo || 'Veículo');
-    const srvNome = (agendamento?.servico as any)?.nome || 'Serviços Especializados';
+    const nomesItens = ((agendamento as any)?.agendamento_itens || [])
+      .slice()
+      .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0))
+      .map((it: any) => it.servicos?.nome || it.servico_nome)
+      .filter(Boolean);
+    const srvNome = nomesItens.length > 0
+      ? nomesItens.join(', ')
+      : ((agendamento?.servico as any)?.nome || 'Serviços Especializados');
     const meses = (agendamento as any)?.garantia_meses || (agendamento?.servico as any)?.garantia_meses || 3;
     const prazo = `${meses} ${meses === 1 ? 'mês' : 'meses'}`;
 
@@ -243,7 +250,8 @@ export const FormularioCheckin: React.FC = () => {
           termo_garantia_texto,
           cliente:clientes(id, nome, telefone, documento),
           veiculo:veiculos(id, modelo, placa, cor, marca),
-          servico:servicos(id, nome, garantia_meses)
+          servico:servicos(id, nome, garantia_meses),
+          agendamento_itens(servico_nome, ordem, servicos(nome))
         `)
         .eq('id', agendamentoId)
         .maybeSingle();
@@ -284,7 +292,14 @@ export const FormularioCheckin: React.FC = () => {
       const veicPlacaIdent = veiculoModelo && veiculoPlaca 
         ? `${veiculoModelo} (${veiculoPlaca})` 
         : (veiculoPlaca || veiculoModelo || 'Veículo');
-      const servicoNome = (agData.servico as any)?.nome || 'Serviços Especializados';
+      const nomesItens = ((agData as any).agendamento_itens || [])
+        .slice()
+        .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0))
+        .map((it: any) => it.servicos?.nome || it.servico_nome)
+        .filter(Boolean);
+      const servicoNome = nomesItens.length > 0
+        ? nomesItens.join(', ')
+        : ((agData.servico as any)?.nome || 'Serviços Especializados');
       const garantiaMesesNum = (agData as any)?.garantia_meses || (agData.servico as any)?.garantia_meses || 3;
       const prazoGarantiaStr = `${garantiaMesesNum} ${garantiaMesesNum === 1 ? 'mês' : 'meses'}`;
 

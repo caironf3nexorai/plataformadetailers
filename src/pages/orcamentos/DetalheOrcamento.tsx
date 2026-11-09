@@ -43,6 +43,9 @@ import {
   Edit3,
   Scale,
   Plus,
+  Search,
+  X,
+  Eye,
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
@@ -78,6 +81,20 @@ interface ServicoComPrecoDuracao extends Servico {
   temPrecoCadastrado: boolean;
 }
 
+interface ServicoAvulsoItem {
+  uid: string;
+  nome: string;
+  preco: number;
+  duracao_minutos: number;
+}
+
+const normalizarTextoBusca = (texto: string): string =>
+  (texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+
 export const DetalheOrcamento: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -108,8 +125,9 @@ export const DetalheOrcamento: React.FC = () => {
   const [showConfirmExcluir, setShowConfirmExcluir] = useState<boolean>(false);
   const [excluindoOrcamento, setExcluindoOrcamento] = useState<boolean>(false);
 
-  // Modal de Troca de Cliente / Veículo
+  // Modal de Troca / Preenchimento de Cliente / Veículo
   const [showModalTrocarCliente, setShowModalTrocarCliente] = useState<boolean>(false);
+  const [modoModalTrocarCliente, setModoModalTrocarCliente] = useState<'selecionar' | 'cadastrar' | 'editar'>('selecionar');
 
   const handleExcluirOrcamento = async () => {
     if (!orcamento) return;
@@ -163,6 +181,29 @@ export const DetalheOrcamento: React.FC = () => {
   // Preços Personalizados por Item de Nível (key: `${nivel}_${servicoId}` -> number)
   const [customPrecos, setCustomPrecos] = useState<Record<string, number>>({});
 
+  // Serviços Únicos (avulsos, não salvos no catálogo de Serviços) por Nível
+  const [servicosAvulsosNivel, setServicosAvulsosNivel] = useState<Record<TipoNivelOrcamento, ServicoAvulsoItem[]>>({
+    essencial: [],
+    recomendado: [],
+    completo: [],
+  });
+  const servicosAvulsosRef = useRef(servicosAvulsosNivel);
+  servicosAvulsosRef.current = servicosAvulsosNivel;
+
+  // Pesquisa rápida na seleção de serviços
+  const [buscaServico, setBuscaServico] = useState<string>('');
+
+  // Modal de Serviço Único (avulso)
+  const [showModalServicoUnico, setShowModalServicoUnico] = useState<boolean>(false);
+  const [suNome, setSuNome] = useState<string>('');
+  const [suValor, setSuValor] = useState<string>('');
+  const [suDuracao, setSuDuracao] = useState<string>('60');
+  const [suNiveisDestino, setSuNiveisDestino] = useState<Record<TipoNivelOrcamento, boolean>>({
+    essencial: false,
+    recomendado: true,
+    completo: true,
+  });
+
   // Observações e Termos Personalizados do Orçamento
   const [observacoes, setObservacoes] = useState<string>('');
 
@@ -208,14 +249,24 @@ export const DetalheOrcamento: React.FC = () => {
   const [filtroMomentoFoto, setFiltroMomentoFoto] = useState<'todas' | 'antes' | 'depois'>('todas');
   const fileInputFotoRef = useRef<HTMLInputElement>(null);
 
-  // Checks de Inclusão no Orçamento / PDF / Link Público
-  const [incluirFotos, setIncluirFotos] = useState<boolean>(true);
-  const [incluirTermoResponsabilidade, setIncluirTermoResponsabilidade] = useState<boolean>(true);
-  const [incluirTermoGarantia, setIncluirTermoGarantia] = useState<boolean>(true);
+  // Checks de Inclusão no Orçamento / PDF / Link Público (desmarcados por padrão)
+  const [incluirFotos, setIncluirFotos] = useState<boolean>(false);
+  const [incluirTermoResponsabilidade, setIncluirTermoResponsabilidade] = useState<boolean>(false);
+  const [incluirTermoGarantia, setIncluirTermoGarantia] = useState<boolean>(false);
+  const [expandidoTermosFotos, setExpandidoTermosFotos] = useState<boolean>(false);
   const [garantiaMeses, setGarantiaMeses] = useState<number>(3);
   const [incluirTermoRisco, setIncluirTermoRisco] = useState<boolean>(false);
   const [termoRiscoServico, setTermoRiscoServico] = useState<string>('');
   const [termoRiscoObservacoes, setTermoRiscoObservacoes] = useState<string>('');
+
+  const incluirFotosRef = useRef(incluirFotos);
+  incluirFotosRef.current = incluirFotos;
+  const incluirTermoRespRef = useRef(incluirTermoResponsabilidade);
+  incluirTermoRespRef.current = incluirTermoResponsabilidade;
+  const incluirTermoGarantiaRef = useRef(incluirTermoGarantia);
+  incluirTermoGarantiaRef.current = incluirTermoGarantia;
+  const incluirTermoRiscoRef = useRef(incluirTermoRisco);
+  incluirTermoRiscoRef.current = incluirTermoRisco;
 
   // Termos de Garantia, Responsabilidade e Validade
   const [termosDisponiveis, setTermosDisponiveis] = useState<TermoGarantia[]>([]);
@@ -228,6 +279,17 @@ export const DetalheOrcamento: React.FC = () => {
   const [editandoTermoResp, setEditandoTermoResp] = useState<boolean>(false);
   const [validadeDiasOrcamento, setValidadeDiasOrcamento] = useState<number>(7);
   const [veiculoKm, setVeiculoKm] = useState<number | null>(null);
+
+  const servicosAtivosRef = useRef<ServicoParaTermo[]>([]);
+  const dadosTermoRef = useRef<DadosPreenchimentoTermo | null>(null);
+  const termoGarantiaSelecionadoRef = useRef(termoGarantiaSelecionado);
+  termoGarantiaSelecionadoRef.current = termoGarantiaSelecionado;
+  const garantiaMesesRef = useRef(garantiaMeses);
+  garantiaMesesRef.current = garantiaMeses;
+  const modoTermoRespRef = useRef(modoTermoResp);
+  modoTermoRespRef.current = modoTermoResp;
+  const termoRespSelecionadoIdRef = useRef(termoRespSelecionadoId);
+  termoRespSelecionadoIdRef.current = termoRespSelecionadoId;
 
   // Termos de responsabilidade ativos disponíveis para a oficina selecionar
   // Termos de responsabilidade ativos disponíveis para a oficina selecionar
@@ -305,12 +367,14 @@ export const DetalheOrcamento: React.FC = () => {
     const orcData = orcamento as any;
     const veicModelo = orcData?.veiculo?.modelo;
     const veicPlaca = orcData?.veiculo?.placa;
-    const veicIdent = veicModelo ? `${veicModelo} (${veicPlaca || ''})` : veicPlaca;
+    const veicIdent = veicModelo
+      ? `${veicModelo}${veicPlaca ? ` (${veicPlaca})` : ''}`
+      : (veicPlaca || orcData?.veiculo_descricao_avulsa || undefined);
 
     const dadosSubst = {
       nomeEmpresa,
       prazoGarantia: prazoTexto,
-      clienteNome: orcData?.cliente?.nome,
+      clienteNome: orcData?.cliente?.nome || orcData?.cliente_nome_avulso || undefined,
       veiculoPlaca: veicIdent,
     };
 
@@ -322,8 +386,10 @@ export const DetalheOrcamento: React.FC = () => {
     tenant?.razao_social,
     tenant?.nome,
     (orcamento as any)?.cliente?.nome,
+    (orcamento as any)?.cliente_nome_avulso,
     (orcamento as any)?.veiculo?.modelo,
     (orcamento as any)?.veiculo?.placa,
+    (orcamento as any)?.veiculo_descricao_avulsa,
   ]);
 
   // Modal de Novo Serviço Rápido
@@ -399,10 +465,12 @@ export const DetalheOrcamento: React.FC = () => {
 
       setObservacoes(quote.observacoes || '');
       setValidadeDiasOrcamento(quote.validade_dias || 7);
-      setIncluirFotos((quote as any).incluir_fotos ?? true);
-      const baseTermos = (quote as any).incluir_termos ?? true;
-      setIncluirTermoResponsabilidade((quote as any).incluir_termo_responsabilidade ?? baseTermos);
-      setIncluirTermoGarantia((quote as any).incluir_termo_garantia ?? baseTermos);
+      setIncluirFotos(Boolean((quote as any).incluir_fotos));
+      const baseTermos = Boolean((quote as any).incluir_termos);
+      const flagResp = (quote as any).incluir_termo_responsabilidade;
+      const flagGarantia = (quote as any).incluir_termo_garantia;
+      setIncluirTermoResponsabilidade(flagResp !== null && flagResp !== undefined ? Boolean(flagResp) : baseTermos);
+      setIncluirTermoGarantia(flagGarantia !== null && flagGarantia !== undefined ? Boolean(flagGarantia) : baseTermos);
       setTermoGarantiaSelecionado((quote as any).termo_garantia_id || '');
       setGarantiaMeses((quote as any).garantia_meses ?? 3);
       setIncluirTermoRisco(Boolean((quote as any).incluir_termo_risco));
@@ -631,6 +699,11 @@ export const DetalheOrcamento: React.FC = () => {
         recomendado: new Set(),
         completo: new Set(),
       };
+      const newAvulsos: Record<TipoNivelOrcamento, ServicoAvulsoItem[]> = {
+        essencial: [],
+        recomendado: [],
+        completo: [],
+      };
 
       const initialCustomPrecos: Record<string, number> = {};
       if (quote.niveis) {
@@ -646,6 +719,13 @@ export const DetalheOrcamento: React.FC = () => {
                   if (it.preco !== null && it.preco !== undefined) {
                     initialCustomPrecos[`${n.nivel}_${it.servico_id}`] = Number(it.preco);
                   }
+                } else if (!it.combo_id && (it.servico_nome || '').trim()) {
+                  newAvulsos[n.nivel].push({
+                    uid: it.id || `av_${n.nivel}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                    nome: (it.servico_nome || '').trim(),
+                    preco: Number(it.preco ?? 0),
+                    duracao_minutos: Number(it.duracao_minutos ?? 60),
+                  });
                 }
               });
             }
@@ -656,11 +736,14 @@ export const DetalheOrcamento: React.FC = () => {
       if ((quote as any)?.modo_orcamento === 'simples') {
         newItens.recomendado = new Set();
         newItens.completo = new Set();
+        newAvulsos.recomendado = [];
+        newAvulsos.completo = [];
       }
 
       setTitulosNiveis(newTitulos);
       setDescricoesNiveis(newDescricoes);
       setItensNivel(newItens);
+      setServicosAvulsosNivel(newAvulsos);
       setCustomPrecos(initialCustomPrecos);
       setObservacoes(quote.observacoes || '');
       setSaveStatus('salvo');
@@ -694,6 +777,34 @@ export const DetalheOrcamento: React.FC = () => {
     return map;
   }, [servicosCatalogo]);
 
+  const termoBuscaNorm = normalizarTextoBusca(buscaServico);
+
+  const servicosPorGrupoFiltrados = useMemo(() => {
+    if (!termoBuscaNorm) return servicosPorGrupo;
+    const filtered = new Map<string, ServicoComPrecoDuracao[]>();
+    servicosPorGrupo.forEach((lista, nomeGrupo) => {
+      const grupoBate = normalizarTextoBusca(nomeGrupo).includes(termoBuscaNorm);
+      const itensFiltrados = grupoBate
+        ? lista
+        : lista.filter(
+            (s) =>
+              normalizarTextoBusca(s.nome).includes(termoBuscaNorm) ||
+              normalizarTextoBusca((s as any).codigo || '').includes(termoBuscaNorm)
+          );
+      if (itensFiltrados.length > 0) {
+        filtered.set(nomeGrupo, itensFiltrados);
+      }
+    });
+    return filtered;
+  }, [servicosPorGrupo, termoBuscaNorm]);
+
+  const customPrecosRef = useRef(customPrecos);
+  customPrecosRef.current = customPrecos;
+  const observacoesRef = useRef(observacoes);
+  observacoesRef.current = observacoes;
+  const modoOrcamentoRef = useRef<string | null | undefined>((orcamento as any)?.modo_orcamento);
+  modoOrcamentoRef.current = (orcamento as any)?.modo_orcamento;
+
   // PERSISTÊNCIA NO BANCO (FUNÇÃO PRINCIPAL DE SALVAMENTO)
   const executarSalvarNoBanco = useCallback(
     async (
@@ -701,31 +812,48 @@ export const DetalheOrcamento: React.FC = () => {
       currentTitulos: Record<TipoNivelOrcamento, string>,
       currentDescricoes: Record<TipoNivelOrcamento, string>,
       currentObservacoes?: string,
-      currentCustomPrecos?: Record<string, number>
+      currentCustomPrecos?: Record<string, number>,
+      currentAvulsos?: Record<TipoNivelOrcamento, ServicoAvulsoItem[]>
     ) => {
       if (!orcamento || !tenant) return;
       setSaveStatus('salvando');
 
       try {
         const niveisList = orcamento.niveis || [];
-        const precosEfetivos = currentCustomPrecos || customPrecos;
+        const precosEfetivos = currentCustomPrecos || customPrecosRef.current;
+        const avulsosEfetivos = currentAvulsos || servicosAvulsosRef.current;
 
-        const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+        const isSimples = (modoOrcamentoRef.current || (orcamento as any)?.modo_orcamento) === 'simples';
 
         for (const nivelKey of ['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]) {
           const nivelRecord = niveisList.find((n) => n.nivel === nivelKey);
           if (nivelRecord) {
             const servicosIds = isSimples && nivelKey !== 'essencial' ? [] : Array.from(currentItens[nivelKey]);
-            const payloadItens = servicosIds.map((sId) => {
-              const cPrice = precosEfetivos[`${nivelKey}_${sId}`];
-              const sCatalogo = servicosCatalogo.find((s) => s.id === sId);
-              return {
-                servico_id: sId,
+            const avulsosList =
+              isSimples && nivelKey !== 'essencial'
+                ? []
+                : (avulsosEfetivos[nivelKey] || []).filter((av) => av.nome && av.nome.trim().length > 0);
+
+            const payloadItens = [
+              ...servicosIds.map((sId) => {
+                const cPrice = precosEfetivos[`${nivelKey}_${sId}`];
+                const sCatalogo = servicosCatalogo.find((s) => s.id === sId);
+                return {
+                  servico_id: sId,
+                  combo_id: null,
+                  servico_nome: null,
+                  preco: cPrice !== undefined ? cPrice : null,
+                  duracao_minutos: sCatalogo?.duracaoMatriz || 60,
+                };
+              }),
+              ...avulsosList.map((av) => ({
+                servico_id: null,
                 combo_id: null,
-                preco: cPrice !== undefined ? cPrice : null,
-                duracao_minutos: sCatalogo?.duracaoMatriz || 60,
-              };
-            });
+                servico_nome: av.nome.trim(),
+                preco: Math.max(0, Number(av.preco || 0)),
+                duracao_minutos: Math.max(5, Math.round(Number(av.duracao_minutos || 60))),
+              })),
+            ];
 
             const { error } = await supabase.rpc('salvar_nivel_orcamento', {
               p_nivel: nivelRecord.id,
@@ -738,28 +866,32 @@ export const DetalheOrcamento: React.FC = () => {
           }
         }
 
-        // Salvar observações e termo de responsabilidade do orçamento
-        const valObs = currentObservacoes !== undefined ? currentObservacoes : observacoes;
+        // Salvar observações, flags de visualização/termos e termo de responsabilidade do orçamento
+        const valObs = currentObservacoes !== undefined ? currentObservacoes : observacoesRef.current;
         const payloadOrc: any = {
           observacoes: valObs.trim() || null,
           updated_at: new Date().toISOString(),
         };
-        const textoSalvar = (modoTermoResp === 'dinamico' || !termoResponsabilidadeRef.current || termoResponsabilidadeRef.current.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim())
-          ? (gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo) || termoResponsabilidadeRef.current || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO)
+        const dtTermo = dadosTermoRef.current;
+        const textoSalvar = (modoTermoRespRef.current === 'dinamico' || !termoResponsabilidadeRef.current || termoResponsabilidadeRef.current.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim())
+          ? (dtTermo ? (gerarTermoDinamicoServicos(servicosAtivosRef.current, dtTermo) || termoResponsabilidadeRef.current || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO) : (termoResponsabilidadeRef.current || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO))
           : (termoResponsabilidadeRef.current || termoResponsabilidade);
         if (textoSalvar) {
           payloadOrc.termo_responsabilidade_texto = textoSalvar;
         }
-        payloadOrc.modo_termo_responsabilidade = modoTermoResp;
-        if (termoRespSelecionadoId && termoRespSelecionadoId !== 'dinamico' && termoRespSelecionadoId !== 'personalizado') {
-          payloadOrc.termo_responsabilidade_id = termoRespSelecionadoId;
+        payloadOrc.modo_termo_responsabilidade = modoTermoRespRef.current;
+        if (termoRespSelecionadoIdRef.current && termoRespSelecionadoIdRef.current !== 'dinamico' && termoRespSelecionadoIdRef.current !== 'personalizado') {
+          payloadOrc.termo_responsabilidade_id = termoRespSelecionadoIdRef.current;
         } else {
           payloadOrc.termo_responsabilidade_id = null;
         }
-        payloadOrc.termo_garantia_id = termoGarantiaSelecionado || null;
-        payloadOrc.garantia_meses = garantiaMeses;
-        payloadOrc.incluir_termo_garantia = incluirTermoGarantia;
-        payloadOrc.incluir_termo_responsabilidade = incluirTermoResponsabilidade;
+        payloadOrc.termo_garantia_id = termoGarantiaSelecionadoRef.current || null;
+        payloadOrc.garantia_meses = garantiaMesesRef.current;
+        payloadOrc.incluir_fotos = incluirFotosRef.current;
+        payloadOrc.incluir_termo_garantia = incluirTermoGarantiaRef.current;
+        payloadOrc.incluir_termo_responsabilidade = incluirTermoRespRef.current;
+        payloadOrc.incluir_termo_risco = incluirTermoRespRef.current ? incluirTermoRiscoRef.current : false;
+        payloadOrc.incluir_termos = incluirTermoGarantiaRef.current || incluirTermoRespRef.current;
 
         let { error: obsError } = await supabase
           .from('orcamentos')
@@ -783,7 +915,7 @@ export const DetalheOrcamento: React.FC = () => {
         showError('Não foi possível salvar o orçamento. Tente novamente.', err);
       }
     },
-    [orcamento, tenant, observacoes, customPrecos, showError]
+    [orcamento, tenant, servicosCatalogo, termoResponsabilidade, showError]
   );
 
   // TRIGGER AUTOSAVE COM DEBOUNCE (800ms)
@@ -793,7 +925,8 @@ export const DetalheOrcamento: React.FC = () => {
       updatedTitulos: Record<TipoNivelOrcamento, string>,
       updatedDescricoes: Record<TipoNivelOrcamento, string>,
       updatedObservacoes?: string,
-      updatedCustomPrecos?: Record<string, number>
+      updatedCustomPrecos?: Record<string, number>,
+      updatedAvulsos?: Record<TipoNivelOrcamento, ServicoAvulsoItem[]>
     ) => {
       if (!isLoadedRef.current) return;
 
@@ -803,7 +936,14 @@ export const DetalheOrcamento: React.FC = () => {
       }
 
       autoSaveTimerRef.current = setTimeout(() => {
-        executarSalvarNoBanco(updatedItens, updatedTitulos, updatedDescricoes, updatedObservacoes, updatedCustomPrecos);
+        executarSalvarNoBanco(
+          updatedItens,
+          updatedTitulos,
+          updatedDescricoes,
+          updatedObservacoes,
+          updatedCustomPrecos,
+          updatedAvulsos
+        );
       }, 800);
     },
     [executarSalvarNoBanco]
@@ -816,7 +956,104 @@ export const DetalheOrcamento: React.FC = () => {
       [`${nivel}_${servicoId}`]: Math.max(0, novoPreco),
     };
     setCustomPrecos(updated);
-    triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, observacoes, updated);
+    triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, observacoes, updated, servicosAvulsosNivel);
+  };
+
+  // GERENCIAMENTO DE SERVIÇOS ÚNICOS (AVULSOS)
+  const abrirModalServicoUnico = (nivelAlvo?: TipoNivelOrcamento, nomeInicial = '') => {
+    const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+    setSuNome(nomeInicial);
+    setSuValor('');
+    setSuDuracao('60');
+    if (isSimples || !nivelAlvo) {
+      setSuNiveisDestino({
+        essencial: true,
+        recomendado: !isSimples,
+        completo: !isSimples,
+      });
+    } else if (nivelAlvo === 'essencial') {
+      setSuNiveisDestino({ essencial: true, recomendado: true, completo: true });
+    } else if (nivelAlvo === 'recomendado') {
+      setSuNiveisDestino({ essencial: false, recomendado: true, completo: true });
+    } else {
+      setSuNiveisDestino({ essencial: false, recomendado: false, completo: true });
+    }
+    setShowModalServicoUnico(true);
+  };
+
+  const handleAdicionarServicoUnico = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nomeLimpo = suNome.trim();
+    const valorNum = parseFloat(suValor.replace(',', '.'));
+    const duracaoNum = parseInt(suDuracao, 10);
+
+    if (!nomeLimpo) {
+      showError('Informe o nome do serviço único.');
+      return;
+    }
+    if (isNaN(valorNum) || valorNum < 0) {
+      showError('Informe um valor válido para o serviço.');
+      return;
+    }
+    if (isNaN(duracaoNum) || duracaoNum < 5) {
+      showError('Informe um tempo de execução válido (mínimo 5 min).');
+      return;
+    }
+
+    const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+    const niveisAlvo: TipoNivelOrcamento[] = isSimples
+      ? ['essencial']
+      : (['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).filter((k) => suNiveisDestino[k]);
+
+    if (niveisAlvo.length === 0) {
+      showError('Selecione pelo menos um nível para adicionar o serviço único.');
+      return;
+    }
+
+    const updated: Record<TipoNivelOrcamento, ServicoAvulsoItem[]> = {
+      essencial: [...servicosAvulsosNivel.essencial],
+      recomendado: [...servicosAvulsosNivel.recomendado],
+      completo: [...servicosAvulsosNivel.completo],
+    };
+
+    const baseId = `av_${Date.now().toString(36)}`;
+    niveisAlvo.forEach((nk, idx) => {
+      updated[nk].push({
+        uid: `${baseId}_${nk}_${idx}`,
+        nome: nomeLimpo,
+        preco: Math.round(valorNum * 100) / 100,
+        duracao_minutos: duracaoNum,
+      });
+    });
+
+    setServicosAvulsosNivel(updated);
+    setShowModalServicoUnico(false);
+    triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, observacoes, customPrecos, updated);
+    showSuccess(`Serviço Único "${nomeLimpo}" adicionado ao orçamento!`);
+  };
+
+  const handleAtualizarServicoUnico = (
+    nivel: TipoNivelOrcamento,
+    uid: string,
+    patch: Partial<Pick<ServicoAvulsoItem, 'nome' | 'preco' | 'duracao_minutos'>>
+  ) => {
+    const updated: Record<TipoNivelOrcamento, ServicoAvulsoItem[]> = {
+      ...servicosAvulsosNivel,
+      [nivel]: servicosAvulsosNivel[nivel].map((av) =>
+        av.uid === uid ? { ...av, ...patch } : av
+      ),
+    };
+    setServicosAvulsosNivel(updated);
+    triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, observacoes, customPrecos, updated);
+  };
+
+  const handleRemoverServicoUnico = (nivel: TipoNivelOrcamento, uid: string) => {
+    const updated: Record<TipoNivelOrcamento, ServicoAvulsoItem[]> = {
+      ...servicosAvulsosNivel,
+      [nivel]: servicosAvulsosNivel[nivel].filter((av) => av.uid !== uid),
+    };
+    setServicosAvulsosNivel(updated);
+    triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, observacoes, customPrecos, updated);
   };
 
   // TOGGLE SERVIÇO COM HERANÇA E DISPARO DE AUTOSAVE
@@ -845,25 +1082,25 @@ export const DetalheOrcamento: React.FC = () => {
     }
 
     setItensNivel(copy);
-    triggerAutoSave(copy, titulosNiveis, descricoesNiveis);
+    triggerAutoSave(copy, titulosNiveis, descricoesNiveis, observacoes, customPrecos, servicosAvulsosNivel);
   };
 
   // ATUALIZAR TÍTULO / DESCRIÇÃO COM AUTOSAVE
   const handleAtualizarTitulo = (nivelKey: TipoNivelOrcamento, novoTitulo: string) => {
     const updated = { ...titulosNiveis, [nivelKey]: novoTitulo };
     setTitulosNiveis(updated);
-    triggerAutoSave(itensNivel, updated, descricoesNiveis);
+    triggerAutoSave(itensNivel, updated, descricoesNiveis, observacoes, customPrecos, servicosAvulsosNivel);
   };
 
   const handleAtualizarDescricao = (nivelKey: TipoNivelOrcamento, novaDescricao: string) => {
     const updated = { ...descricoesNiveis, [nivelKey]: novaDescricao };
     setDescricoesNiveis(updated);
-    triggerAutoSave(itensNivel, titulosNiveis, updated);
+    triggerAutoSave(itensNivel, titulosNiveis, updated, observacoes, customPrecos, servicosAvulsosNivel);
   };
 
   // BOTÃO SUGERIR NÍVEIS AUTOMATICAMENTE
   const handleSugerirNiveis = () => {
-    if (itensNivel.essencial.size === 0) {
+    if (itensNivel.essencial.size === 0 && servicosAvulsosNivel.essencial.length === 0) {
       showToast('Selecione ao menos um serviço no nível Essencial antes de sugerir os outros dois.', 'warning');
       return;
     }
@@ -894,10 +1131,10 @@ export const DetalheOrcamento: React.FC = () => {
     });
 
     setItensNivel(copy);
-    triggerAutoSave(copy, titulosNiveis, descricoesNiveis);
+    triggerAutoSave(copy, titulosNiveis, descricoesNiveis, observacoes, customPrecos, servicosAvulsosNivel);
   };
 
-  // CÁLCULOS AO VIVO DOS TOTAIS DE CADA NÍVEL (COM DESCONTO SE ATIVO E PREÇOS EDITADOS)
+  // CÁLCULOS AO VIVO DOS TOTAIS DE CADA NÍVEL (COM DESCONTO SE ATIVO, PREÇOS EDITADOS E SERVIÇOS ÚNICOS)
   const calcularTotaisNivel = (nivel: TipoNivelOrcamento) => {
     let valorTotal = 0;
     let duracaoTotal = 0;
@@ -917,6 +1154,11 @@ export const DetalheOrcamento: React.FC = () => {
       }
     });
 
+    (servicosAvulsosNivel[nivel] || []).forEach((av) => {
+      valorTotal += Number(av.preco || 0);
+      duracaoTotal += Number(av.duracao_minutos || 60);
+    });
+
     let valorComDesconto = valorTotal;
     if (orcamento?.desconto_valor && orcamento.desconto_valor > 0 && orcamento.desconto_tipo) {
       if (orcamento.desconto_tipo === 'porcentagem') {
@@ -930,7 +1172,7 @@ export const DetalheOrcamento: React.FC = () => {
       valorTotal,
       valorComDesconto,
       duracaoTotal,
-      itensCount: itensNivel[nivel].size,
+      itensCount: itensNivel[nivel].size + (servicosAvulsosNivel[nivel]?.length || 0),
       itensSemPrecoCount
     };
   };
@@ -946,7 +1188,14 @@ export const DetalheOrcamento: React.FC = () => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
-    await executarSalvarNoBanco(itensNivel, titulosNiveis, descricoesNiveis, observacoes, customPrecos);
+    await executarSalvarNoBanco(
+      itensNivel,
+      titulosNiveis,
+      descricoesNiveis,
+      observacoes,
+      customPrecos,
+      servicosAvulsosNivel
+    );
     showSuccess('Orçamento salvo com sucesso!');
   };
 
@@ -966,11 +1215,15 @@ export const DetalheOrcamento: React.FC = () => {
       const link = `${window.location.origin}/orcamento/${token || orcamento.token_publico}`;
       setLinkPublico(link);
 
-      const clienteNome = orcamento.cliente?.nome ? orcamento.cliente.nome.split(' ')[0] : 'Cliente';
-      const veiculoModelo = orcamento.veiculo?.modelo || 'seu veículo';
+      const nomeBruto = orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso;
+      const clienteNome = nomeBruto ? nomeBruto.split(' ')[0] : 'Cliente';
+      const veiculoModelo = orcamento.veiculo?.modelo || (orcamento as any).veiculo_descricao_avulsa || 'seu veículo';
+      const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
 
-      const mensagem = `Olá ${clienteNome}! Preparei três opções especiais de serviços para o seu ${veiculoModelo}. Dá uma olhada e me diz qual prefere: ${link}`;
-      const telefoneFormatado = (orcamento.cliente?.telefone || '').replace(/\D/g, '');
+      const mensagem = isSimples
+        ? `Olá ${clienteNome}! Preparei uma proposta especial de serviços para o seu ${veiculoModelo}. Dá uma olhada e me diz se podemos agendar: ${link}`
+        : `Olá ${clienteNome}! Preparei três opções especiais de serviços para o seu ${veiculoModelo}. Dá uma olhada e me diz qual prefere: ${link}`;
+      const telefoneFormatado = (orcamento.cliente?.telefone || (orcamento as any).cliente_telefone_avulso || '').replace(/\D/g, '');
 
       const whatsappUrl = telefoneFormatado
         ? `https://api.whatsapp.com/send?phone=55${telefoneFormatado}&text=${encodeURIComponent(mensagem)}`
@@ -1012,11 +1265,12 @@ export const DetalheOrcamento: React.FC = () => {
       const link = `${window.location.origin}/orcamento/${orcamento.token_publico}`;
       setLinkPublico(link);
 
-      const clienteNome = orcamento.cliente?.nome ? orcamento.cliente.nome.split(' ')[0] : 'Cliente';
-      const veiculoModelo = orcamento.veiculo?.modelo || 'seu veículo';
+      const nomeBruto = orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso;
+      const clienteNome = nomeBruto ? nomeBruto.split(' ')[0] : 'Cliente';
+      const veiculoModelo = orcamento.veiculo?.modelo || (orcamento as any).veiculo_descricao_avulsa || 'seu veículo';
 
       const mensagem = `Olá ${clienteNome}! Atualizamos os detalhes e valores do orçamento do seu ${veiculoModelo}. Por favor, acesse o link a seguir para conferir a alteração e realizar sua assinatura digital de confirmação: ${link}`;
-      const telefoneFormatado = (orcamento.cliente?.telefone || '').replace(/\D/g, '');
+      const telefoneFormatado = (orcamento.cliente?.telefone || (orcamento as any).cliente_telefone_avulso || '').replace(/\D/g, '');
 
       const whatsappUrl = telefoneFormatado
         ? `https://api.whatsapp.com/send?phone=55${telefoneFormatado}&text=${encodeURIComponent(mensagem)}`
@@ -1090,6 +1344,14 @@ export const DetalheOrcamento: React.FC = () => {
   const handleConverterAgendamento = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orcamento || !dataAgendamento || !horaAgendamento) return;
+
+    if (!orcamento.cliente_id) {
+      setShowAgendarModal(false);
+      showToast('Preencha e vincule o cliente antes de converter em agendamento/OS.', 'warning');
+      setModoModalTrocarCliente('cadastrar');
+      setShowModalTrocarCliente(true);
+      return;
+    }
 
     setConverting(true);
     try {
@@ -1345,30 +1607,43 @@ export const DetalheOrcamento: React.FC = () => {
 
   // Lista de serviços constantes neste orçamento para preenchimento ágil
   const servicosDoOrcamento = useMemo(() => {
-    if (!orcamento?.niveis) return [];
     const map = new Map<string, { id: string; nome: string; riscos_especificos_padrao?: string }>();
-    for (const n of orcamento.niveis) {
-      for (const it of (n.itens || [])) {
-        const nome = (it as any).servico_nome || it.servico?.nome;
-        if (nome && !map.has(nome)) {
-          map.set(nome, {
-            id: it.servico_id || it.id,
-            nome,
-            riscos_especificos_padrao: (it.servico as any)?.riscos_especificos_padrao || '',
-          });
+    if (orcamento?.niveis) {
+      for (const n of orcamento.niveis) {
+        for (const it of (n.itens || [])) {
+          const nome = (it as any).servico_nome || it.servico?.nome;
+          if (nome && !map.has(nome)) {
+            map.set(nome, {
+              id: it.servico_id || it.id,
+              nome,
+              riscos_especificos_padrao: (it.servico as any)?.riscos_especificos_padrao || '',
+            });
+          }
         }
       }
     }
+    Object.values(servicosAvulsosNivel).forEach((arr) => {
+      arr.forEach((av) => {
+        if (av.nome && !map.has(av.nome)) {
+          map.set(av.nome, { id: av.uid, nome: av.nome, riscos_especificos_padrao: '' });
+        }
+      });
+    });
     return Array.from(map.values());
-  }, [orcamento]);
+  }, [orcamento, servicosAvulsosNivel]);
 
   // Lista de serviços atualmente selecionados na proposta (reativo às mudanças nos níveis)
   const servicosAtivosNoOrcamento = useMemo<ServicoParaTermo[]>(() => {
-    const todosIds = new Set<string>([
-      ...Array.from(itensNivel.essencial),
-      ...Array.from(itensNivel.recomendado),
-      ...Array.from(itensNivel.completo),
-    ]);
+    const isSimples = (orcamento as any)?.modo_orcamento === 'simples';
+    const todosIds = new Set<string>(
+      isSimples
+        ? Array.from(itensNivel.essencial)
+        : [
+            ...Array.from(itensNivel.essencial),
+            ...Array.from(itensNivel.recomendado),
+            ...Array.from(itensNivel.completo),
+          ]
+    );
 
     const list: ServicoParaTermo[] = [];
     const seen = new Set<string>();
@@ -1385,9 +1660,29 @@ export const DetalheOrcamento: React.FC = () => {
       }
     });
 
+    // Inclui Serviços Únicos (avulsos) ativos
+    const avulsosAtivos = isSimples
+      ? servicosAvulsosNivel.essencial
+      : [
+          ...servicosAvulsosNivel.essencial,
+          ...servicosAvulsosNivel.recomendado,
+          ...servicosAvulsosNivel.completo,
+        ];
+    avulsosAtivos.forEach((av) => {
+      if (av.nome && !seen.has(av.nome.toLowerCase())) {
+        seen.add(av.nome.toLowerCase());
+        list.push({
+          nome: av.nome,
+          grupo: 'Serviço Único',
+          riscos_especificos_padrao: null,
+        });
+      }
+    });
+
     // Se houver itens em orcamento.niveis que estão selecionados ou se o catálogo ainda estiver carregando
-    if (orcamento?.niveis) {
+    if (orcamento?.niveis && servicosCatalogo.length === 0) {
       for (const n of orcamento.niveis) {
+        if (isSimples && n.nivel !== 'essencial') continue;
         for (const it of (n.itens || [])) {
           const sId = it.servico_id || (it.servico as any)?.id;
           const isSelected = todosIds.size === 0 || (sId && todosIds.has(sId));
@@ -1407,23 +1702,25 @@ export const DetalheOrcamento: React.FC = () => {
     }
 
     return list;
-  }, [itensNivel, servicosCatalogo, orcamento]);
+  }, [itensNivel, servicosAvulsosNivel, servicosCatalogo, orcamento]);
+  servicosAtivosRef.current = servicosAtivosNoOrcamento;
 
   // Dados do cliente, veículo e oficina para preenchimento de variáveis no termo
   const dadosTermo = useMemo<DadosPreenchimentoTermo>(() => {
     const veicStr = orcamento?.veiculo
       ? `${orcamento.veiculo.modelo || 'Veículo'}${orcamento.veiculo.marca ? ` (${orcamento.veiculo.marca})` : ''} - Placa: ${orcamento.veiculo.placa || 'N/I'}`
-      : 'Veículo';
+      : ((orcamento as any)?.veiculo_descricao_avulsa || 'Veículo');
     return {
       nomeEmpresa: tenant?.nome || tenant?.razao_social || 'Oficina Especializada',
       prazoGarantia: `${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'}`,
       servicoContratado: servicosAtivosNoOrcamento.map((s) => s.nome).join(', ') || 'Procedimentos Especializados',
-      clienteNome: orcamento?.cliente?.nome || '',
+      clienteNome: orcamento?.cliente?.nome || (orcamento as any)?.cliente_nome_avulso || '',
       clienteCpf: (orcamento?.cliente as any)?.documento || (orcamento?.cliente as any)?.cpf_cnpj || '',
       veiculoPlaca: veicStr,
       data: new Date().toLocaleDateString('pt-BR'),
     };
   }, [tenant, garantiaMeses, servicosAtivosNoOrcamento, orcamento]);
+  dadosTermoRef.current = dadosTermo;
 
   // Cláusulas técnicas ativas detectadas com base nos serviços selecionados (motor centralizado)
   const clausulasDetectadasInfo = useMemo(() => {
@@ -1566,16 +1863,24 @@ export const DetalheOrcamento: React.FC = () => {
   // ATIVAR / DESATIVAR TERMO DE RESPONSABILIDADE & RISCOS
   const handleToggleTermoResponsabilidade = async (ativo: boolean) => {
     setIncluirTermoResponsabilidade(ativo);
+    if (ativo) {
+      setExpandidoTermosFotos(true);
+    } else {
+      setIncluirTermoRisco(false);
+    }
     if (!orcamento) return;
     try {
-      await supabase.from('orcamentos').update({
+      const updatePayload: any = {
         incluir_termo_responsabilidade: ativo,
         incluir_termos: ativo || incluirTermoGarantia,
-      }).eq('id', orcamento.id);
+      };
+      if (!ativo) {
+        updatePayload.incluir_termo_risco = false;
+      }
+      await supabase.from('orcamentos').update(updatePayload).eq('id', orcamento.id);
       setOrcamento((prev) => prev ? {
         ...prev,
-        incluir_termo_responsabilidade: ativo,
-        incluir_termos: ativo || incluirTermoGarantia,
+        ...updatePayload,
       } as any : null);
       showSuccess(ativo ? 'Termo de Responsabilidade & Riscos ativado!' : 'Termo de Responsabilidade & Riscos desativado.');
     } catch (e) {
@@ -1586,6 +1891,9 @@ export const DetalheOrcamento: React.FC = () => {
   // ATIVAR / DESATIVAR TERMO DE GARANTIA
   const handleToggleTermoGarantia = async (ativo: boolean) => {
     setIncluirTermoGarantia(ativo);
+    if (ativo) {
+      setExpandidoTermosFotos(true);
+    }
     if (!orcamento) return;
     try {
       await supabase.from('orcamentos').update({
@@ -1677,6 +1985,29 @@ export const DetalheOrcamento: React.FC = () => {
         const tituloNivel = isSimples
           ? (titulosNiveis['essencial'] && titulosNiveis['essencial'].toLowerCase() !== 'essencial' ? titulosNiveis['essencial'] : 'Proposta de Serviços')
           : (titulosNiveis[n.nivel] || n.titulo || n.nivel);
+        const itensCatalogoPdf = Array.from(itensNivel[n.nivel]).map((sId) => {
+          const s = servicosCatalogo.find((serv) => serv.id === sId);
+          const cPrice = customPrecos[`${n.nivel}_${sId}`];
+          const dbNivel = orcamento.niveis?.find((lvl: any) => lvl.nivel === n.nivel);
+          const dbItem = dbNivel?.itens?.find((it: any) => it.servico_id === sId);
+          const nomeFinal = s?.nome || dbItem?.servico?.nome || (dbItem as any)?.servico_nome || 'Serviço';
+          const descFinal = s?.descricao_publica || s?.descricao_interna || dbItem?.servico?.descricao_publica;
+          const precoFinal = cPrice !== undefined ? cPrice : (s?.precoMatriz !== undefined ? s.precoMatriz : (dbItem?.preco ? Number(dbItem.preco) : 0));
+          const duracaoFinal = s?.duracaoMatriz !== undefined ? s.duracaoMatriz : (dbItem?.duracao_minutos ? Number(dbItem.duracao_minutos) : undefined);
+
+          return {
+            servico_nome: nomeFinal,
+            servico_descricao: descFinal,
+            preco: precoFinal,
+            duracao_minutos: duracaoFinal,
+          };
+        });
+        const itensAvulsosPdf = (servicosAvulsosNivel[n.nivel] || []).map((av) => ({
+          servico_nome: av.nome,
+          servico_descricao: 'Serviço Único (personalizado para esta proposta)',
+          preco: av.preco,
+          duracao_minutos: av.duracao_minutos,
+        }));
         return {
           nivel: n.nivel,
           titulo: tituloNivel,
@@ -1685,23 +2016,7 @@ export const DetalheOrcamento: React.FC = () => {
           valor_original: calc.valorTotal,
           duracao_total: calc.duracaoTotal,
           destaque: isSimples ? false : n.destaque,
-          itens: Array.from(itensNivel[n.nivel]).map((sId) => {
-            const s = servicosCatalogo.find((serv) => serv.id === sId);
-            const cPrice = customPrecos[`${n.nivel}_${sId}`];
-            const dbNivel = orcamento.niveis?.find((lvl: any) => lvl.nivel === n.nivel);
-            const dbItem = dbNivel?.itens?.find((it: any) => it.servico_id === sId);
-            const nomeFinal = s?.nome || dbItem?.servico?.nome || (dbItem as any)?.servico_nome || 'Serviço';
-            const descFinal = s?.descricao_publica || s?.descricao_interna || dbItem?.servico?.descricao_publica;
-            const precoFinal = cPrice !== undefined ? cPrice : (s?.precoMatriz !== undefined ? s.precoMatriz : (dbItem?.preco ? Number(dbItem.preco) : 0));
-            const duracaoFinal = s?.duracaoMatriz !== undefined ? s.duracaoMatriz : (dbItem?.duracao_minutos ? Number(dbItem.duracao_minutos) : undefined);
-
-            return {
-              servico_nome: nomeFinal,
-              servico_descricao: descFinal,
-              preco: precoFinal,
-              duracao_minutos: duracaoFinal,
-            };
-          }),
+          itens: [...itensCatalogoPdf, ...itensAvulsosPdf],
         };
       });
 
@@ -1724,12 +2039,12 @@ export const DetalheOrcamento: React.FC = () => {
           validade_dias: diasVal,
           data_validade_limite: dataValidadeLimiteStr,
           observacoes: observacoes || orcamento.observacoes,
-          clienteNome: orcamento.cliente?.nome || 'Cliente',
-          clienteTelefone: orcamento.cliente?.telefone,
+          clienteNome: orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'Não informado',
+          clienteTelefone: orcamento.cliente?.telefone || (orcamento as any).cliente_telefone_avulso || undefined,
           clienteEmail: (orcamento.cliente as any)?.email,
           clienteCpfCnpj: (orcamento.cliente as any)?.documento || (orcamento.cliente as any)?.cpf_cnpj,
           clienteEndereco: (orcamento.cliente as any)?.endereco,
-          veiculoModelo: orcamento.veiculo?.modelo,
+          veiculoModelo: orcamento.veiculo?.modelo || (orcamento as any).veiculo_descricao_avulsa || undefined,
           veiculoMarca: orcamento.veiculo?.marca,
           veiculoPlaca: orcamento.veiculo?.placa,
           veiculoCor: orcamento.veiculo?.cor || null,
@@ -1750,24 +2065,32 @@ export const DetalheOrcamento: React.FC = () => {
           assinaturaUsuarioNome: (orcamento as any).assinatura_usuario_nome || tenant.nome,
           assinadoUsuarioEm: (orcamento as any).assinado_usuario_em,
           incluirFotos,
-          fotos: fotosAvaliacao.map((f) => ({
-            url: f.url,
-            path: (f as any).path,
-            tipo: f.tipo || (f.descricao?.includes('[DEPOIS]') ? 'depois' : 'antes'),
-            created_at: f.created_at,
-            descricao: f.descricao,
-          })),
-          incluirTermos: incluirTermoResponsabilidade || incluirTermoGarantia || incluirTermoRisco,
+          fotos: incluirFotos
+            ? fotosAvaliacao.map((f) => ({
+                url: f.url,
+                path: (f as any).path,
+                tipo: f.tipo || (f.descricao?.includes('[DEPOIS]') ? 'depois' : 'antes'),
+                created_at: f.created_at,
+                descricao: f.descricao,
+              }))
+            : [],
+          incluirTermos: incluirTermoResponsabilidade || incluirTermoGarantia,
           incluirTermoResponsabilidade,
           incluirTermoGarantia,
           garantiaMeses,
-          incluirTermoRisco,
-          termoRiscoServico: termoRiscoServico || servicosAtivosNoOrcamento.map((s) => s.nome).join(', ') || 'Procedimentos Especializados com Risco Técnico',
-          termoRiscoObservacoes: termoRiscoObservacoes?.trim() || termoResponsabilidadeRef.current || termoResponsabilidade,
-          termoResponsabilidade: (modoTermoResp === 'dinamico' || !termoResponsabilidade || termoResponsabilidade.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim())
-            ? (gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo) || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO)
-            : termoResponsabilidade,
-          termosGarantia: termoEscolhido?.conteudo ? textoPreviewGarantia : undefined,
+          incluirTermoRisco: incluirTermoResponsabilidade && incluirTermoRisco,
+          termoRiscoServico: incluirTermoResponsabilidade
+            ? (termoRiscoServico || servicosAtivosNoOrcamento.map((s) => s.nome).join(', ') || 'Procedimentos Especializados com Risco Técnico')
+            : undefined,
+          termoRiscoObservacoes: incluirTermoResponsabilidade
+            ? (termoRiscoObservacoes?.trim() || termoResponsabilidadeRef.current || termoResponsabilidade)
+            : undefined,
+          termoResponsabilidade: incluirTermoResponsabilidade
+            ? ((modoTermoResp === 'dinamico' || !termoResponsabilidade || termoResponsabilidade.trim() === TERMO_RESPONSABILIDADE_PADRAO.trim())
+              ? (gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo) || termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO)
+              : termoResponsabilidade)
+            : undefined,
+          termosGarantia: incluirTermoGarantia && termoEscolhido?.conteudo ? textoPreviewGarantia : undefined,
           desconto: orcamento.desconto_valor && orcamento.desconto_tipo ? {
             tipo: orcamento.desconto_tipo,
             valor: orcamento.desconto_valor,
@@ -1853,23 +2176,32 @@ export const DetalheOrcamento: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
-                {orcamento.cliente?.nome || 'Cliente não informado'}
+                {orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'Cliente não informado'}
               </h1>
-              {!isAprovado && (
+              {!orcamento.cliente_id && (
+                <Badge tone="amber">Dados parciais</Badge>
+              )}
+              {!orcamento.agendamento_id && (
                 <button
                   type="button"
-                  onClick={() => setShowModalTrocarCliente(true)}
+                  onClick={() => {
+                    setModoModalTrocarCliente(!orcamento.cliente_id ? 'cadastrar' : 'selecionar');
+                    setShowModalTrocarCliente(true);
+                  }}
                   className="inline-flex items-center gap-1.5 text-[11px] text-cyan-400 hover:text-cyan-300 font-sans font-bold px-2 py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-colors"
-                  title="Alterar cliente e veículo deste orçamento"
+                  title={!orcamento.cliente_id ? 'Preencher ou vincular cliente a este orçamento' : 'Alterar ou editar cliente e veículo deste orçamento'}
                 >
                   <UserCheck size={12} />
-                  <span>Alterar Cliente / Veículo</span>
+                  <span>{!orcamento.cliente_id ? 'Preencher / Vincular Cliente' : 'Alterar / Editar Cliente'}</span>
                 </button>
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-[13px] text-vapor-400">
-                {orcamento.veiculo ? `${orcamento.veiculo.placa} (${orcamento.veiculo.modelo || 'Sem modelo'})${orcamento.veiculo.cor ? ` • Cor: ${orcamento.veiculo.cor}` : ''}` : 'Sem veículo'} • {orcamento.categoria?.nome}
+                {orcamento.veiculo
+                  ? `${orcamento.veiculo.placa} (${orcamento.veiculo.modelo || 'Sem modelo'})${orcamento.veiculo.cor ? ` • Cor: ${orcamento.veiculo.cor}` : ''}`
+                  : ((orcamento as any).veiculo_descricao_avulsa || 'Sem veículo')} • {orcamento.categoria?.nome}
+                {!orcamento.cliente_id && (orcamento as any).cliente_telefone_avulso ? ` • ${(orcamento as any).cliente_telefone_avulso}` : ''}
               </span>
               {orcamento.veiculo && (
                 <button
@@ -1970,7 +2302,7 @@ export const DetalheOrcamento: React.FC = () => {
             size="sm"
             onClick={() => {
               setAssinandoTipo('cliente');
-              setNomeSignatario(orcamento.cliente?.nome || '');
+              setNomeSignatario(orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
               setShowAssinaturaModal(true);
             }}
             className="flex items-center gap-1.5 min-h-[44px]"
@@ -2033,6 +2365,12 @@ export const DetalheOrcamento: React.FC = () => {
               tone="cyan"
               size="sm"
               onClick={() => {
+                if (!orcamento.cliente_id) {
+                  showToast('Preencha e vincule o cliente antes de converter em agendamento/OS.', 'warning');
+                  setModoModalTrocarCliente('cadastrar');
+                  setShowModalTrocarCliente(true);
+                  return;
+                }
                 const hoje = new Date().toISOString().split('T')[0];
                 setDataAgendamento(hoje);
                 setShowAgendarModal(true);
@@ -2108,6 +2446,12 @@ export const DetalheOrcamento: React.FC = () => {
             tone="emerald"
             size="sm"
             onClick={() => {
+              if (!orcamento.cliente_id) {
+                showToast('Preencha e vincule o cliente antes de agendar a OS.', 'warning');
+                setModoModalTrocarCliente('cadastrar');
+                setShowModalTrocarCliente(true);
+                return;
+              }
               const hoje = new Date().toISOString().split('T')[0];
               setDataAgendamento(hoje);
               setShowAgendarModal(true);
@@ -2119,10 +2463,10 @@ export const DetalheOrcamento: React.FC = () => {
       )}
 
       {/* CARD: AVALIAÇÃO DO VEÍCULO, FOTOS COM TIMESTAMP IMUTÁVEL E TERMOS DE GARANTIA */}
-      <Card className="p-4 bg-graphite-900 border-graphite-800 flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-graphite-800 pb-3">
+      <Card className="p-4 bg-graphite-900 border-graphite-800 flex flex-col gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Camera size={18} className="text-amber-400" />
+            <Camera size={18} className="text-amber-400 shrink-0" />
             <h3 className="font-display text-sm font-bold text-vapor-100 uppercase tracking-wide">
               Avaliação do Veículo, Fotos & Termos
             </h3>
@@ -2137,8 +2481,12 @@ export const DetalheOrcamento: React.FC = () => {
                 onChange={async (e) => {
                   const val = e.target.checked;
                   setIncluirFotos(val);
+                  if (val) {
+                    setExpandidoTermosFotos(true);
+                  }
                   if (orcamento) {
                     await supabase.from('orcamentos').update({ incluir_fotos: val }).eq('id', orcamento.id);
+                    setOrcamento((prev) => prev ? ({ ...prev, incluir_fotos: val } as any) : null);
                   }
                 }}
                 className="w-4 h-4 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
@@ -2167,619 +2515,617 @@ export const DetalheOrcamento: React.FC = () => {
               />
               <span className="font-semibold">Termo de Garantia</span>
             </label>
+
+            {/* BOTÃO VISUALIZAR TUDO / RECOLHER */}
+            <button
+              type="button"
+              onClick={() => setExpandidoTermosFotos((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-amber-400 border border-graphite-700 font-sans text-xs font-bold transition-colors ml-auto lg:ml-1"
+            >
+              <Eye size={13} />
+              <span>{expandidoTermosFotos ? 'Recolher' : 'Visualizar tudo'}</span>
+              {expandidoTermosFotos ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
           </div>
         </div>
 
-        {/* SELETORES: VALIDADE DO ORÇAMENTO, PRAZO DE GARANTIA E TERMOS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-vapor-300">
-              Validade da Proposta (em dias):
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                value={validadeDiasOrcamento}
-                onChange={(e) => {
-                  const val = Math.max(1, parseInt(e.target.value) || 1);
-                  setValidadeDiasOrcamento(val);
-                }}
-                onBlur={() => handleAlterarValidade(validadeDiasOrcamento)}
-                className="w-24 bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono text-base font-bold outline-none focus:border-amber-500"
-              />
-              <span className="text-xs font-sans text-vapor-300 font-medium">dias</span>
-              <button
-                type="button"
-                onClick={() => handleAlterarValidade(validadeDiasOrcamento)}
-                className="px-2.5 py-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border border-graphite-700 rounded text-xs font-bold"
-                title="Salvar validade digitada"
-              >
-                Salvar
-              </button>
-              <div className="flex items-center gap-1 ml-auto flex-wrap">
-                {[7, 15, 30, 60, 90].map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => {
-                      setValidadeDiasOrcamento(d);
-                      handleAlterarValidade(d);
-                    }}
-                    className={`px-2 py-1 rounded text-[11px] font-mono transition-colors ${
-                      validadeDiasOrcamento === d
-                        ? 'bg-amber-500 text-graphite-950 font-bold'
-                        : 'bg-graphite-950 text-vapor-400 border border-graphite-800 hover:text-vapor-200'
-                    }`}
-                  >
-                    {d}d
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className={`flex flex-col gap-1.5 transition-opacity ${incluirTermoGarantia ? 'opacity-100' : 'opacity-50'}`}>
-            <label className="text-xs font-semibold text-vapor-300 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck size={14} className={incluirTermoGarantia ? 'text-amber-400' : 'text-vapor-500'} />
-                Tempo de Garantia do Serviço:
-              </span>
-              {incluirTermoGarantia ? (
-                <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                  {garantiaMeses} {garantiaMeses === 1 ? 'mês' : 'meses'} (Jurídico Padrão)
-                </span>
-              ) : (
-                <span className="text-[10px] font-mono text-vapor-400 bg-graphite-900 px-2 py-0.5 rounded border border-graphite-800">
-                  Não inclusa na proposta
-                </span>
-              )}
-            </label>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {[1, 3, 6, 12].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={!incluirTermoGarantia}
-                  onClick={() => handleAlterarGarantiaMeses(m)}
-                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
-                    !incluirTermoGarantia
-                      ? 'bg-graphite-950/60 text-vapor-500 border border-graphite-800/40 cursor-not-allowed'
-                      : garantiaMeses === m
-                      ? 'bg-amber-500 text-graphite-950 font-bold shadow-md shadow-amber-500/20'
-                      : 'bg-graphite-950 text-vapor-300 border border-graphite-800 hover:bg-graphite-900 hover:text-vapor-100'
-                  }`}
-                >
-                  {m} {m === 1 ? 'mês' : 'meses'} {m === 3 ? '(CDC)' : ''}
-                </button>
-              ))}
-            </div>
-            <span className="text-[10.5px] text-vapor-400 mt-0.5">
-              {incluirTermoGarantia
-                ? '• Acompanha a proposta com o termo de garantia padrão e exclusões legais do CDC.'
-                : '• Opção desmarcada acima: nenhuma cláusula de garantia será anexada a este orçamento ou PDF.'}
+        {/* RESUMO COMPACTO QUANDO RECOLHIDO */}
+        {!expandidoTermosFotos ? (
+          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-graphite-800/80 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setExpandidoTermosFotos(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-graphite-950 border border-graphite-800 text-vapor-300 hover:border-amber-500/40 font-mono transition-colors"
+            >
+              <Calendar size={11} className="text-amber-400" />
+              <span>Validade: {validadeDiasOrcamento}d</span>
+            </button>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md border font-mono ${
+                incluirFotos
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  : 'bg-graphite-950/60 border-graphite-800/70 text-vapor-500'
+              }`}
+            >
+              Fotos: {incluirFotos ? `${fotosAvaliacao.length} anexada(s)` : 'Oculto'}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md border font-mono ${
+                incluirTermoResponsabilidade
+                  ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-300'
+                  : 'bg-graphite-950/60 border-graphite-800/70 text-vapor-500'
+              }`}
+            >
+              Resp. CDC: {incluirTermoResponsabilidade ? 'Ativo' : 'Oculto'}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md border font-mono ${
+                incluirTermoGarantia
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  : 'bg-graphite-950/60 border-graphite-800/70 text-vapor-500'
+              }`}
+            >
+              Garantia: {incluirTermoGarantia ? `${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'}` : 'Oculto'}
             </span>
           </div>
-        </div>
-
-        {/* SELETOR DE MODELO DE TERMO DE GARANTIA */}
-        {incluirTermoGarantia && (
-          <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
-                <ShieldCheck size={14} className="text-amber-400" />
-                <span>Modelo de Garantia da Proposta:</span>
-              </span>
-              <span className="text-[11px] text-vapor-400">
-                Selecione a minuta do advogado (CDC padrão) ou uma garantia técnica específica para os serviços executados.
-              </span>
-              <div className="pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleSelecionarTermoGarantia('padrao')}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
-                    !termoGarantiaSelecionado
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                      : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
-                  }`}
-                >
-                  <ShieldCheck size={12} />
-                  <span>⚡ Aplicar Minuta Oficial de Garantia (Advogado)</span>
-                </button>
+        ) : (
+          <div className="flex flex-col gap-4 pt-3 border-t border-graphite-800">
+            {/* SELETORES: VALIDADE DO ORÇAMENTO E (QUANDO ATIVO) PRAZO DE GARANTIA */}
+            <div className={`grid grid-cols-1 ${incluirTermoGarantia ? 'md:grid-cols-2' : ''} gap-4`}>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-vapor-300">
+                  Validade da Proposta (em dias):
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={validadeDiasOrcamento}
+                    onChange={(e) => {
+                      const val = Math.max(1, parseInt(e.target.value) || 1);
+                      setValidadeDiasOrcamento(val);
+                    }}
+                    onBlur={() => handleAlterarValidade(validadeDiasOrcamento)}
+                    className="w-24 bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono text-base font-bold outline-none focus:border-amber-500"
+                  />
+                  <span className="text-xs font-sans text-vapor-300 font-medium">dias</span>
+                  <button
+                    type="button"
+                    onClick={() => handleAlterarValidade(validadeDiasOrcamento)}
+                    className="px-2.5 py-1.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-200 border border-graphite-700 rounded text-xs font-bold"
+                    title="Salvar validade digitada"
+                  >
+                    Salvar
+                  </button>
+                  <div className="flex items-center gap-1 ml-auto flex-wrap">
+                    {[7, 15, 30, 60, 90].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => {
+                          setValidadeDiasOrcamento(d);
+                          handleAlterarValidade(d);
+                        }}
+                        className={`px-2 py-1 rounded text-[11px] font-mono transition-colors ${
+                          validadeDiasOrcamento === d
+                            ? 'bg-amber-500 text-graphite-950 font-bold'
+                            : 'bg-graphite-950 text-vapor-400 border border-graphite-800 hover:text-vapor-200'
+                        }`}
+                      >
+                        {d}d
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
+
+              {incluirTermoGarantia && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-vapor-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-amber-400" />
+                      Tempo de Garantia do Serviço:
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      {garantiaMeses} {garantiaMeses === 1 ? 'mês' : 'meses'} (Jurídico Padrão)
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[1, 3, 6, 12].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleAlterarGarantiaMeses(m)}
+                        className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                          garantiaMeses === m
+                            ? 'bg-amber-500 text-graphite-950 font-bold shadow-md shadow-amber-500/20'
+                            : 'bg-graphite-950 text-vapor-300 border border-graphite-800 hover:bg-graphite-900 hover:text-vapor-100'
+                        }`}
+                      >
+                        {m} {m === 1 ? 'mês' : 'meses'} {m === 3 ? '(CDC)' : ''}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-[10.5px] text-vapor-400 mt-0.5">
+                    • Acompanha a proposta com o termo de garantia padrão e exclusões legais do CDC.
+                  </span>
+                </div>
+              )}
             </div>
 
-            <select
-              value={termoGarantiaSelecionado}
-              onChange={(e) => handleSelecionarTermoGarantia(e.target.value)}
-              className="bg-graphite-900 border border-graphite-700 hover:border-amber-500 text-vapor-100 font-sans text-xs rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-colors cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
-            >
-              <option value="">
-                ⚡ Minuta do Advogado (Padrão Geral CDC - {garantiaMeses} {garantiaMeses === 1 ? 'mês' : 'meses'})
-              </option>
-              {termosGarantiaDisponiveis.map((t) => (
-                <option key={t.id} value={t.id}>
-                  🛡️ {t.titulo}
-                </option>
-              ))}
-            </select>
+            {/* BLOCO COMPLETO DO TERMO DE GARANTIA (SOMENTE SE MARCADO) */}
+            {incluirTermoGarantia && (
+              <>
+                <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
+                      <ShieldCheck size={14} className="text-amber-400" />
+                      <span>Modelo de Garantia da Proposta:</span>
+                    </span>
+                    <span className="text-[11px] text-vapor-400">
+                      Selecione a minuta do advogado (CDC padrão) ou uma garantia técnica específica para os serviços executados.
+                    </span>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSelecionarTermoGarantia('padrao')}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                          !termoGarantiaSelecionado
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                            : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                        }`}
+                      >
+                        <ShieldCheck size={12} />
+                        <span>⚡ Aplicar Minuta Oficial de Garantia (Advogado)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <select
+                    value={termoGarantiaSelecionado}
+                    onChange={(e) => handleSelecionarTermoGarantia(e.target.value)}
+                    className="bg-graphite-900 border border-graphite-700 hover:border-amber-500 text-vapor-100 font-sans text-xs rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-colors cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
+                  >
+                    <option value="">
+                      ⚡ Minuta do Advogado (Padrão Geral CDC - {garantiaMeses} {garantiaMeses === 1 ? 'mês' : 'meses'})
+                    </option>
+                    {termosGarantiaDisponiveis.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        🛡️ {t.titulo}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5 p-3 rounded-lg border text-xs bg-graphite-950/70 border-graphite-800">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold flex items-center gap-1.5 text-amber-400">
+                      <ShieldCheck size={14} />
+                      {termoGarantiaAtual ? termoGarantiaAtual.titulo : `Termo de Garantia da Proposta (${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'})`}
+                    </span>
+                    <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
+                      {termoGarantiaAtual ? 'Modelo Específico Ativo' : 'Minuta do Advogado Ativa'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-vapor-300 leading-relaxed italic bg-graphite-900/60 p-2.5 rounded border border-graphite-800/80 whitespace-pre-line">
+                    {textoPreviewGarantia}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* CARD UNIFICADO DO TERMO DE RESPONSABILIDADE & RISCOS TÉCNICOS (SOMENTE SE MARCADO) */}
+            {incluirTermoResponsabilidade && (
+              <div className="flex flex-col gap-3 p-3.5 rounded-xl border transition-all bg-graphite-950/90 border-cyan-500/30 shadow-lg shadow-cyan-950/20">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-graphite-800/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
+                      <ShieldCheck size={16} />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-vapor-200 flex items-center gap-1.5 flex-wrap">
+                        Termo de Responsabilidade & Riscos Técnicos (CDC)
+                        {modoTermoResp === 'dinamico' && (
+                          <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold border border-cyan-500/30">
+                            ⚡ Cláusulas Inteligentes Dinâmicas
+                          </span>
+                        )}
+                      </span>
+                      <p className="text-[10.5px] text-vapor-400">
+                        Preenchido automaticamente com as variáveis do cliente, veículo e cláusulas técnicas dos serviços selecionados.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold self-start sm:self-auto">
+                    Ativo na Proposta / PDF
+                  </span>
+                </div>
+
+                {clausulasDetectadas.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-semibold text-vapor-400 flex items-center gap-1">
+                      <span>⚡ Cláusulas técnicas ativas:</span>
+                    </span>
+                    {clausulasDetectadas.map((c, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] bg-graphite-900 text-cyan-300 px-2 py-0.5 rounded-md border border-cyan-500/20 font-medium flex items-center gap-1"
+                      >
+                        <Check size={10} className="text-cyan-400" />
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 bg-graphite-900/60 rounded-lg border border-graphite-800">
+                  <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={incluirTermoRisco}
+                      onChange={(e) => handleToggleTermoRisco(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 sm:mt-0 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-vapor-200 flex items-center gap-1.5 flex-wrap">
+                        <span>Imprimir em Folha Separada no PDF</span>
+                        <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase border border-amber-500/30">
+                          Anexo Dedicado CDC com Assinatura Exclusiva
+                        </span>
+                      </span>
+                      <span className="text-[10.5px] text-vapor-400">
+                        Gera folha anexa avulsa no PDF com campo de assinatura exclusiva para o cliente aceitar as condições de risco (Arts. 6º, 8º, 14, 40 e 54 CDC).
+                      </span>
+                    </div>
+                  </label>
+                  {incluirTermoRisco && (
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold self-start sm:self-auto shrink-0">
+                      Folha Anexa Ativa
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-1 border-t border-graphite-800/60">
+                  <span className="text-vapor-400 font-semibold text-[10.5px]">Adicionar risco específico:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleInserirRiscoRapido('Lavagem técnica com risco em conectores/chicotes elétricos e módulos antigos ressecados')}
+                    className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+                  >
+                    + Motor / Chicote Elétrico
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInserirRiscoRapido('Pintura com repintura anterior ou verniz fino (< 80 micras), risco de queima')}
+                    className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+                  >
+                    + Verniz Fino / Repintura
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInserirRiscoRapido('Forro de teto/estofamento ressecado com fragilidade ou risco de descolamento')}
+                    className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+                  >
+                    + Higienização / Couro
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInserirRiscoRapido('Martelinho em vinco ou chapa estirada com tinta fragilizada')}
+                    className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
+                  >
+                    + Martelinho / Vinco
+                  </button>
+                </div>
+
+                <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
+                      <Scale size={14} className="text-amber-400" />
+                      <span>Modelo de Responsabilidade na Proposta / Impressão:</span>
+                    </span>
+                    <span className="text-[11px] text-vapor-400">
+                      Selecione o modelo adequado para o perfil do carro (padrão CDC por serviços, minuta do advogado, veículos antigos, etc.).
+                    </span>
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const advTermo = termosResponsabilidadeDisponiveis.find((t) =>
+                            t.titulo.toLowerCase().includes('advogado')
+                          );
+                          if (advTermo) {
+                            handleSelecionarTermoResp(advTermo.id);
+                          } else {
+                            setModoTermoResp('personalizado');
+                            setEditandoTermoResp(false);
+                            setTermoResponsabilidade(TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO);
+                            termoResponsabilidadeRef.current = TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO;
+                            showSuccess('Minuta Oficial do Advogado (CDC) aplicada neste orçamento e no PDF!');
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                          termoRespSelecionadoId.includes('advogado') || (modoTermoResp === 'personalizado' && termoResponsabilidade.includes('CDC'))
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                            : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+                        }`}
+                      >
+                        <Scale size={12} />
+                        <span>⚡ Aplicar Minuta Oficial do Advogado (CDC)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <select
+                    value={termoRespSelecionadoId}
+                    onChange={(e) => handleSelecionarTermoResp(e.target.value)}
+                    className="bg-graphite-900 border border-graphite-700 hover:border-amber-500 text-vapor-100 font-sans text-xs rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-colors cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
+                  >
+                    <option value="dinamico">
+                      ⚡ Dinâmico (Cláusulas automáticas dos serviços)
+                    </option>
+                    {termosResponsabilidadeDisponiveis.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        📄 {t.titulo}
+                      </option>
+                    ))}
+                    <option value="personalizado">
+                      ✍️ Texto Personalizado (Edição Livre)
+                    </option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs pt-1">
+                  <div className="flex items-center gap-2 flex-wrap flex-1">
+                    {modoTermoResp === 'dinamico' ? (
+                      <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
+                        <Sparkles size={12} className="text-emerald-400 animate-pulse" />
+                        <span>Sincronização Dinâmica Ativa (Atualiza ao marcar/desmarcar serviços)</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/30 flex items-center gap-1.5">
+                        <Lock size={12} className="text-amber-400" />
+                        <span>Modelo Fixo / Manual Selecionado</span>
+                      </span>
+                    )}
+                    <span className="text-[10px] text-vapor-500 hidden md:inline">
+                      • Arts. 6º, 8º, 14, 40 e 54 CDC
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
+                    {modoTermoResp !== 'dinamico' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleAnexarClausulasServicos}
+                          className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded text-[11px] font-bold transition-colors flex items-center gap-1"
+                          title="Adiciona as cláusulas dos serviços selecionados neste orçamento ao final deste termo"
+                        >
+                          <Plus size={12} />
+                          + Cláusulas dos Serviços
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelecionarTermoResp('dinamico')}
+                          className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors flex items-center gap-1"
+                          title="Voltar ao modo onde o texto é atualizado automaticamente conforme os serviços marcados"
+                        >
+                          <RefreshCw size={11} />
+                          Voltar ao Dinâmico
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditandoTermoResp(!editandoTermoResp)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
+                        editandoTermoResp
+                          ? 'bg-cyan-500 text-graphite-950 font-bold border-cyan-400'
+                          : 'bg-graphite-900 text-vapor-300 border-graphite-700 hover:text-vapor-100'
+                      }`}
+                    >
+                      <Edit3 size={11} />
+                      {editandoTermoResp ? 'Concluir Edição' : 'Editar Texto'}
+                    </button>
+                  </div>
+                </div>
+
+                {editandoTermoResp ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-md flex items-start gap-2 text-[11px] text-amber-200">
+                      <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                      <span className="leading-snug">
+                        <strong>Aviso de Segurança Jurídica (CDC):</strong> O modelo automático está amparado nos Arts. 6º, III e 14, §3º do CDC (desgaste preexistente). Cláusulas que tentem isentar a oficina de falhas próprias de execução são nulas por lei (Art. 51, I). Utilize a edição para apontar avarias pontuais deste veículo.
+                      </span>
+                    </div>
+                    <textarea
+                      rows={6}
+                      value={termoResponsabilidade}
+                      onChange={(e) => {
+                        setTermoResponsabilidade(e.target.value);
+                        setModoTermoResp('personalizado');
+                      }}
+                      className="w-full bg-graphite-900 border border-cyan-500/50 rounded-lg p-2.5 font-sans text-xs text-vapor-100 outline-none focus:border-cyan-400 leading-relaxed shadow-inner"
+                      placeholder="Texto do termo de responsabilidade e riscos..."
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-vapor-400">
+                      <span>Modo manual ativado. As alterações serão salvas neste orçamento.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModoTermoResp('dinamico');
+                          const txt = gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo);
+                          setTermoResponsabilidade(txt);
+                          setEditandoTermoResp(false);
+                          showSuccess('Texto restaurado para o formato inteligente!');
+                        }}
+                        className="text-cyan-400 hover:underline font-semibold"
+                      >
+                        Descartar e voltar ao automático
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-vapor-300 leading-relaxed whitespace-pre-line bg-graphite-900/70 p-3 rounded-lg border border-graphite-800 max-h-36 overflow-y-auto">
+                    {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
+                  </p>
+                )}
+
+                <div className="flex flex-col gap-1 text-[10px] text-vapor-500">
+                  <span>
+                    • Este termo com as cláusulas dos serviços selecionados acompanha a proposta comercial e o PDF para proteção jurídica blindada contra falhas preexistentes.
+                  </span>
+                  <span className="text-amber-400/90 font-medium">
+                    ⚡ Recomendação CDC: Armazene fotos e vídeos do estado ANTES do serviço (na galeria abaixo) para juntar ao documento como comprovação do estado anterior do veículo.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* GALERIA DE FOTOS DE AVALIAÇÃO (SOMENTE SE FOTOS ESTIVER MARCADO) */}
+            {incluirFotos && (
+              <div className="flex flex-col gap-3 pt-2 border-t border-graphite-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
+                      Fotos do Veículo ({fotosAvaliacao.length})
+                    </span>
+
+                    <div className="flex items-center bg-graphite-950 p-0.5 rounded-lg border border-graphite-800 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setFiltroMomentoFoto('todas')}
+                        className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'todas' ? 'bg-graphite-800 text-vapor-100 font-bold' : 'text-vapor-400 hover:text-vapor-200'}`}
+                      >
+                        Todas ({fotosAvaliacao.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltroMomentoFoto('antes')}
+                        className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'antes' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30' : 'text-vapor-400 hover:text-vapor-200'}`}
+                      >
+                        📷 Antes ({fotosAvaliacao.filter(f => f.tipo !== 'depois').length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFiltroMomentoFoto('depois')}
+                        className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'depois' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-vapor-400 hover:text-vapor-200'}`}
+                      >
+                        ✨ Depois ({fotosAvaliacao.filter(f => f.tipo === 'depois').length})
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleDispararUpload('antes')}
+                      disabled={uploadingFoto}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                      title="Anexar foto do estado inicial / antes do serviço"
+                    >
+                      <Camera size={14} />
+                      <span>{uploadingFoto && momentoFotoUpload === 'antes' ? 'Enviando...' : '+ Foto Antes'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDispararUpload('depois')}
+                      disabled={uploadingFoto}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                      title="Anexar foto do resultado final / depois do serviço"
+                    >
+                      <Sparkles size={14} />
+                      <span>{uploadingFoto && momentoFotoUpload === 'depois' ? 'Enviando...' : '+ Foto Depois'}</span>
+                    </button>
+
+                    <input
+                      ref={fileInputFotoRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleUploadFotoAvaliacao}
+                      disabled={uploadingFoto}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+
+                {fotosAvaliacao.length === 0 ? (
+                  <p className="text-xs text-vapor-400 italic py-2">
+                    Nenhuma foto anexada. Tire fotos de detalhes ou avarias para o "Antes", e fotos do acabamento para o "Depois".
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+                    {fotosAvaliacao
+                      .filter((f) => {
+                        if (filtroMomentoFoto === 'antes') return f.tipo !== 'depois';
+                        if (filtroMomentoFoto === 'depois') return f.tipo === 'depois';
+                        return true;
+                      })
+                      .map((foto) => {
+                        const isDepois = foto.tipo === 'depois';
+                        return (
+                          <div
+                            key={foto.id}
+                            className="relative group rounded-lg overflow-hidden border border-graphite-700 bg-graphite-950 flex flex-col"
+                          >
+                            <img
+                              src={foto.url}
+                              alt={isDepois ? 'Depois' : 'Antes'}
+                              className="w-full h-24 object-cover group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute top-1 left-1">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase shadow ${
+                                isDepois
+                                  ? 'bg-emerald-500 text-graphite-950'
+                                  : 'bg-cyan-600 text-white'
+                              }`}>
+                                {isDepois ? '✨ DEPOIS' : '📷 ANTES'}
+                              </span>
+                            </div>
+
+                            <div className="p-1 bg-graphite-950/95 border-t border-graphite-800 text-[9px] font-mono text-vapor-300 flex items-center gap-1">
+                              <Clock size={10} className="text-amber-400 shrink-0" />
+                              <span className="truncate">{formatarDataHora(foto.created_at)}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                baixarFoto(
+                                  foto.url,
+                                  `orcamento_${orcamento?.numero ? String(orcamento.numero) : (orcamento?.id ? orcamento.id.slice(0, 8) : 'proposta')}_${isDepois ? 'depois' : 'antes'}_${foto.id.slice(0, 6)}.jpg`
+                                );
+                              }}
+                              className={`absolute top-1 ${!isAprovado ? 'right-7' : 'right-1'} p-1 bg-graphite-900/80 hover:bg-amber-500 hover:text-graphite-950 text-white rounded opacity-0 group-hover:opacity-100 transition shadow`}
+                              title="Baixar Foto"
+                            >
+                              <Download size={12} />
+                            </button>
+                            {!isAprovado && (
+                              <button
+                                type="button"
+                                onClick={() => handleExcluirFotoAvaliacao(foto.id)}
+                                className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Remover Foto"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* CARD DO TERMO DE GARANTIA COM PREVIEW */}
-        <div
-          className={`flex flex-col gap-1.5 p-3 rounded-lg border text-xs transition-all ${
-            incluirTermoGarantia
-              ? 'bg-graphite-950/70 border-graphite-800'
-              : 'bg-graphite-950/30 border-graphite-800/40 border-dashed opacity-50'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className={`font-bold flex items-center gap-1.5 ${incluirTermoGarantia ? 'text-amber-400' : 'text-vapor-400'}`}>
-              <ShieldCheck size={14} />
-              {termoGarantiaAtual ? termoGarantiaAtual.titulo : `Termo de Garantia da Proposta (${garantiaMeses} ${garantiaMeses === 1 ? 'mês' : 'meses'})`}
-            </span>
-            {incluirTermoGarantia ? (
-              <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
-                {termoGarantiaAtual ? 'Modelo Específico Ativo' : 'Minuta do Advogado Ativa'}
-              </span>
-            ) : (
-              <span className="text-[10px] text-vapor-400 font-mono bg-graphite-900 px-2 py-0.5 rounded border border-graphite-800">
-                Desativado neste Orçamento
-              </span>
-            )}
-          </div>
-          {incluirTermoGarantia ? (
-            <p className="text-[11px] text-vapor-300 leading-relaxed italic bg-graphite-900/60 p-2.5 rounded border border-graphite-800/80 whitespace-pre-line">
-              {textoPreviewGarantia}
-            </p>
-          ) : (
-            <p className="text-[11px] text-vapor-400 italic bg-graphite-900/30 p-2 rounded">
-              Garantia não selecionada para esta proposta. Nenhuma obrigação extra de garantia será formalizada.
-            </p>
-          )}
-        </div>
-
-        {/* CARD UNIFICADO DO TERMO DE RESPONSABILIDADE & RISCOS TÉCNICOS (DINÂMICO PELOS SERVIÇOS + CDC) */}
-        <div
-          className={`flex flex-col gap-3 p-3.5 rounded-xl border transition-all ${
-            incluirTermoResponsabilidade
-              ? 'bg-graphite-950/90 border-cyan-500/30 shadow-lg shadow-cyan-950/20'
-              : 'bg-graphite-950/40 border-graphite-800/60 border-dashed opacity-60'
-          }`}
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-graphite-800/80 pb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
-                <ShieldCheck size={16} />
-              </div>
-              <div>
-                <span className="text-xs font-bold text-vapor-200 flex items-center gap-1.5 flex-wrap">
-                  Termo de Responsabilidade & Riscos Técnicos (CDC)
-                  {modoTermoResp === 'dinamico' && (
-                    <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold border border-cyan-500/30">
-                      ⚡ Cláusulas Inteligentes Dinâmicas
-                    </span>
-                  )}
-                </span>
-                <p className="text-[10.5px] text-vapor-400">
-                  Preenchido automaticamente com as variáveis do cliente, veículo e cláusulas técnicas dos serviços selecionados.
-                </p>
-              </div>
-            </div>
-            {incluirTermoResponsabilidade ? (
-              <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold self-start sm:self-auto">
-                Ativo na Proposta / PDF
-              </span>
-            ) : (
-              <span className="text-[10px] text-vapor-400 bg-graphite-900 px-2 py-0.5 rounded-full border border-graphite-700 font-bold self-start sm:self-auto">
-                Desativado neste Orçamento
-              </span>
-            )}
-          </div>
-
-          {/* BADGES DAS CLÁUSULAS TÉCNICAS ATIVAS DETECTADAS */}
-          {incluirTermoResponsabilidade && clausulasDetectadas.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] font-semibold text-vapor-400 flex items-center gap-1">
-                <span>⚡ Cláusulas técnicas ativas:</span>
-              </span>
-              {clausulasDetectadas.map((c, i) => (
-                <span
-                  key={i}
-                  className="text-[10px] bg-graphite-900 text-cyan-300 px-2 py-0.5 rounded-md border border-cyan-500/20 font-medium flex items-center gap-1"
-                >
-                  <Check size={10} className="text-cyan-400" />
-                  {c}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* OPÇÃO DE EMISSÃO EM FOLHA SEPARADA NO PDF (CDC) */}
-          {incluirTermoResponsabilidade && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2.5 bg-graphite-900/60 rounded-lg border border-graphite-800">
-              <label className="flex items-start sm:items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={incluirTermoRisco}
-                  onChange={(e) => handleToggleTermoRisco(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 sm:mt-0 rounded bg-graphite-950 border-graphite-700 text-amber-500 focus:ring-0"
-                />
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-vapor-200 flex items-center gap-1.5 flex-wrap">
-                    <span>Imprimir em Folha Separada no PDF</span>
-                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold uppercase border border-amber-500/30">
-                      Anexo Dedicado CDC com Assinatura Exclusiva
-                    </span>
-                  </span>
-                  <span className="text-[10.5px] text-vapor-400">
-                    Gera folha anexa avulsa no PDF com campo de assinatura exclusiva para o cliente aceitar as condições de risco (Arts. 6º, 8º, 14, 40 e 54 CDC).
-                  </span>
-                </div>
-              </label>
-              {incluirTermoRisco && (
-                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold self-start sm:self-auto shrink-0">
-                  Folha Anexa Ativa
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* ATALHOS PARA INSERÇÃO RÁPIDA DE RISCO ESPECÍFICO */}
-          {incluirTermoResponsabilidade && (
-            <div className="flex items-center gap-1.5 flex-wrap text-[11px] pt-1 border-t border-graphite-800/60">
-              <span className="text-vapor-400 font-semibold text-[10.5px]">Adicionar risco específico:</span>
-              <button
-                type="button"
-                onClick={() => handleInserirRiscoRapido('Lavagem técnica com risco em conectores/chicotes elétricos e módulos antigos ressecados')}
-                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
-              >
-                + Motor / Chicote Elétrico
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInserirRiscoRapido('Pintura com repintura anterior ou verniz fino (< 80 micras), risco de queima')}
-                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
-              >
-                + Verniz Fino / Repintura
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInserirRiscoRapido('Forro de teto/estofamento ressecado com fragilidade ou risco de descolamento')}
-                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
-              >
-                + Higienização / Couro
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInserirRiscoRapido('Martelinho em vinco ou chapa estirada com tinta fragilizada')}
-                className="px-2 py-0.5 bg-graphite-900 hover:bg-graphite-800 text-cyan-300 border border-cyan-500/30 rounded text-[10.5px] transition-colors"
-              >
-                + Martelinho / Vinco
-              </button>
-            </div>
-          )}
-
-          {/* SELETOR DE MODELO DE TERMO DE RESPONSABILIDADE */}
-          {incluirTermoResponsabilidade && (
-            <div className="p-3 bg-graphite-950/70 rounded-xl border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex flex-col gap-1 min-w-0">
-                <span className="text-xs font-bold text-vapor-100 flex items-center gap-2">
-                  <Scale size={14} className="text-amber-400" />
-                  <span>Modelo de Responsabilidade na Proposta / Impressão:</span>
-                </span>
-                <span className="text-[11px] text-vapor-400">
-                  Selecione o modelo adequado para o perfil do carro (padrão CDC por serviços, minuta do advogado, veículos antigos, etc.).
-                </span>
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const advTermo = termosResponsabilidadeDisponiveis.find((t) =>
-                        t.titulo.toLowerCase().includes('advogado')
-                      );
-                      if (advTermo) {
-                        handleSelecionarTermoResp(advTermo.id);
-                      } else {
-                        setModoTermoResp('personalizado');
-                        setEditandoTermoResp(false);
-                        setTermoResponsabilidade(TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO);
-                        termoResponsabilidadeRef.current = TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO;
-                        showSuccess('Minuta Oficial do Advogado (CDC) aplicada neste orçamento e no PDF!');
-                      }
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
-                      termoRespSelecionadoId.includes('advogado') || (modoTermoResp === 'personalizado' && termoResponsabilidade.includes('CDC'))
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                        : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
-                    }`}
-                  >
-                    <Scale size={12} />
-                    <span>⚡ Aplicar Minuta Oficial do Advogado (CDC)</span>
-                  </button>
-                </div>
-              </div>
-
-              <select
-                value={termoRespSelecionadoId}
-                onChange={(e) => handleSelecionarTermoResp(e.target.value)}
-                className="bg-graphite-900 border border-graphite-700 hover:border-amber-500 text-vapor-100 font-sans text-xs rounded-lg px-3 py-2 outline-none focus:border-amber-500 transition-colors cursor-pointer w-full sm:w-auto sm:min-w-[280px]"
-              >
-                <option value="dinamico">
-                  ⚡ Dinâmico (Cláusulas automáticas dos serviços)
-                </option>
-                {termosResponsabilidadeDisponiveis.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    📄 {t.titulo}
-                  </option>
-                ))}
-                <option value="personalizado">
-                  ✍️ Texto Personalizado (Edição Livre)
-                </option>
-              </select>
-            </div>
-          )}
-
-          {/* SELETOR DE MODO / STATUS / AÇÕES */}
-          {incluirTermoResponsabilidade && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 text-xs pt-1">
-              <div className="flex items-center gap-2 flex-wrap flex-1">
-                {modoTermoResp === 'dinamico' ? (
-                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/30 flex items-center gap-1.5 shadow-sm">
-                    <Sparkles size={12} className="text-emerald-400 animate-pulse" />
-                    <span>Sincronização Dinâmica Ativa (Atualiza ao marcar/desmarcar serviços)</span>
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/30 flex items-center gap-1.5">
-                    <Lock size={12} className="text-amber-400" />
-                    <span>Modelo Fixo / Manual Selecionado</span>
-                  </span>
-                )}
-                <span className="text-[10px] text-vapor-500 hidden md:inline">
-                  • Arts. 6º, 8º, 14, 40 e 54 CDC
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
-                {modoTermoResp !== 'dinamico' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={handleAnexarClausulasServicos}
-                      className="px-2.5 py-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded text-[11px] font-bold transition-colors flex items-center gap-1"
-                      title="Adiciona as cláusulas dos serviços selecionados neste orçamento ao final deste termo"
-                    >
-                      <Plus size={12} />
-                      + Cláusulas dos Serviços
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSelecionarTermoResp('dinamico')}
-                      className="px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-bold transition-colors flex items-center gap-1"
-                      title="Voltar ao modo onde o texto é atualizado automaticamente conforme os serviços marcados"
-                    >
-                      <RefreshCw size={11} />
-                      Voltar ao Dinâmico
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setEditandoTermoResp(!editandoTermoResp)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
-                    editandoTermoResp
-                      ? 'bg-cyan-500 text-graphite-950 font-bold border-cyan-400'
-                      : 'bg-graphite-900 text-vapor-300 border-graphite-700 hover:text-vapor-100'
-                  }`}
-                >
-                  <Edit3 size={11} />
-                  {editandoTermoResp ? 'Concluir Edição' : 'Editar Texto'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* VISUALIZAÇÃO OU EDIÇÃO DO TEXTO */}
-          {editandoTermoResp ? (
-            <div className="flex flex-col gap-2">
-              <div className="p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-md flex items-start gap-2 text-[11px] text-amber-200">
-                <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-                <span className="leading-snug">
-                  <strong>Aviso de Segurança Jurídica (CDC):</strong> O modelo automático está amparado nos Arts. 6º, III e 14, §3º do CDC (desgaste preexistente). Cláusulas que tentem isentar a oficina de falhas próprias de execução são nulas por lei (Art. 51, I). Utilize a edição para apontar avarias pontuais deste veículo.
-                </span>
-              </div>
-              <textarea
-                rows={6}
-                value={termoResponsabilidade}
-                onChange={(e) => {
-                  setTermoResponsabilidade(e.target.value);
-                  setModoTermoResp('personalizado');
-                }}
-                className="w-full bg-graphite-900 border border-cyan-500/50 rounded-lg p-2.5 font-sans text-xs text-vapor-100 outline-none focus:border-cyan-400 leading-relaxed shadow-inner"
-                placeholder="Texto do termo de responsabilidade e riscos..."
-              />
-              <div className="flex items-center justify-between text-[10px] text-vapor-400">
-                <span>Modo manual ativado. As alterações serão salvas neste orçamento.</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModoTermoResp('dinamico');
-                    const txt = gerarTermoDinamicoServicos(servicosAtivosNoOrcamento, dadosTermo);
-                    setTermoResponsabilidade(txt);
-                    setEditandoTermoResp(false);
-                    showSuccess('Texto restaurado para o formato inteligente!');
-                  }}
-                  className="text-cyan-400 hover:underline font-semibold"
-                >
-                  Descartar e voltar ao automático
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p className="text-[11px] text-vapor-300 leading-relaxed whitespace-pre-line bg-graphite-900/70 p-3 rounded-lg border border-graphite-800 max-h-36 overflow-y-auto">
-              {termoResponsabilidade || TERMO_RESPONSABILIDADE_PADRAO}
-            </p>
-          )}
-
-          <div className="flex flex-col gap-1 text-[10px] text-vapor-500">
-            <span>
-              {incluirTermoResponsabilidade
-                ? '• Este termo com as cláusulas dos serviços selecionados acompanha a proposta comercial e o PDF para proteção jurídica blindada contra falhas preexistentes.'
-                : '• A opção "Termo de Responsabilidade & Riscos" está desmarcada acima. Nenhum termo de responsabilidade será anexado a esta proposta nem ao PDF.'}
-            </span>
-            {incluirTermoResponsabilidade && (
-              <span className="text-amber-400/90 font-medium">
-                ⚡ Recomendação CDC: Armazene fotos e vídeos do estado ANTES do serviço (na galeria abaixo) para juntar ao documento como comprovação do estado anterior do veículo.
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* GALERIA DE FOTOS DE AVALIAÇÃO (ANTES E DEPOIS) COM DATA IMUTÁVEL */}
-        <div className="flex flex-col gap-3 pt-2 border-t border-graphite-800">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
-                Fotos do Veículo ({fotosAvaliacao.length})
-              </span>
-
-              {/* Filtros Antes / Depois */}
-              <div className="flex items-center bg-graphite-950 p-0.5 rounded-lg border border-graphite-800 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setFiltroMomentoFoto('todas')}
-                  className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'todas' ? 'bg-graphite-800 text-vapor-100 font-bold' : 'text-vapor-400 hover:text-vapor-200'}`}
-                >
-                  Todas ({fotosAvaliacao.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroMomentoFoto('antes')}
-                  className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'antes' ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30' : 'text-vapor-400 hover:text-vapor-200'}`}
-                >
-                  📷 Antes ({fotosAvaliacao.filter(f => f.tipo !== 'depois').length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFiltroMomentoFoto('depois')}
-                  className={`px-2.5 py-1 rounded transition-colors ${filtroMomentoFoto === 'depois' ? 'bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30' : 'text-vapor-400 hover:text-vapor-200'}`}
-                >
-                  ✨ Depois ({fotosAvaliacao.filter(f => f.tipo === 'depois').length})
-                </button>
-              </div>
-            </div>
-
-            {/* Ações de Upload Diferenciadas: Antes vs Depois */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => handleDispararUpload('antes')}
-                disabled={uploadingFoto}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                title="Anexar foto do estado inicial / antes do serviço"
-              >
-                <Camera size={14} />
-                <span>{uploadingFoto && momentoFotoUpload === 'antes' ? 'Enviando...' : '+ Foto Antes'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDispararUpload('depois')}
-                disabled={uploadingFoto}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-                title="Anexar foto do resultado final / depois do serviço"
-              >
-                <Sparkles size={14} />
-                <span>{uploadingFoto && momentoFotoUpload === 'depois' ? 'Enviando...' : '+ Foto Depois'}</span>
-              </button>
-
-              <input
-                ref={fileInputFotoRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleUploadFotoAvaliacao}
-                disabled={uploadingFoto}
-                className="hidden"
-              />
-            </div>
-          </div>
-
-          {fotosAvaliacao.length === 0 ? (
-            <p className="text-xs text-vapor-400 italic py-2">
-              Nenhuma foto anexada. Tire fotos de detalhes ou avarias para o "Antes", e fotos do acabamento para o "Depois".
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
-              {fotosAvaliacao
-                .filter((f) => {
-                  if (filtroMomentoFoto === 'antes') return f.tipo !== 'depois';
-                  if (filtroMomentoFoto === 'depois') return f.tipo === 'depois';
-                  return true;
-                })
-                .map((foto) => {
-                  const isDepois = foto.tipo === 'depois';
-                  return (
-                    <div
-                      key={foto.id}
-                      className="relative group rounded-lg overflow-hidden border border-graphite-700 bg-graphite-950 flex flex-col"
-                    >
-                      <img
-                        src={foto.url}
-                        alt={isDepois ? 'Depois' : 'Antes'}
-                        className="w-full h-24 object-cover group-hover:scale-105 transition-transform"
-                      />
-                      {/* Tag Antes ou Depois */}
-                      <div className="absolute top-1 left-1">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase shadow ${
-                          isDepois
-                            ? 'bg-emerald-500 text-graphite-950'
-                            : 'bg-cyan-600 text-white'
-                        }`}>
-                          {isDepois ? '✨ DEPOIS' : '📷 ANTES'}
-                        </span>
-                      </div>
-
-                      {/* Badge de Data/Hora */}
-                      <div className="p-1 bg-graphite-950/95 border-t border-graphite-800 text-[9px] font-mono text-vapor-300 flex items-center gap-1">
-                        <Clock size={10} className="text-amber-400 shrink-0" />
-                        <span className="truncate">{formatarDataHora(foto.created_at)}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          baixarFoto(
-                            foto.url,
-                            `orcamento_${orcamento?.numero ? String(orcamento.numero) : (orcamento?.id ? orcamento.id.slice(0, 8) : 'proposta')}_${isDepois ? 'depois' : 'antes'}_${foto.id.slice(0, 6)}.jpg`
-                          );
-                        }}
-                        className={`absolute top-1 ${!isAprovado ? 'right-7' : 'right-1'} p-1 bg-graphite-900/80 hover:bg-amber-500 hover:text-graphite-950 text-white rounded opacity-0 group-hover:opacity-100 transition shadow`}
-                        title="Baixar Foto"
-                      >
-                        <Download size={12} />
-                      </button>
-                      {!isAprovado && (
-                        <button
-                          type="button"
-                          onClick={() => handleExcluirFotoAvaliacao(foto.id)}
-                          className="absolute top-1 right-1 p-1 bg-rose-600/90 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Remover Foto"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          )}
-        </div>
-
-        {/* STATUS DAS ASSINATURAS */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-graphite-800 text-xs">
+        {/* STATUS DAS ASSINATURAS (SEMPRE ACESSÍVEL DE FORMA COMPACTA) */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2.5 border-t border-graphite-800 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-vapor-400 font-medium">Assinatura Cliente:</span>
             {(orcamento as any).assinatura_path || (orcamento as any).assinatura_data ? (
@@ -2787,7 +3133,7 @@ export const DetalheOrcamento: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setAssinandoTipo('cliente');
-                  setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || '');
+                  setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
                   setRecriarAssinaturaCliente(false);
                   setShowAssinaturaModal(true);
                 }}
@@ -2801,7 +3147,7 @@ export const DetalheOrcamento: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setAssinandoTipo('cliente');
-                  setNomeSignatario(orcamento.cliente?.nome || '');
+                  setNomeSignatario(orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
                   setRecriarAssinaturaCliente(true);
                   setShowAssinaturaModal(true);
                 }}
@@ -2813,7 +3159,7 @@ export const DetalheOrcamento: React.FC = () => {
             {assinaturaClienteUrl && (
               <button
                 type="button"
-                onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || 'cliente'}.png`)}
+                onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'cliente'}.png`)}
                 className="p-1 text-vapor-400 hover:text-amber-400 hover:bg-graphite-800 rounded transition"
                 title="Baixar Assinatura do Cliente"
               >
@@ -2890,6 +3236,7 @@ export const DetalheOrcamento: React.FC = () => {
             }
 
             await supabase.from('orcamentos').update({ modo_orcamento: novoModo }).eq('id', orcamento.id);
+            modoOrcamentoRef.current = novoModo;
             setOrcamento((prev) => prev ? { ...prev, modo_orcamento: novoModo } : null);
 
             if (novoModo === 'simples') {
@@ -2899,8 +3246,14 @@ export const DetalheOrcamento: React.FC = () => {
                 recomendado: new Set<string>(),
                 completo: new Set<string>(),
               };
+              const copyAvulsos: Record<TipoNivelOrcamento, ServicoAvulsoItem[]> = {
+                essencial: [...servicosAvulsosNivel.essencial],
+                recomendado: [],
+                completo: [],
+              };
               setItensNivel(copy);
-              triggerAutoSave(copy, titulosNiveis, descricoesNiveis, observacoes, customPrecos);
+              setServicosAvulsosNivel(copyAvulsos);
+              triggerAutoSave(copy, titulosNiveis, descricoesNiveis, observacoes, customPrecos, copyAvulsos);
             }
             showSuccess(novoModo === 'simples' ? 'Alternado para Orçamento Simples' : 'Alternado para Orçamento em 3 Níveis');
           }}
@@ -2918,6 +3271,45 @@ export const DetalheOrcamento: React.FC = () => {
           ) : (
             'Mudar para Orçamento Simples'
           )}
+        </button>
+      </div>
+
+      {/* BARRA DE PESQUISA RÁPIDA NA SELEÇÃO DE SERVIÇOS + ATALHO DE SERVIÇO ÚNICO */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 bg-graphite-900/90 border border-graphite-800 rounded-xl p-2.5">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-vapor-400 pointer-events-none" />
+          <input
+            type="text"
+            value={buscaServico}
+            onChange={(e) => setBuscaServico(e.target.value)}
+            placeholder="Pesquisar serviço por nome ou categoria (ex: polimento, vitrificação, higienização)..."
+            className="w-full bg-graphite-950 border border-graphite-700 rounded-lg pl-9 pr-9 py-2 text-vapor-100 placeholder:text-vapor-500 font-sans text-[13px] focus:outline-none focus:border-amber-500 min-h-[42px]"
+          />
+          {buscaServico && (
+            <button
+              type="button"
+              onClick={() => setBuscaServico('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-vapor-400 hover:text-vapor-100 p-1"
+              title="Limpar pesquisa"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            abrirModalServicoUnico(
+              (orcamento as any)?.modo_orcamento === 'simples' ? 'essencial' : activeTabMobile,
+              buscaServico.trim()
+            )
+          }
+          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 font-sans text-[13px] font-bold transition-colors min-h-[42px] shrink-0"
+          title="Adicionar serviço pontual apenas neste orçamento sem salvar no catálogo"
+        >
+          <Plus size={15} />
+          <span>Serviço Único (Avulso)</span>
         </button>
       </div>
 
@@ -3052,28 +3444,128 @@ export const DetalheOrcamento: React.FC = () => {
 
               {/* LISTA DE SERVIÇOS AGRUPADOS COM CABEÇALHOS RECOLHÍVEIS */}
               <Card className="p-3 bg-graphite-900 border-graphite-800 flex flex-col gap-3 max-h-[600px] overflow-y-auto">
-                <div className="flex items-center justify-between border-b border-graphite-800 pb-2">
+                <div className="flex items-center justify-between gap-2 border-b border-graphite-800 pb-2 flex-wrap">
                   <span className="font-mono text-[11px] text-vapor-400 uppercase tracking-wider">
-                    Selecione os Serviços ({itensNivel[nivelKey].size})
+                    Selecione os Serviços ({totais[nivelKey].itensCount})
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowModalServicoRapido(true)}
-                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline"
-                    title="Cadastrar novo serviço sem sair desta tela"
-                  >
-                    <PlusCircle size={13} />
-                    <span>+ Novo Serviço</span>
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => abrirModalServicoUnico(nivelKey)}
+                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 hover:underline"
+                      title="Adicionar serviço pontual sem salvar no catálogo"
+                    >
+                      <Plus size={12} />
+                      <span>Serviço Único</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowModalServicoRapido(true)}
+                      className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline"
+                      title="Cadastrar novo serviço no catálogo sem sair desta tela"
+                    >
+                      <PlusCircle size={13} />
+                      <span>+ Catálogo</span>
+                    </button>
+                  </div>
                 </div>
+
+                {/* SERVIÇOS ÚNICOS (AVULSOS) DESTE NÍVEL */}
+                {(servicosAvulsosNivel[nivelKey] || []).length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-cyan-300 px-1">
+                      Serviços Únicos neste nível ({servicosAvulsosNivel[nivelKey].length})
+                    </span>
+                    {servicosAvulsosNivel[nivelKey].map((av) => (
+                      <div
+                        key={av.uid}
+                        className="p-2.5 rounded-lg border border-cyan-500/40 bg-cyan-500/10 flex flex-col gap-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                            <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0 mt-0.5">
+                              Único
+                            </span>
+                            <input
+                              type="text"
+                              value={av.nome}
+                              onChange={(e) =>
+                                handleAtualizarServicoUnico(nivelKey, av.uid, { nome: e.target.value })
+                              }
+                              className="w-full bg-transparent font-sans text-[13px] font-bold text-vapor-100 outline-none border-b border-transparent focus:border-cyan-400"
+                              placeholder="Nome do serviço único"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoverServicoUnico(nivelKey, av.uid)}
+                            className="text-vapor-400 hover:text-rose-400 p-1 rounded transition-colors shrink-0"
+                            title="Remover Serviço Único"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1.5 border-t border-cyan-500/20 text-[11px] font-mono gap-2">
+                          <div className="flex items-center gap-1 text-vapor-300">
+                            <Clock size={11} className="text-cyan-400" />
+                            <input
+                              type="number"
+                              min="5"
+                              step="5"
+                              value={av.duracao_minutos}
+                              onChange={(e) => {
+                                const mins = Math.max(5, parseInt(e.target.value, 10) || 5);
+                                handleAtualizarServicoUnico(nivelKey, av.uid, { duracao_minutos: mins });
+                              }}
+                              className="w-14 bg-graphite-950/80 border border-cyan-500/30 rounded px-1.5 py-0.5 text-center text-vapor-100 font-mono text-[11px] outline-none focus:border-cyan-400"
+                            />
+                            <span className="text-vapor-400 text-[10px]">min</span>
+                          </div>
+
+                          <div className="flex items-center gap-1 bg-graphite-950/80 px-2 py-0.5 rounded border border-cyan-500/40">
+                            <span className="text-cyan-300 font-bold text-[11px]">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={av.preco}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                handleAtualizarServicoUnico(nivelKey, av.uid, {
+                                  preco: isNaN(val) ? 0 : Math.max(0, val),
+                                });
+                              }}
+                              className="w-20 bg-transparent text-right font-mono font-bold text-cyan-300 text-xs outline-none focus:text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {servicosCatalogo.length === 0 ? (
                   <p className="font-sans text-[13px] text-vapor-400 italic py-2">
                     Nenhum serviço disponível no catálogo.
                   </p>
+                ) : servicosPorGrupoFiltrados.size === 0 ? (
+                  <div className="flex flex-col items-center justify-center gap-2 py-6 px-3 text-center bg-graphite-950/50 rounded-xl border border-graphite-800">
+                    <span className="font-sans text-[12px] text-vapor-400">
+                      Nenhum serviço encontrado para &ldquo;{buscaServico}&rdquo;.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => abrirModalServicoUnico(nivelKey, buscaServico.trim())}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-colors"
+                    >
+                      <Plus size={13} />
+                      <span>Adicionar &ldquo;{buscaServico.trim()}&rdquo; como Serviço Único</span>
+                    </button>
+                  </div>
                 ) : (
-                  Array.from(servicosPorGrupo.entries()).map(([nomeGrupo, servicosDoGrupo]) => {
-                    const isExpanded = gruposExpandidos[nomeGrupo] !== false;
+                  Array.from(servicosPorGrupoFiltrados.entries()).map(([nomeGrupo, servicosDoGrupo]) => {
+                    const isExpanded = termoBuscaNorm ? true : gruposExpandidos[nomeGrupo] !== false;
                     const selecionadosNoGrupo = servicosDoGrupo.filter((s) => itensNivel[nivelKey].has(s.id)).length;
 
                     return (
@@ -3217,7 +3709,7 @@ export const DetalheOrcamento: React.FC = () => {
           onChange={(e) => {
             const val = e.target.value;
             setObservacoes(val);
-            triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, val);
+            triggerAutoSave(itensNivel, titulosNiveis, descricoesNiveis, val, customPrecos, servicosAvulsosNivel);
           }}
           placeholder="Digite observações específicas deste veículo ou atendimento (ex: veículo possui repintura no capô, prazos de execução, condições de garantia...)"
           rows={3}
@@ -3610,6 +4102,140 @@ export const DetalheOrcamento: React.FC = () => {
         categoriaVeiculoId={orcamento.categoria_id}
       />
 
+      {/* MODAL SERVIÇO ÚNICO (AVULSO, NÃO SALVO NO CATÁLOGO) */}
+      <Modal
+        isOpen={showModalServicoUnico}
+        onClose={() => setShowModalServicoUnico(false)}
+        title="Adicionar Serviço Único (Avulso)"
+        subtitle="Serviço pontual apenas para este orçamento — não será salvo no catálogo"
+        maxWidth="md"
+      >
+        <form onSubmit={handleAdicionarServicoUnico} className="flex flex-col gap-4">
+          <div className="p-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/25 text-[12px] text-cyan-200">
+            Ideal para demandas pontuais: informe apenas nome, valor e tempo de execução.
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="font-sans text-[13px] font-bold text-vapor-200">
+              Nome do serviço <span className="text-amber-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={suNome}
+              onChange={(e) => setSuNome(e.target.value)}
+              placeholder="Ex: Remoção de piche localizado, Ajuste pontual..."
+              autoFocus
+              required
+              className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-vapor-100 font-sans text-[14px] focus:border-cyan-400 focus:outline-none min-h-[44px]"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="font-sans text-[13px] font-bold text-vapor-200">
+                Valor (R$) <span className="text-amber-500">*</span>
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={suValor}
+                onChange={(e) => setSuValor(e.target.value)}
+                placeholder="Ex: 150.00"
+                required
+                className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-vapor-100 font-mono text-[14px] focus:border-cyan-400 focus:outline-none min-h-[44px]"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="font-sans text-[13px] font-bold text-vapor-200">
+                Tempo de execução (min) <span className="text-amber-500">*</span>
+              </label>
+              <input
+                type="number"
+                min="5"
+                step="5"
+                value={suDuracao}
+                onChange={(e) => setSuDuracao(e.target.value)}
+                placeholder="Ex: 60"
+                required
+                className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-vapor-100 font-mono text-[14px] focus:border-cyan-400 focus:outline-none min-h-[44px]"
+              />
+              <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                {[30, 60, 90, 120, 180].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setSuDuracao(String(m))}
+                    className={`px-2 py-0.5 rounded text-[10.5px] font-mono border transition-colors ${
+                      Number(suDuracao) === m
+                        ? 'bg-cyan-500 text-graphite-950 font-bold border-cyan-400'
+                        : 'bg-graphite-950 text-vapor-400 border-graphite-800 hover:text-vapor-200'
+                    }`}
+                  >
+                    {m < 60 ? `${m}m` : `${m / 60}h`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {(orcamento as any)?.modo_orcamento !== 'simples' && (
+            <div className="flex flex-col gap-2 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="font-sans text-[12px] font-bold text-vapor-300 uppercase tracking-wide">
+                  Incluir em quais níveis:
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setSuNiveisDestino({ essencial: true, recomendado: true, completo: true })}
+                  className="text-[11px] text-cyan-400 hover:underline font-semibold"
+                >
+                  Marcar todos os 3
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {(['essencial', 'recomendado', 'completo'] as TipoNivelOrcamento[]).map((nKey) => {
+                  const ativo = suNiveisDestino[nKey];
+                  return (
+                    <button
+                      key={nKey}
+                      type="button"
+                      onClick={() => setSuNiveisDestino((prev) => ({ ...prev, [nKey]: !prev[nKey] }))}
+                      className={`py-2 px-2.5 rounded-lg border text-xs font-bold uppercase tracking-wide transition-all ${
+                        ativo
+                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60'
+                          : 'bg-graphite-950 text-vapor-400 border-graphite-800 hover:text-vapor-200'
+                      }`}
+                    >
+                      {nKey === 'recomendado' ? 'Recomendado ★' : nKey}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 mt-2 pt-3 border-t border-graphite-800">
+            <Button
+              type="button"
+              tone="graphite"
+              onClick={() => setShowModalServicoUnico(false)}
+              className="min-h-[44px]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              tone="cyan"
+              className="min-h-[44px] font-bold"
+            >
+              Adicionar Serviço Único
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
       {/* MODAL ASSINATURA DIGITAL (CLIENTE OU OFICINA) */}
       <Modal
         isOpen={showAssinaturaModal}
@@ -3624,7 +4250,7 @@ export const DetalheOrcamento: React.FC = () => {
               type="button"
               onClick={() => {
                 setAssinandoTipo('cliente');
-                setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || '');
+                setNomeSignatario(orcamento.assinatura_nome || orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || '');
               }}
               className={`flex-1 py-1.5 text-xs font-bold rounded flex items-center justify-center gap-1.5 transition ${
                 assinandoTipo === 'cliente' ? 'bg-amber-500 text-graphite-950 shadow' : 'text-vapor-400 hover:text-vapor-100'
@@ -3671,7 +4297,7 @@ export const DetalheOrcamento: React.FC = () => {
                 )}
                 <div className="flex flex-col gap-0.5 text-xs">
                   <span className="font-semibold text-vapor-100">
-                    {orcamento.assinatura_nome || orcamento.cliente?.nome || 'Cliente'}
+                    {orcamento.assinatura_nome || orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'Cliente'}
                   </span>
                   {orcamento.assinatura_data && (
                     <span className="font-mono text-[11px] text-vapor-400">
@@ -3685,7 +4311,7 @@ export const DetalheOrcamento: React.FC = () => {
                       type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || 'cliente'}.png`)}
+                      onClick={() => baixarFoto(assinaturaClienteUrl, `assinatura_cliente_${orcamento.cliente?.nome || (orcamento as any).cliente_nome_avulso || 'cliente'}.png`)}
                       className="text-xs h-8 px-3 flex items-center gap-1.5 text-amber-400 border-graphite-700 hover:bg-graphite-800"
                       title="Baixar imagem da assinatura do cliente"
                     >
@@ -3878,6 +4504,12 @@ export const DetalheOrcamento: React.FC = () => {
         clienteAtualId={orcamento.cliente_id}
         veiculoAtualId={orcamento.veiculo_id}
         categoriaAtualId={orcamento.categoria_id}
+        modoInicial={modoModalTrocarCliente}
+        dadosAvulsosInicial={{
+          nome: (orcamento as any).cliente_nome_avulso || '',
+          telefone: (orcamento as any).cliente_telefone_avulso || '',
+          veiculoDescricao: (orcamento as any).veiculo_descricao_avulsa || '',
+        }}
         onSuccess={() => {
           fetchOrcamentoEDados();
         }}

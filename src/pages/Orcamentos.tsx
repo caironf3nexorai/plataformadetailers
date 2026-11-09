@@ -146,11 +146,15 @@ export const Orcamentos: React.FC = () => {
     try {
       const [resClientes, resCategorias] = await Promise.all([
         supabase.from('clientes').select('*').eq('tenant_id', tenant.id).eq('ativo', true).order('nome'),
-        supabase.from('categorias_veiculo').select('*').eq('tenant_id', tenant.id).order('nome'),
+        supabase.from('categorias_veiculo').select('*').eq('tenant_id', tenant.id).order('ordem'),
       ]);
 
       if (resClientes.data) setClientes(resClientes.data as Cliente[]);
-      if (resCategorias.data) setCategorias(resCategorias.data as CategoriaVeiculo[]);
+      if (resCategorias.data) {
+        const cats = resCategorias.data as CategoriaVeiculo[];
+        const ativas = cats.filter((c) => c.ativo !== false);
+        setCategorias(ativas.length > 0 ? ativas : cats);
+      }
     } catch (err) {
       console.error('[Orcamentos] Erro ao carregar dados do formulário:', err);
     }
@@ -198,59 +202,75 @@ export const Orcamentos: React.FC = () => {
 
     setCreating(true);
     try {
-      let finalClienteId = clienteId;
-      let finalVeiculoId = veiculoId || null;
-      let finalCategoriaId = categoriaId;
+      let finalClienteId: string | null = clienteId || null;
+      let finalVeiculoId: string | null = veiculoId || null;
+      const finalCategoriaId: string | null = categoriaId || categorias[0]?.id || null;
+
+      const veiculoDescAvulsa = [
+        novoModelo.trim(),
+        novaCor.trim(),
+        novaPlaca.trim() ? novaPlaca.trim().toUpperCase() : '',
+      ]
+        .filter(Boolean)
+        .join(' • ');
 
       if (modoEntrada === 'rapido') {
-        if (!novoNome.trim() || !novoTelefone.trim() || !finalCategoriaId) {
-          showError('Preencha o nome do cliente, telefone e a categoria do veículo.');
-          setCreating(false);
-          return;
+        const temNome = Boolean(novoNome.trim());
+        const temTelefone = Boolean(novoTelefone.trim());
+        const temVeiculoParaCadastrar = Boolean(novoModelo.trim() || novaPlaca.trim());
+
+        if (temNome && temTelefone) {
+          let cleanPlaca: string | null = null;
+          if (temVeiculoParaCadastrar) {
+            const rawPlaca = novaPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+            const isPlacaGenerica = !rawPlaca || ['SEMPLACA', 'SEM', 'SP', 'NAOTEM', 'TESTE'].includes(rawPlaca);
+            cleanPlaca = isPlacaGenerica
+              ? `PROV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
+              : rawPlaca;
+          }
+
+          const { data: cadData, error: cadErr } = await supabase.rpc('cadastro_rapido', {
+            p_nome: novoNome.trim(),
+            p_telefone: novoTelefone.trim(),
+            p_placa: cleanPlaca,
+            p_categoria: cleanPlaca ? finalCategoriaId : null,
+            p_marca: null,
+            p_modelo: cleanPlaca ? (novoModelo.trim() || 'Veículo') : null,
+            p_cor: cleanPlaca ? (novaCor.trim() || null) : null,
+          });
+
+          if (cadErr) throw cadErr;
+          const res = Array.isArray(cadData) ? cadData[0] : cadData;
+          finalClienteId = res?.out_cliente_id || res?.cliente_id || null;
+          finalVeiculoId = res?.out_veiculo_id || res?.veiculo_id || null;
+
+          // Garante que o modelo, cor e categoria cadastrados pelo usuário sejam salvos diretamente no veículo
+          if (finalVeiculoId) {
+            await supabase
+              .from('veiculos')
+              .update({
+                modelo: novoModelo.trim() || 'Veículo',
+                cor: novaCor.trim() || null,
+                categoria_id: finalCategoriaId || undefined,
+              })
+              .eq('id', finalVeiculoId);
+          }
+        } else {
+          // Dados parciais ou em branco: cria orçamento sem travar o usuário em cadastro obrigatório
+          finalClienteId = null;
+          finalVeiculoId = null;
         }
-
-        const rawPlaca = novaPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-        const isPlacaGenerica = !rawPlaca || ['SEMPLACA', 'SEM', 'SP', 'NAOTEM', 'TESTE'].includes(rawPlaca);
-        const cleanPlaca = isPlacaGenerica
-          ? `PROV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`
-          : rawPlaca;
-
-        const { data: cadData, error: cadErr } = await supabase.rpc('cadastro_rapido', {
-          p_nome: novoNome.trim(),
-          p_telefone: novoTelefone.trim(),
-          p_placa: cleanPlaca,
-          p_categoria: finalCategoriaId,
-          p_marca: null,
-          p_modelo: novoModelo.trim() || 'Veículo',
-          p_cor: novaCor.trim() || null,
-        });
-
-        if (cadErr) throw cadErr;
-        const res = Array.isArray(cadData) ? cadData[0] : cadData;
-        finalClienteId = res?.out_cliente_id || res?.cliente_id;
-        finalVeiculoId = res?.out_veiculo_id || res?.veiculo_id;
-
-        // Garante que o modelo, cor e categoria cadastrados pelo usuário sejam salvos diretamente no veículo
-        if (finalVeiculoId) {
-          await supabase.from('veiculos').update({
-            modelo: novoModelo.trim() || 'Veículo',
-            cor: novaCor.trim() || null,
-            categoria_id: finalCategoriaId,
-          }).eq('id', finalVeiculoId);
-        }
-      }
-
-      if (!finalClienteId) {
-        showError('Por favor, selecione ou informe o cliente.');
-        setCreating(false);
-        return;
       }
 
       const { data: newId, error } = await supabase.rpc('criar_orcamento', {
         p_cliente: finalClienteId,
         p_veiculo: finalVeiculoId,
-        p_categoria: finalCategoriaId || null,
+        p_categoria: finalCategoriaId,
         p_titulo: titulo.trim() || null,
+        p_cliente_nome_avulso: !finalClienteId ? (novoNome.trim() || null) : null,
+        p_cliente_telefone_avulso: !finalClienteId ? (novoTelefone.trim() || null) : null,
+        p_veiculo_descricao_avulsa: !finalVeiculoId ? (veiculoDescAvulsa || null) : null,
+        p_tenant: tenant.id,
       });
 
       if (error) throw error;
@@ -266,7 +286,11 @@ export const Orcamentos: React.FC = () => {
         navigate(`/orcamentos/${newId}`);
       }
     } catch (err: any) {
-      showError('Não foi possível criar o orçamento. Tente novamente.', err);
+      if (err?.message?.includes('LIMITE_PLANO_ATINGIDO')) {
+        showError(err.message.replace(/^.*?LIMITE_PLANO_ATINGIDO:\s*/, ''), err);
+      } else {
+        showError('Não foi possível criar o orçamento. Tente novamente.', err);
+      }
     } finally {
       setCreating(false);
     }
@@ -313,12 +337,13 @@ export const Orcamentos: React.FC = () => {
       const q = busca.toLowerCase().trim();
       const numStr = o.numero.toString();
       const osNumStr = o.numero_os ? o.numero_os.toString() : '';
-      const clienteNome = o.cliente?.nome?.toLowerCase() || '';
-      const veiculoPlaca = o.veiculo?.placa?.toLowerCase() || '';
+      const clienteNome = (o.cliente?.nome || o.cliente_nome_avulso || '').toLowerCase();
+      const clienteTel = (o.cliente?.telefone || o.cliente_telefone_avulso || '').toLowerCase();
+      const veiculoPlaca = (o.veiculo?.placa || o.veiculo_descricao_avulsa || '').toLowerCase();
       const tituloStr = o.titulo?.toLowerCase() || '';
 
       const matchNum = numStr.includes(q) || q.includes(numStr) || (osNumStr && osNumStr.includes(q));
-      const matchCliente = clienteNome.includes(q);
+      const matchCliente = clienteNome.includes(q) || clienteTel.includes(q);
       const matchVeiculo = veiculoPlaca.includes(q);
       const matchTitulo = tituloStr.includes(q);
 
@@ -350,7 +375,7 @@ export const Orcamentos: React.FC = () => {
                 setModoEntrada('existente');
                 setClienteId('');
                 setVeiculoId('');
-                setCategoriaId('');
+                setCategoriaId(categorias[0]?.id || '');
                 setTitulo('');
                 setNovoNome('');
                 setNovoTelefone('');
@@ -560,8 +585,11 @@ export const Orcamentos: React.FC = () => {
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-sans text-[15px] font-bold text-vapor-100 group-hover:text-amber-400 transition-colors">
-                        {orc.cliente?.nome || 'Cliente não informado'}
+                        {orc.cliente?.nome || orc.cliente_nome_avulso || 'Cliente não informado'}
                       </span>
+                      {!orc.cliente_id && (
+                        <Badge tone="amber">Dados parciais</Badge>
+                      )}
                       {orc.titulo && (
                         <span className="text-[12px] text-vapor-400 bg-graphite-800 px-2 py-0.5 rounded font-sans">
                           {orc.titulo}
@@ -573,6 +601,10 @@ export const Orcamentos: React.FC = () => {
                       {orc.veiculo ? (
                         <span className="font-mono font-medium text-vapor-300">
                           {orc.veiculo.placa} ({orc.veiculo.modelo || 'Sem modelo'}){orc.veiculo.cor ? ` • ${orc.veiculo.cor}` : ''}
+                        </span>
+                      ) : orc.veiculo_descricao_avulsa ? (
+                        <span className="font-sans font-medium text-vapor-300">
+                          {orc.veiculo_descricao_avulsa}
                         </span>
                       ) : (
                         <span>Sem veículo associado</span>
@@ -640,7 +672,7 @@ export const Orcamentos: React.FC = () => {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title="Novo Orçamento em Níveis"
+        title={modoOrcamento === 'simples' ? 'Novo Orçamento Simples' : 'Novo Orçamento em Níveis'}
       >
         <form onSubmit={handleCriarOrcamento} className="flex flex-col gap-4">
           {/* SELETOR DE MODO DE CLIENTE */}
@@ -669,23 +701,35 @@ export const Orcamentos: React.FC = () => {
                   : 'text-vapor-400 hover:text-vapor-200'
               }`}
             >
-              + Digitar Dados na Hora
+              + Rápido / Opcional
             </button>
           </div>
 
           {modoEntrada === 'existente' ? (
             <>
               <div className="flex flex-col gap-1.5">
-                <label className="font-sans text-[13px] font-bold text-vapor-200">
-                  Cliente <span className="text-amber-500">*</span>
-                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="font-sans text-[13px] font-bold text-vapor-200">
+                    Cliente <span className="text-vapor-400 font-normal">(Opcional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClienteId('');
+                      setVeiculoId('');
+                      setModoEntrada('rapido');
+                    }}
+                    className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 underline-offset-2 hover:underline"
+                  >
+                    Ou informar dados parciais / pular
+                  </button>
+                </div>
                 <select
                   value={clienteId}
                   onChange={(e) => setClienteId(e.target.value)}
-                  required={modoEntrada === 'existente'}
                   className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 font-sans text-[14px] focus:border-amber-500 focus:outline-none"
                 >
-                  <option value="">Selecione um cliente...</option>
+                  <option value="">Sem cliente definido (preencher depois)...</option>
                   {clientes.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.nome} {c.telefone ? `(${c.telefone})` : ''}
@@ -696,7 +740,7 @@ export const Orcamentos: React.FC = () => {
 
               <div className="flex flex-col gap-1.5">
                 <label className="font-sans text-[13px] font-bold text-vapor-200">
-                  Veículo
+                  Veículo <span className="text-vapor-400 font-normal">(Opcional)</span>
                 </label>
                 <select
                   value={veiculoId}
@@ -706,7 +750,7 @@ export const Orcamentos: React.FC = () => {
                 >
                   <option value="">
                     {!clienteId
-                      ? 'Selecione um cliente primeiro...'
+                      ? 'Opcional — selecione um cliente acima ou avance direto...'
                       : veiculos.length === 0
                         ? 'Nenhum veículo cadastrado para este cliente'
                         : 'Selecione um veículo...'}
@@ -721,29 +765,32 @@ export const Orcamentos: React.FC = () => {
             </>
           ) : (
             <div className="p-3 bg-graphite-900/80 rounded-lg border border-graphite-700 flex flex-col gap-3">
-              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-                Dados Base do Cliente e Veículo:
-              </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                  Dados Rápidos do Cliente e Veículo (Tudo Opcional)
+                </span>
+                <span className="text-[11px] text-vapor-400">
+                  Preencha apenas o que tiver em mãos ou avance em branco. Você pode completar depois antes da OS.
+                </span>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs text-vapor-300 font-medium">Nome do Cliente *</label>
+                  <label className="text-xs text-vapor-300 font-medium">Nome do Cliente (Opcional)</label>
                   <input
                     type="text"
                     placeholder="Ex: Carlos Mendes"
                     value={novoNome}
                     onChange={(e) => setNovoNome(e.target.value)}
-                    required={modoEntrada === 'rapido'}
                     className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs text-vapor-300 font-medium">Telefone / WhatsApp *</label>
+                  <label className="text-xs text-vapor-300 font-medium">Telefone / WhatsApp (Opcional)</label>
                   <input
                     type="tel"
                     placeholder="(00) 00000-0000"
                     value={novoTelefone}
                     onChange={(e) => setNovoTelefone(e.target.value)}
-                    required={modoEntrada === 'rapido'}
                     className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
                   />
                 </div>
@@ -751,18 +798,17 @@ export const Orcamentos: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs text-vapor-300 font-medium">Carro / Modelo *</label>
+                  <label className="text-xs text-vapor-300 font-medium">Carro / Modelo (Opcional)</label>
                   <input
                     type="text"
                     placeholder="Ex: Civic G10"
                     value={novoModelo}
                     onChange={(e) => setNovoModelo(e.target.value)}
-                    required={modoEntrada === 'rapido'}
                     className="bg-graphite-800 border border-graphite-700 rounded px-2.5 py-1.5 text-xs text-vapor-100 outline-none focus:border-amber-500"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs text-vapor-300 font-medium">Cor do Carro</label>
+                  <label className="text-xs text-vapor-300 font-medium">Cor (Opcional)</label>
                   <input
                     type="text"
                     placeholder="Ex: Preto Cristal"
@@ -837,15 +883,14 @@ export const Orcamentos: React.FC = () => {
 
           <div className="flex flex-col gap-1.5">
             <label className="font-sans text-[13px] font-bold text-vapor-200">
-              Categoria do Veículo (para preços da matriz) <span className="text-amber-500">*</span>
+              Categoria do Veículo (para preços da matriz) <span className="text-vapor-400 font-normal">(Padrão selecionada)</span>
             </label>
             <select
               value={categoriaId}
               onChange={(e) => setCategoriaId(e.target.value)}
-              required
               className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 font-sans text-[14px] focus:border-amber-500 focus:outline-none"
             >
-              <option value="">Selecione a categoria...</option>
+              <option value="">Usar primeira categoria disponível...</option>
               {categorias.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.nome}
@@ -925,7 +970,7 @@ export const Orcamentos: React.FC = () => {
               tone="amber"
               loading={creating}
             >
-              Criar e Montar Níveis
+              {modoOrcamento === 'simples' ? 'Criar e Montar Orçamento' : 'Criar e Montar Níveis'}
             </Button>
           </div>
         </form>

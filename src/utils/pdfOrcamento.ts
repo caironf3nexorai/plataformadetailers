@@ -44,7 +44,7 @@ export interface PDFOrcamentoData {
   modo_orcamento?: 'simples' | '3_niveis' | string | null;
   
   // Cliente & Veículo
-  clienteNome: string;
+  clienteNome?: string | null;
   clienteTelefone?: string | null;
   clienteCpfCnpj?: string | null;
   clienteEmail?: string | null;
@@ -264,10 +264,11 @@ export async function gerarPDFOrcamento(
   doc.setFont('helvetica', 'bold');
   doc.text('DADOS DO CLIENTE', pageMargin + 5, y + 5.5);
 
+  const clienteNomeTexto = (data.clienteNome || '').trim() || 'Não informado';
   doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Nome: ${data.clienteNome}`, pageMargin + 5, y + 10.5);
+  doc.text(`Nome: ${clienteNomeTexto}`, pageMargin + 5, y + 10.5);
   doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
   doc.text(`Telefone: ${data.clienteTelefone || 'Não informado'}`, pageMargin + 5, y + 15);
 
@@ -458,8 +459,8 @@ export async function gerarPDFOrcamento(
     y += boxHeight + 4.5;
   }
 
-  // 5. Fotos de Avaliação (Antes e Depois)
-  if (data.incluirFotos !== false && data.fotos && data.fotos.length > 0) {
+  // 5. Fotos de Avaliação (Antes e Depois) — só exibe se checkbox explicitamente marcado
+  if (data.incluirFotos === true && data.fotos && data.fotos.length > 0) {
     onProgress?.('Renderizando fotos de avaliação (antes e depois)...');
 
     const fotosAntes = data.fotos.filter((f) => 
@@ -579,19 +580,22 @@ export async function gerarPDFOrcamento(
     }
   }
 
-  // 6. Termos Contratuais (Responsabilidade e Garantia)
-  // SE a emissão em folha separada (Anexo CDC - data.incluirTermoRisco) estiver ATIVA,
+  // 6. Termos Contratuais (Responsabilidade e Garantia) — só exibe se checkbox marcado
+  // SE a emissão em folha separada (Anexo CDC - data.incluirTermoRisco) estiver ATIVA junto ao Termo de Responsabilidade,
   // o Termo de Responsabilidade & Riscos Técnicos é emitido exclusivamente no Anexo Dedicado (Seção 8),
   // evitando duplicidade do mesmo texto na proposta e no anexo, e mantendo a proposta comercial em 1 página.
-  const deveIncluirResp = (
+  const respAtivo =
     data.incluirTermoResponsabilidade !== undefined
-      ? data.incluirTermoResponsabilidade
-      : (data.incluirTermos !== false)
-  ) && !data.incluirTermoRisco;
+      ? Boolean(data.incluirTermoResponsabilidade)
+      : Boolean(data.incluirTermos);
 
-  const deveIncluirGar = data.incluirTermoGarantia !== undefined
-    ? data.incluirTermoGarantia
-    : (data.incluirTermos !== false);
+  const deveIncluirRisco = respAtivo && Boolean(data.incluirTermoRisco);
+  const deveIncluirResp = respAtivo && !deveIncluirRisco;
+
+  const deveIncluirGar =
+    data.incluirTermoGarantia !== undefined
+      ? Boolean(data.incluirTermoGarantia)
+      : Boolean(data.incluirTermos);
 
   // 6.1 Termo Fixo de Responsabilidade & Falhas Ocultas (Geral da Oficina ou Dinâmico por Serviços)
   if (deveIncluirResp) {
@@ -743,7 +747,7 @@ export async function gerarPDFOrcamento(
 
     doc.setFontSize(7.2);
     doc.setFont('helvetica', 'italic');
-    const termoAceite = data.incluirTermoRisco
+    const termoAceite = deveIncluirRisco
       ? '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta. Condições técnicas e riscos específicos aceitos conforme Anexo Contratual emitido."'
       : '"Declaro que li e concordo com as condições, prazos e valores apresentados nesta proposta de orçamento."';
     const splitTermoAceite = doc.splitTextToSize(termoAceite, usableWidth - 10);
@@ -794,7 +798,7 @@ export async function gerarPDFOrcamento(
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-      const nomeCliExibir = doc.splitTextToSize(`Cliente: ${data.assinaturaNome || data.clienteNome}`, colW);
+      const nomeCliExibir = doc.splitTextToSize(`Cliente: ${data.assinaturaNome || data.clienteNome || 'Cliente'}`, colW);
       doc.text(nomeCliExibir[0] || '', col1X, sigStartY + sigBoxH + 3.5);
 
       if (data.assinaturaData) {
@@ -811,7 +815,7 @@ export async function gerarPDFOrcamento(
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-      doc.text(data.clienteNome, col1X + colW / 2, sigStartY + 14, { align: 'center' });
+      doc.text((data.clienteNome || '').trim() || 'Cliente / Contratante', col1X + colW / 2, sigStartY + 14, { align: 'center' });
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.8);
       doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
@@ -873,7 +877,7 @@ export async function gerarPDFOrcamento(
     doc.setFontSize(7.2);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
-    const termoTxt = data.incluirTermoRisco
+    const termoTxt = deveIncluirRisco
       ? '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta. Condições técnicas e riscos específicos aceitos conforme Anexo Contratual emitido."'
       : '"Declaro que li e concordo com os valores, serviços discriminados e prazos estipulados nesta proposta de orçamento."';
     const splitTermo = doc.splitTextToSize(termoTxt, usableWidth - 10);
@@ -891,7 +895,7 @@ export async function gerarPDFOrcamento(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(corTextoPrincipal[0], corTextoPrincipal[1], corTextoPrincipal[2]);
-    doc.text(data.clienteNome, pageMargin + 5 + colW / 2, sigY + 12, { align: 'center' });
+    doc.text((data.clienteNome || '').trim() || 'Cliente / Contratante', pageMargin + 5 + colW / 2, sigY + 12, { align: 'center' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(corTextoSecundario[0], corTextoSecundario[1], corTextoSecundario[2]);
@@ -913,7 +917,7 @@ export async function gerarPDFOrcamento(
   }
 
   // 8. TERMO DE CIÊNCIA E AUTORIZAÇÃO DE SERVIÇO COM RISCO ESPECÍFICO (FOLHA SEPARADA DEDICADA)
-  if (data.incluirTermoRisco) {
+  if (deveIncluirRisco) {
     onProgress?.('Renderizando Termo de Risco em folha separada...');
     doc.addPage();
     let yRisco = 14;
@@ -1164,7 +1168,7 @@ export async function gerarPDFOrcamento(
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(7.5);
       doc.setTextColor(corDocTextoDark[0], corDocTextoDark[1], corDocTextoDark[2]);
-      doc.text(`Assinado Digitalmente: ${data.assinaturaNome || data.clienteNome}`, colCliX, yRisco + 18);
+      doc.text(`Assinado Digitalmente: ${data.assinaturaNome || data.clienteNome || 'Cliente'}`, colCliX, yRisco + 18);
       if (data.assinaturaData) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(6.8);

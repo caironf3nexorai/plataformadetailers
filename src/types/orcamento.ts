@@ -12,8 +12,9 @@ export interface OrcamentoNivelItem {
   id: string;
   tenant_id: string;
   nivel_id: string;
-  servico_id: string;
+  servico_id: string | null;
   combo_id?: string | null;
+  servico_nome?: string | null;
   preco: number;
   duracao_minutos: number;
   incluido: boolean;
@@ -46,9 +47,12 @@ export interface Orcamento {
   tenant_id: string;
   numero: number;
   numero_os?: number | null;
-  cliente_id: string;
+  cliente_id?: string | null;
   veiculo_id?: string | null;
   categoria_id: string;
+  cliente_nome_avulso?: string | null;
+  cliente_telefone_avulso?: string | null;
+  veiculo_descricao_avulsa?: string | null;
   titulo?: string | null;
   observacoes?: string | null;
   status: StatusOrcamento;
@@ -109,7 +113,8 @@ export interface Orcamento {
 }
 
 export interface OrcamentoPublicoItem {
-  servico_id: string;
+  servico_id: string | null;
+  combo_id?: string | null;
   servico_nome: string;
   servico_descricao?: string | null;
   preco: number;
@@ -137,7 +142,12 @@ export interface OrcamentoPublicoData {
   modo_orcamento?: 'simples' | '3_niveis' | string | null;
   nivel_aprovado?: TipoNivelOrcamento | null;
   categoria_id?: string;
-  itens_aprovados?: Array<{ servico_id: string; combo_id?: string | null }>;
+  itens_aprovados?: Array<{
+    servico_id: string | null;
+    combo_id?: string | null;
+    servico_nome?: string | null;
+    duracao_minutos?: number;
+  }>;
   validade_dias: number;
   enviado_em?: string | null;
   data_validade_limite?: string | null;
@@ -167,6 +177,7 @@ export interface OrcamentoPublicoData {
     aplicado_em?: string | null;
     aplicado_por_nome?: string | null;
   } | null;
+  incluir_fotos?: boolean;
   incluir_termos?: boolean;
   incluir_termo_responsabilidade?: boolean;
   incluir_termo_garantia?: boolean;
@@ -197,7 +208,11 @@ export interface OrcamentoPublicoData {
     antecedencia_minima_horas?: number;
     pdf_texto_observacoes_orcamento?: string | null;
   };
-  cliente_primeiro_nome: string;
+  tem_cliente_cadastrado?: boolean;
+  cliente_primeiro_nome?: string | null;
+  cliente_nome_avulso?: string | null;
+  cliente_telefone_avulso?: string | null;
+  veiculo_descricao_avulsa?: string | null;
   veiculo?: {
     placa: string;
     modelo?: string | null;

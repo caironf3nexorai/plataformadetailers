@@ -32,8 +32,9 @@ export interface AgendamentoItem {
   id: string;
   tenant_id: string;
   agendamento_id: string;
-  servico_id: string;
+  servico_id: string | null;
   combo_id?: string | null;
+  servico_nome?: string | null;
   duracao_minutos: number;
   preco_estimado?: number | null;
   modo_ocupacao: ModoOcupacao;

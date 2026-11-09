@@ -20,7 +20,10 @@ import {
   RefreshCw,
   Tag,
   FileText,
-  Copy
+  Copy,
+  Camera,
+  User,
+  Car
 } from 'lucide-react';
 import type { OrcamentoPublicoData, TipoNivelOrcamento } from '../types/orcamento';
 import { SeletorHorarioPublico, type ItemAgendamentoPublico, type SlotHorarioPublico } from '../components/publico/SeletorHorarioPublico';
@@ -56,6 +59,23 @@ export const OrcamentoPublico: React.FC = () => {
   const [erroAgendamento, setErroAgendamento] = useState<string | null>(null);
   const [copiadoPix, setCopiadoPix] = useState<boolean>(false);
 
+  // Fotos públicas (somente carregadas quando incluir_fotos = true)
+  const [fotosPublicas, setFotosPublicas] = useState<
+    Array<{
+      id: string;
+      url: string;
+      tipo: 'antes' | 'depois';
+      descricao?: string;
+      created_at?: string;
+    }>
+  >([]);
+
+  // Dados complementares para Opção B (quando orçamento foi criado sem cliente cadastrado)
+  const [clienteNomePublico, setClienteNomePublico] = useState<string>('');
+  const [clienteTelefonePublico, setClienteTelefonePublico] = useState<string>('');
+  const [veiculoModeloPublico, setVeiculoModeloPublico] = useState<string>('');
+  const [veiculoPlacaPublico, setVeiculoPlacaPublico] = useState<string>('');
+
   // Reseta aceite do pernoite ao mudar data ou horario
   useEffect(() => {
     setTransbordoAceito(false);
@@ -80,6 +100,39 @@ export const OrcamentoPublico: React.FC = () => {
   const sanitizeToken = (t?: string): string => (t ?? '').trim();
   const isUuid = (t: string): boolean =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t);
+
+  const carregarFotosPublicas = async (tokenLimpo: string) => {
+    try {
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/evidencias-orcamento`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ token_publico: tokenLimpo }),
+      });
+      const res = await resp.json();
+      if (res?.incluir_fotos && Array.isArray(res?.fotos)) {
+        const formatadas = res.fotos
+          .map((f: any) => ({
+            id: String(f.id || Math.random()),
+            url: f.foto_url || f.url,
+            tipo: (f.tipo === 'depois' ? 'depois' : 'antes') as 'antes' | 'depois',
+            descricao: f.descricao || undefined,
+            created_at: f.created_at || undefined,
+          }))
+          .filter((f: any) => Boolean(f.url));
+        setFotosPublicas(formatadas);
+        return formatadas;
+      }
+      setFotosPublicas([]);
+      return [];
+    } catch {
+      setFotosPublicas([]);
+      return [];
+    }
+  };
 
   const fetchOrcamentoPublico = async () => {
     const tokenLimpo = sanitizeToken(token);
@@ -126,8 +179,19 @@ export const OrcamentoPublico: React.FC = () => {
         if (parsed.status === 'aprovado' && parsed.nivel_aprovado) {
           setEscolhaSucesso(parsed.nivel_aprovado);
         }
-        if (parsed.cliente_primeiro_nome && !nomeAssinante) {
-          setNomeAssinante(parsed.cliente_primeiro_nome);
+        const nomeInicial = parsed.cliente_primeiro_nome || parsed.cliente_nome_avulso || '';
+        if (nomeInicial && !nomeAssinante) {
+          setNomeAssinante(nomeInicial);
+        }
+        if (parsed.tem_cliente_cadastrado === false) {
+          setClienteNomePublico((prev) => prev || parsed.cliente_nome_avulso || parsed.cliente_primeiro_nome || '');
+          setClienteTelefonePublico((prev) => prev || parsed.cliente_telefone_avulso || parsed.cliente_telefone || '');
+          setVeiculoModeloPublico((prev) => prev || parsed.veiculo_descricao_avulsa || '');
+        }
+        if (parsed.incluir_fotos) {
+          void carregarFotosPublicas(tokenLimpo);
+        } else {
+          setFotosPublicas([]);
         }
       }
     } catch (err: any) {
@@ -182,42 +246,73 @@ export const OrcamentoPublico: React.FC = () => {
       const reader = new FileReader();
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
-        const base64data = reader.result as string;
-        const { error } = await supabase.rpc('responder_orcamento', {
-          p_token: tokenLimpo,
-          p_nivel: nivelPendenteAceite,
-          p_aceite: true,
-          p_assinatura_base64: base64data,
-          p_nome_assinante: nomeAssinante || data?.cliente_primeiro_nome || 'Cliente',
-        });
+        try {
+          const base64data = reader.result as string;
+          const nomeParaAssinar =
+            nomeAssinante.trim() ||
+            data?.cliente_nome_avulso ||
+            data?.cliente_primeiro_nome ||
+            'Cliente';
 
-        if (error) throw error;
-
-        // Se o cliente já tinha selecionado data e horário no calendário, conclui o agendamento imediatamente
-        if (dataSelecionada && horarioSelecionado) {
-          if (isTransbordoSlot && !transbordoAceito) {
-            setErroAgendamento('Você precisa aceitar os termos de permanência do veículo para continuar.');
-            return;
-          }
-          const inicioIso = montarTimestampLocal(dataSelecionada, horarioSelecionado);
-          await supabase.rpc('agendar_orcamento_publico', {
+          const { error } = await supabase.rpc('responder_orcamento', {
             p_token: tokenLimpo,
-            p_inicio: inicioIso,
-            p_transbordo_aceito: isTransbordoSlot ? transbordoAceito : false,
-            p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-            p_ip: null,
+            p_nivel: nivelPendenteAceite,
+            p_aceite: true,
+            p_assinatura_base64: base64data,
+            p_nome_assinante: nomeParaAssinar,
           });
-        }
 
-        setEscolhaSucesso(nivelPendenteAceite);
-        setShowModalAceiteAssinatura(false);
-        setNivelPendenteAceite(null);
-        await fetchOrcamentoPublico();
+          if (error) throw error;
+
+          if (data?.tem_cliente_cadastrado === false && !clienteNomePublico.trim() && nomeAssinante.trim()) {
+            setClienteNomePublico(nomeAssinante.trim());
+          }
+
+          // Se o cliente já tinha selecionado data e horário no calendário, conclui o agendamento se dados estiverem válidos
+          if (dataSelecionada && horarioSelecionado) {
+            if (isTransbordoSlot && !transbordoAceito) {
+              setErroAgendamento('Você precisa aceitar os termos de permanência do veículo para continuar.');
+              return;
+            }
+            const nomeFinalAgend = (clienteNomePublico.trim() || nomeAssinante.trim() || data?.cliente_nome_avulso || '').trim();
+            const telFinalAgend = (clienteTelefonePublico.trim() || data?.cliente_telefone_avulso || data?.cliente_telefone || '').trim();
+            const podeAgendarAgora =
+              data?.tem_cliente_cadastrado !== false ||
+              (nomeFinalAgend.length >= 2 && telFinalAgend.replace(/\D/g, '').length >= 8);
+
+            if (podeAgendarAgora) {
+              const inicioIso = montarTimestampLocal(dataSelecionada, horarioSelecionado);
+              const { error: agErr } = await supabase.rpc('agendar_orcamento_publico', {
+                p_token: tokenLimpo,
+                p_inicio: inicioIso,
+                p_transbordo_aceito: isTransbordoSlot ? transbordoAceito : false,
+                p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+                p_ip: null,
+                p_cliente_nome: data?.tem_cliente_cadastrado === false ? nomeFinalAgend : null,
+                p_cliente_telefone: data?.tem_cliente_cadastrado === false ? telFinalAgend : null,
+                p_veiculo_modelo: data?.tem_cliente_cadastrado === false ? (veiculoModeloPublico.trim() || data?.veiculo_descricao_avulsa || null) : null,
+                p_veiculo_placa: data?.tem_cliente_cadastrado === false ? (veiculoPlacaPublico.trim().toUpperCase() || null) : null,
+              });
+              if (agErr) {
+                setErroAgendamento(agErr.message || 'Erro ao concluir o agendamento.');
+              }
+            }
+          }
+
+          setEscolhaSucesso(nivelPendenteAceite);
+          setShowModalAceiteAssinatura(false);
+          setNivelPendenteAceite(null);
+          await fetchOrcamentoPublico();
+        } catch (innerErr: any) {
+          console.error('[OrcamentoPublico] Erro ao confirmar aceite com assinatura:', innerErr);
+          setErroAgendamento(innerErr.message || 'Erro ao confirmar aceite. Tente novamente.');
+        } finally {
+          setResponding(false);
+        }
       };
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao confirmar aceite com assinatura:', err);
       setErroAgendamento(err.message || 'Erro ao confirmar aceite. Tente novamente.');
-    } finally {
       setResponding(false);
     }
   };
@@ -243,12 +338,13 @@ export const OrcamentoPublico: React.FC = () => {
       });
 
       if (servicos.length > 0) {
-        const veicStr = `${data.veiculo?.modelo || 'Veículo'}${data.veiculo?.marca ? ` (${data.veiculo.marca})` : ''} - Placa: ${data.veiculo?.placa || 'N/I'}`;
+        const modeloExibir = data.veiculo?.modelo || data.veiculo_descricao_avulsa || 'Veículo';
+        const veicStr = `${modeloExibir}${data.veiculo?.marca ? ` (${data.veiculo.marca})` : ''} - Placa: ${data.veiculo?.placa || 'N/I'}`;
         const dinamico = gerarTermoDinamicoServicos(servicos, {
           nomeEmpresa: data.oficina?.razao_social || data.oficina?.nome || 'Oficina Especializada',
           prazoGarantia: `${data.garantia_meses || 3} meses`,
           servicoContratado: servicos.map((s) => s.nome).join(', '),
-          clienteNome: (data as any)?.cliente_nome || data.cliente_primeiro_nome || '',
+          clienteNome: (data as any)?.cliente_nome || data.cliente_nome_avulso || data.cliente_primeiro_nome || '',
           clienteCpf: data.cliente_documento || '',
           veiculoPlaca: veicStr,
           data: data.enviado_em ? formatarData(data.enviado_em) : new Date().toLocaleDateString('pt-BR'),
@@ -291,6 +387,18 @@ export const OrcamentoPublico: React.FC = () => {
         })),
       }));
 
+      const hasResp = Boolean(data.incluir_termo_responsabilidade ?? data.incluir_termos ?? false);
+      const hasGar = Boolean(data.incluir_termo_garantia ?? data.incluir_termos ?? false);
+      const hasRisco = hasResp && Boolean(data.incluir_termo_risco);
+      const hasFotos = Boolean(data.incluir_fotos);
+      let fotosParaPdf = fotosPublicas;
+      if (hasFotos && fotosParaPdf.length === 0) {
+        const tokenLimpo = sanitizeToken(token);
+        if (tokenLimpo && isUuid(tokenLimpo)) {
+          fotosParaPdf = await carregarFotosPublicas(tokenLimpo);
+        }
+      }
+
       await gerarPDFOrcamento({
         id: String(data.numero || 'orcamento'),
         numero: data.numero,
@@ -302,9 +410,9 @@ export const OrcamentoPublico: React.FC = () => {
         validade_dias: data.validade_dias,
         data_validade_limite: data.data_validade_limite,
         observacoes: data.observacoes,
-        clienteNome: (data as any)?.cliente_nome || data.cliente_primeiro_nome || 'Cliente',
-        clienteTelefone: data.cliente_telefone,
-        veiculoModelo: data.veiculo?.modelo,
+        clienteNome: (data as any)?.cliente_nome || data.cliente_nome_avulso || data.cliente_primeiro_nome || 'Cliente',
+        clienteTelefone: data.cliente_telefone || data.cliente_telefone_avulso || undefined,
+        veiculoModelo: data.veiculo?.modelo || data.veiculo_descricao_avulsa || undefined,
         veiculoMarca: data.veiculo?.marca,
         veiculoPlaca: data.veiculo?.placa,
         veiculoCor: data.veiculo?.cor || null,
@@ -331,17 +439,19 @@ export const OrcamentoPublico: React.FC = () => {
         pdfTextoObservacoesOrcamento: data.oficina?.pdf_texto_observacoes_orcamento || undefined,
         pdfTextoRodape: (data.oficina as any)?.pdf_texto_rodape || undefined,
         pdfOcultarMarcaDagua: (data.oficina as any)?.pdf_ocultar_marca_dagua ?? undefined,
-        incluirTermos: (data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true) || (data.incluir_termo_garantia ?? data.incluir_termos ?? true) || Boolean(data.incluir_termo_risco),
-        incluirTermoResponsabilidade: data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true,
-        incluirTermoGarantia: data.incluir_termo_garantia ?? data.incluir_termos ?? true,
+        incluirFotos: hasFotos,
+        fotos: hasFotos ? fotosParaPdf : undefined,
+        incluirTermos: hasResp || hasGar,
+        incluirTermoResponsabilidade: hasResp,
+        incluirTermoGarantia: hasGar,
         garantiaMeses: data.garantia_meses,
-        incluirTermoRisco: data.incluir_termo_risco,
+        incluirTermoRisco: hasRisco,
         termoRiscoServico: data.termo_risco_servico,
         termoRiscoObservacoes: data.termo_risco_observacoes,
         termoRiscoTexto: data.termo_risco_texto,
         clienteCpfCnpj: data.cliente_documento,
-        termoResponsabilidade: textoResponsabilidadeExibir,
-        termosGarantia: data.termo_garantia?.conteudo || undefined,
+        termoResponsabilidade: hasResp ? textoResponsabilidadeExibir : undefined,
+        termosGarantia: hasGar ? (data.termo_garantia?.conteudo || undefined) : undefined,
       });
     } catch (err: any) {
       console.error('[OrcamentoPublico] Erro ao gerar PDF:', err);
@@ -358,6 +468,23 @@ export const OrcamentoPublico: React.FC = () => {
     if (isTransbordoSlot && !transbordoAceito) {
       setErroAgendamento('Você precisa aceitar os termos de permanência do veículo na oficina para continuar.');
       return;
+    }
+
+    // Opção B: se o orçamento foi criado sem cliente cadastrado, exige Nome e WhatsApp para fechar OS/agendamento
+    if (data?.tem_cliente_cadastrado === false) {
+      const nomeTrim = clienteNomePublico.trim();
+      const telDigitos = clienteTelefonePublico.replace(/\D/g, '');
+      if (nomeTrim.length < 2) {
+        setErroAgendamento('Informe seu nome completo para concluir o agendamento.');
+        return;
+      }
+      if (telDigitos.length < 8) {
+        setErroAgendamento('Informe um WhatsApp ou telefone válido (com DDD) para concluir o agendamento.');
+        return;
+      }
+      if (!nomeAssinante.trim()) {
+        setNomeAssinante(nomeTrim);
+      }
     }
 
     // Se o orçamento ainda não possui assinatura registrada no banco, exige a assinatura primeiro!
@@ -379,6 +506,10 @@ export const OrcamentoPublico: React.FC = () => {
         p_transbordo_aceito: isTransbordoSlot ? transbordoAceito : false,
         p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
         p_ip: null,
+        p_cliente_nome: data?.tem_cliente_cadastrado === false ? clienteNomePublico.trim() : null,
+        p_cliente_telefone: data?.tem_cliente_cadastrado === false ? clienteTelefonePublico.trim() : null,
+        p_veiculo_modelo: data?.tem_cliente_cadastrado === false ? (veiculoModeloPublico.trim() || null) : null,
+        p_veiculo_placa: data?.tem_cliente_cadastrado === false ? (veiculoPlacaPublico.trim().toUpperCase() || null) : null,
       });
 
       if (error) throw error;
@@ -541,12 +672,18 @@ export const OrcamentoPublico: React.FC = () => {
         {/* SAUDAÇÃO E INFORMAÇÕES DO VEÍCULO */}
         <div className="flex flex-col gap-2 text-center sm:text-left">
           <h2 className="font-display text-[24px] sm:text-[30px] uppercase tracking-wide text-vapor-100">
-            Olá, <span className="text-amber-400">{data.cliente_primeiro_nome}</span>!
+            Olá{data.cliente_primeiro_nome ? (
+              <>, <span className="text-amber-400">{data.cliente_primeiro_nome}</span></>
+            ) : null}!
           </h2>
           <p className="font-sans text-[15px] text-vapor-300">
-            Preparamos três opções exclusivas para o seu{' '}
+            {(data.modo_orcamento === 'simples' || (data.niveis && data.niveis.length === 1))
+              ? 'Preparamos uma proposta exclusiva para o seu '
+              : 'Preparamos três opções exclusivas para o seu '}
             <strong className="text-vapor-100">
-              {data.veiculo ? `${data.veiculo.modelo || 'veículo'} (${data.veiculo.placa})${data.veiculo.cor ? ` • Cor: ${data.veiculo.cor}` : ''}` : 'veículo'}
+              {data.veiculo
+                ? `${data.veiculo.modelo || 'veículo'}${data.veiculo.placa ? ` (${data.veiculo.placa})` : ''}${data.veiculo.cor ? ` • Cor: ${data.veiculo.cor}` : ''}`
+                : (data.veiculo_descricao_avulsa || 'veículo')}
             </strong>.
           </p>
 
@@ -937,11 +1074,72 @@ export const OrcamentoPublico: React.FC = () => {
           );
         })()}
 
+        {/* FOTOS DE AVALIAÇÃO DO VEÍCULO (SOMENTE SE CHECKBOX INCLUIR_FOTOS MARCADO) */}
+        {Boolean(data.incluir_fotos) && fotosPublicas.length > 0 && (
+          <Card className="p-5 bg-graphite-900 border border-graphite-800 rounded-2xl flex flex-col gap-4 mt-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-graphite-800 pb-2.5">
+              <div className="flex items-center gap-2 text-amber-400 font-sans font-bold text-[14px] uppercase tracking-wide">
+                <Camera size={18} />
+                <span>Fotos de Avaliação do Veículo ({fotosPublicas.length})</span>
+              </div>
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Registro Visual
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {fotosPublicas.map((foto) => {
+                const ehDepois = foto.tipo === 'depois' || Boolean(foto.descricao?.includes('[DEPOIS]'));
+                const descLimpa = foto.descricao
+                  ? foto.descricao.replace(/\[ANTES\]/g, '').replace(/\[DEPOIS\]/g, '').trim()
+                  : '';
+                return (
+                  <div
+                    key={foto.id}
+                    className="flex flex-col rounded-xl overflow-hidden bg-graphite-950 border border-graphite-800"
+                  >
+                    <div className="relative aspect-[4/3] bg-black/40 overflow-hidden">
+                      <img
+                        src={foto.url}
+                        alt={descLimpa || (ehDepois ? 'Foto depois dos serviços' : 'Foto antes dos serviços')}
+                        className="w-full h-full object-cover"
+                      />
+                      <span
+                        className={`absolute top-2 left-2 text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
+                          ehDepois
+                            ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/40'
+                            : 'bg-slate-950/90 text-cyan-300 border-cyan-500/40'
+                        }`}
+                      >
+                        {ehDepois ? 'Depois' : 'Antes'}
+                      </span>
+                    </div>
+                    {(descLimpa || foto.created_at) && (
+                      <div className="p-2.5 flex flex-col gap-0.5">
+                        {descLimpa && (
+                          <span className="font-sans text-[12px] text-vapor-200 line-clamp-2">
+                            {descLimpa}
+                          </span>
+                        )}
+                        {foto.created_at && (
+                          <span className="font-mono text-[10px] text-vapor-500">
+                            {formatarDataHora(foto.created_at)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
+
         {/* CARD DE OBSERVAÇÕES E TERMOS DO ORÇAMENTO */}
         {(() => {
-          const hasResp = data.incluir_termo_responsabilidade ?? data.incluir_termos ?? true;
-          const hasGar = data.incluir_termo_garantia ?? data.incluir_termos ?? true;
-          const hasRiscoSeparado = Boolean(data.incluir_termo_risco) && !hasResp;
+          const hasResp = Boolean(data.incluir_termo_responsabilidade ?? data.incluir_termos ?? false);
+          const hasGar = Boolean(data.incluir_termo_garantia ?? data.incluir_termos ?? false);
+          const hasRiscoSeparado = false;
 
           if (!data.observacoes && !hasResp && !hasGar && !hasRiscoSeparado) return null;
 
@@ -1090,7 +1288,12 @@ export const OrcamentoPublico: React.FC = () => {
         {/* PARTE 2: AGENDAMENTO ONLINE DE HORÁRIO PELO CLIENTE (EXIBIDO APÓS APROVAÇÃO E SE AINDA NÃO AGENDOU) */}
         {isAprovado && !data.agendamento && data.oficina?.orcamento_agendamento_cliente !== false && (() => {
           const nivelAprovado = data.niveis?.find((n) => n.nivel === (data.nivel_aprovado || escolhaSucesso)) || data.niveis?.[0];
-          const itensLocais = nivelAprovado?.itens?.map((i) => ({ servico_id: i.servico_id })) || [];
+          const itensLocais: ItemAgendamentoPublico[] =
+            nivelAprovado?.itens?.map((i) => ({
+              servico_id: i.servico_id,
+              combo_id: i.combo_id || null,
+              duracao_minutos: i.duracao_minutos || null,
+            })) || [];
           const itensParaConsulta: ItemAgendamentoPublico[] = (data.itens_aprovados && data.itens_aprovados.length > 0)
             ? data.itens_aprovados
             : itensLocais;
@@ -1122,6 +1325,87 @@ export const OrcamentoPublico: React.FC = () => {
                 onAceiteChange={setTransbordoAceito}
                 theme="amber"
               />
+
+              {/* OPÇÃO B: COLETA DE DADOS MÍNIMOS SE O ORÇAMENTO NÃO TIVER CLIENTE CADASTRADO */}
+              {data.tem_cliente_cadastrado === false && (
+                <div className="p-4 bg-graphite-950/80 rounded-xl border border-amber-500/30 flex flex-col gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-mono text-[12px] text-amber-400 uppercase tracking-wider font-bold flex items-center gap-1.5">
+                      <User size={14} />
+                      <span>3. Seus dados para o agendamento</span>
+                    </span>
+                    <p className="font-sans text-[12px] text-vapor-400">
+                      Preencha seus dados de contato para registrarmos sua Ordem de Serviço na agenda da oficina.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1">
+                      <label className="font-sans text-[12px] font-bold text-vapor-200">
+                        Nome Completo <span className="text-amber-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={clienteNomePublico}
+                        onChange={(e) => {
+                          setClienteNomePublico(e.target.value);
+                          if (erroAgendamento) setErroAgendamento(null);
+                        }}
+                        placeholder="Ex: João da Silva"
+                        className="w-full bg-graphite-900 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="font-sans text-[12px] font-bold text-vapor-200">
+                        WhatsApp / Telefone <span className="text-amber-400">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={clienteTelefonePublico}
+                        onChange={(e) => {
+                          setClienteTelefonePublico(e.target.value);
+                          if (erroAgendamento) setErroAgendamento(null);
+                        }}
+                        placeholder="(11) 99999-9999"
+                        className="w-full bg-graphite-900 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
+                      />
+                    </div>
+
+                    {!data.veiculo && (
+                      <>
+                        <div className="flex flex-col gap-1">
+                          <label className="font-sans text-[12px] font-medium text-vapor-300 flex items-center gap-1">
+                            <Car size={13} className="text-vapor-400" />
+                            <span>Veículo / Modelo (Opcional)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={veiculoModeloPublico}
+                            onChange={(e) => setVeiculoModeloPublico(e.target.value)}
+                            placeholder="Ex: Honda Civic Preto"
+                            className="w-full bg-graphite-900 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-[14px] text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="font-sans text-[12px] font-medium text-vapor-300">
+                            Placa (Opcional)
+                          </label>
+                          <input
+                            type="text"
+                            value={veiculoPlacaPublico}
+                            onChange={(e) => setVeiculoPlacaPublico(e.target.value.toUpperCase())}
+                            placeholder="Ex: ABC1D23 (ou deixe vazio)"
+                            maxLength={8}
+                            className="w-full bg-graphite-900 border border-graphite-700 rounded-xl px-3.5 py-2.5 text-[14px] font-mono uppercase text-vapor-100 placeholder:text-vapor-500 focus:outline-none focus:border-amber-500 min-h-[44px]"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* CONFIRMAÇÃO DO AGENDAMENTO */}
               {dataSelecionada && horarioSelecionado && (
@@ -1210,27 +1494,37 @@ export const OrcamentoPublico: React.FC = () => {
             />
           </div>
 
-          {/* TERMOS DE RESPONSABILIDADE E GARANTIA PARA CIÊNCIA ANTES DA ASSINATURA */}
-          <div className="p-3 bg-graphite-950 border border-graphite-800 rounded-lg flex flex-col gap-2 max-h-36 overflow-y-auto text-xs text-vapor-300 leading-relaxed shadow-inner">
-            <div className="flex items-center gap-1.5 text-amber-400 font-bold uppercase tracking-wider text-[11px]">
-              <ShieldCheck size={14} />
-              <span>Ciência dos Termos e Condições:</span>
-            </div>
-            <p className="whitespace-pre-line text-vapor-400 text-[11.5px]">
-              {textoResponsabilidadeExibir}
-            </p>
+          {/* TERMOS DE RESPONSABILIDADE E GARANTIA PARA CIÊNCIA ANTES DA ASSINATURA (SOMENTE SE ATIVOS) */}
+          {(() => {
+            const modalHasResp = Boolean(data.incluir_termo_responsabilidade ?? data.incluir_termos ?? false);
+            const modalHasGar = Boolean(data.incluir_termo_garantia ?? data.incluir_termos ?? false);
+            if (!modalHasResp && !modalHasGar) return null;
 
-            {data.termo_garantia && (
-              <div className="pt-2 mt-1 border-t border-graphite-800 flex flex-col gap-1">
-                <span className="font-bold text-amber-400 text-[11px] uppercase tracking-wide">
-                  Garantia: {data.termo_garantia.titulo}
-                </span>
-                <p className="whitespace-pre-line text-vapor-300 text-[11.5px]">
-                  {data.termo_garantia.conteudo}
-                </p>
+            return (
+              <div className="p-3 bg-graphite-950 border border-graphite-800 rounded-lg flex flex-col gap-2 max-h-36 overflow-y-auto text-xs text-vapor-300 leading-relaxed shadow-inner">
+                <div className="flex items-center gap-1.5 text-amber-400 font-bold uppercase tracking-wider text-[11px]">
+                  <ShieldCheck size={14} />
+                  <span>Ciência dos Termos e Condições:</span>
+                </div>
+                {modalHasResp && (
+                  <p className="whitespace-pre-line text-vapor-400 text-[11.5px]">
+                    {textoResponsabilidadeExibir}
+                  </p>
+                )}
+
+                {modalHasGar && (
+                  <div className={`${modalHasResp ? 'pt-2 mt-1 border-t border-graphite-800' : ''} flex flex-col gap-1`}>
+                    <span className="font-bold text-amber-400 text-[11px] uppercase tracking-wide">
+                      Garantia: {data.termo_garantia?.titulo || `${data.garantia_meses || 3} ${data.garantia_meses === 1 ? 'mês' : 'meses'}`}
+                    </span>
+                    <p className="whitespace-pre-line text-vapor-300 text-[11.5px]">
+                      {data.termo_garantia?.conteudo || `Garantia de ${data.garantia_meses || 3} ${data.garantia_meses === 1 ? 'mês' : 'meses'} conforme condições descritas nesta proposta.`}
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           <div className="flex flex-col gap-1.5">
             <label className="font-sans text-[13px] font-medium text-vapor-300">

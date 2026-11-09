@@ -315,6 +315,7 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
               id,
               duracao_minutos,
               preco_estimado,
+              servico_nome,
               servicos(id, nome, codigo, tom, grupo)
             ),
             execucao:execucoes(id, status, valor_total_final, finalizado_em)
@@ -789,7 +790,10 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
                       const isContinuacao = papel.isContinuacao;
                       const hora = isContinuacao ? 'Cont.' : (ag.inicio ? formatarHora(ag.inicio) : '');
                       const isCancelado = ag.status === 'cancelado' || ag.status === 'nao_compareceu';
-                      const firstServ = ag.agendamento_itens?.[0]?.servicos || ag.servico;
+                      const firstItem = ag.agendamento_itens?.[0];
+                      const firstServ = firstItem?.servicos || ag.servico;
+                      const firstServNome = firstServ?.nome || (firstItem as any)?.servico_nome || 'Serviço';
+                      const firstServCode = firstServ?.codigo || ((firstItem as any)?.servico_nome ? 'UN' : 'SV');
                       const extraCount = Math.max(0, (ag.agendamento_itens?.length || 1) - 1);
                       const durTotal = ag.duracao_total || ag.duracao_minutos;
 
@@ -842,15 +846,15 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
                               </div>
 
                               <div className={`font-sans text-[13px] ${isCancelado ? 'text-vapor-500' : 'text-vapor-400'}`}>
-                                {ag.cliente?.nome || 'Cliente'} <span className="mx-1 text-graphite-600">•</span> <span className={isCancelado ? 'line-through' : ''}>{firstServ?.nome || 'Serviço'}</span>
+                                {ag.cliente?.nome || 'Cliente'} <span className="mx-1 text-graphite-600">•</span> <span className={isCancelado ? 'line-through' : ''}>{firstServNome}</span>
                               </div>
                             </div>
                           </div>
 
                           <div className="shrink-0 flex items-center gap-1.5">
                             <ServiceChip
-                              code={firstServ?.codigo || 'SV'}
-                              label={firstServ?.nome || 'Serviço'}
+                              code={firstServCode}
+                              label={firstServNome}
                               tone={firstServ?.tom as any || 'vapor'}
                             />
                             {extraCount > 0 && (
@@ -919,7 +923,9 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
                             const isCancelado = ag.status === 'cancelado' || ag.status === 'nao_compareceu';
                             const modoEfetivo = ag.modo_ocupacao_efetivo || ag.modo_ocupacao;
                             const isDiaInteiro = modoEfetivo === 'dia_inteiro';
-                            const firstServ = ag.agendamento_itens?.[0]?.servicos || ag.servico;
+                            const firstItem = ag.agendamento_itens?.[0];
+                            const firstServ = firstItem?.servicos || ag.servico;
+                            const firstServNome = firstServ?.nome || (firstItem as any)?.servico_nome || 'Serviço';
                             const extraCount = Math.max(0, (ag.agendamento_itens?.length || 1) - 1);
 
                             return (
@@ -963,7 +969,7 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
                                 </div>
 
                                 <span className="font-sans text-[11px] text-vapor-400 truncate">
-                                  {firstServ?.nome || 'Serviço'} {extraCount > 0 ? `(+${extraCount})` : ''}
+                                  {firstServNome} {extraCount > 0 ? `(+${extraCount})` : ''}
                                 </span>
                               </div>
                             );
@@ -1057,7 +1063,10 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
                         const hora = ag.inicio ? formatarHora(ag.inicio) : '';
                         const dataFormatada = ag.inicio ? formatarData(ag.inicio) : '';
                         const isCancelado = ag.status === 'cancelado' || ag.status === 'nao_compareceu';
-                        const firstServ = ag.agendamento_itens?.[0]?.servicos || ag.servico;
+                        const firstItem = ag.agendamento_itens?.[0];
+                        const firstServ = firstItem?.servicos || ag.servico;
+                        const firstServNome = firstServ?.nome || (firstItem as any)?.servico_nome || 'Serviço';
+                        const firstServCode = firstServ?.codigo || ((firstItem as any)?.servico_nome ? 'UN' : 'SV');
                         const extraCount = Math.max(0, (ag.agendamento_itens?.length || 1) - 1);
                         
                         // Valor cobrado (Apenas para concluídos e gestores)
@@ -1120,8 +1129,8 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
                               {/* Chip do Serviço */}
                               <div className="flex items-center gap-1.5">
                                 <ServiceChip
-                                  code={firstServ?.codigo || 'SV'}
-                                  label={firstServ?.nome || 'Serviço'}
+                                  code={firstServCode}
+                                  label={firstServNome}
                                   tone={firstServ?.tom as any || 'vapor'}
                                 />
                                 {extraCount > 0 && (

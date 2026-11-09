@@ -141,6 +141,7 @@ export const Hoje: React.FC = () => {
               id,
               duracao_minutos,
               preco_estimado,
+              servico_nome,
               servicos(id, nome, codigo, tom, grupo)
             )
           )
@@ -205,6 +206,7 @@ export const Hoje: React.FC = () => {
             id,
             duracao_minutos,
             preco_estimado,
+            servico_nome,
             servicos(id, nome, codigo, tom, grupo)
           )
         `)
@@ -930,11 +932,17 @@ export const Hoje: React.FC = () => {
                         <span className="font-mono text-[26px] font-bold text-vapor-100 tracking-tight">
                           {agendamento?.veiculo?.placa || 'Sem Veículo'}
                         </span>
-                        <ServiceChip
-                          code={agendamento?.servico?.codigo || 'SV'}
-                          label={agendamento?.servico?.nome || 'Serviço'}
-                          tone={(agendamento?.servico?.tom as any) || 'amber'}
-                        />
+                        {(() => {
+                          const execFirstItem = agendamento?.agendamento_itens?.[0];
+                          const execFirstServ = execFirstItem?.servicos || agendamento?.servico;
+                          return (
+                            <ServiceChip
+                              code={execFirstServ?.codigo || (execFirstItem?.servico_nome ? 'UN' : 'SV')}
+                              label={execFirstServ?.nome || execFirstItem?.servico_nome || 'Serviço'}
+                              tone={(execFirstServ?.tom as any) || 'amber'}
+                            />
+                          );
+                        })()}
                         {exec.status === 'pausado' && (
                           <span className="px-2.5 py-1 text-[11px] font-semibold bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30 font-mono">
                             PAUSADO
@@ -1078,6 +1086,10 @@ export const Hoje: React.FC = () => {
               const duracaoVal = agendamento.duracao_total || agendamento.duracao_minutos;
               const duracaoDisplay = duracaoVal && duracaoVal > 0 ? `${duracaoVal} min` : 'Duração não definida';
               const isCancelado = agendamento.status === 'cancelado' || agendamento.status === 'nao_compareceu';
+              const firstItem = agendamento.agendamento_itens?.[0];
+              const firstServ = firstItem?.servicos || agendamento.servico;
+              const firstServNome = firstServ?.nome || (firstItem as any)?.servico_nome || 'Serviço';
+              const firstServCode = firstServ?.codigo || ((firstItem as any)?.servico_nome ? 'UN' : 'SV');
 
               return (
                 <Card
@@ -1113,9 +1125,9 @@ export const Hoje: React.FC = () => {
                           </span>
                         )}
                         <ServiceChip
-                          code={agendamento.servico?.codigo || 'SV'}
-                          label={agendamento.servico?.nome || 'Serviço'}
-                          tone={(agendamento.servico?.tom as any) || 'amber'}
+                          code={firstServCode}
+                          label={firstServNome}
+                          tone={(firstServ?.tom as any) || 'amber'}
                         />
                         {agendamento.vistoria_dispensada && !checkinsMap[agendamento.id]?.finalizado && (
                           <span className="font-sans text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700">
@@ -1133,7 +1145,7 @@ export const Hoje: React.FC = () => {
                         {agendamento.cliente?.nome || 'Cliente'}{' '}
                         <span className="mx-1.5 text-graphite-600">•</span>{' '}
                         <span className={isCancelado ? 'line-through text-vapor-500' : ''}>
-                          {agendamento.servico?.nome || 'Serviço'}
+                          {firstServNome}
                         </span>
                       </div>
                     </div>

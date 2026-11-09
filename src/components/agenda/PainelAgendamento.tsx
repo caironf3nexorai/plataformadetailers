@@ -572,7 +572,8 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
     try {
       const payloadItens = itensList.map((i) => ({
         servico_id: i.servico_id,
-        combo_id: i.combo_id || null
+        combo_id: i.combo_id || null,
+        duracao_minutos: i.duracao_minutos || null
       }));
 
       const { data, error } = await supabase.rpc('horarios_disponiveis', {
@@ -744,8 +745,8 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
                     >
                       <div className="flex items-center gap-2.5">
                         <ServiceChip
-                          code={serv?.codigo || 'SV'}
-                          label={serv?.nome || 'Serviço'}
+                          code={serv?.codigo || (item.servico_nome ? 'UN' : 'SV')}
+                          label={serv?.nome || item.servico_nome || 'Serviço'}
                           tone={serv?.tom as any || 'vapor'}
                         />
                         <span className="font-mono text-[11px] text-vapor-400">

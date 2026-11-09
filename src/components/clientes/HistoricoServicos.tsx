@@ -65,6 +65,7 @@ export const HistoricoServicos: React.FC<HistoricoServicosProps> = ({
               id,
               duracao_minutos,
               preco_estimado,
+              servico_nome,
               servicos(id, nome, codigo, tom, grupo)
             ),
             execucao:execucoes(id, status, valor_total_final, finalizado_em)
@@ -173,7 +174,10 @@ export const HistoricoServicos: React.FC<HistoricoServicosProps> = ({
             const isCancelado = ag.status === 'cancelado' || ag.status === 'nao_compareceu';
             const isConcluido = ag.status === 'concluido';
 
-            const firstServ = ag.agendamento_itens?.[0]?.servicos || ag.servico;
+            const firstItem = ag.agendamento_itens?.[0];
+            const firstServ = firstItem?.servicos || ag.servico;
+            const firstServNome = firstServ?.nome || (firstItem as any)?.servico_nome || 'Serviço';
+            const firstServCode = firstServ?.codigo || ((firstItem as any)?.servico_nome ? 'UN' : 'SV');
             const extraCount = Math.max(0, (ag.agendamento_itens?.length || 1) - 1);
             const tempoMin = ag.duracao_total || ag.duracao_minutos || 0;
 
@@ -253,8 +257,8 @@ export const HistoricoServicos: React.FC<HistoricoServicosProps> = ({
                 <div className="flex items-center gap-2.5 shrink-0 justify-between sm:justify-end flex-wrap">
                   <div className="flex items-center gap-1">
                     <ServiceChip
-                      code={firstServ?.codigo || 'SV'}
-                      label={firstServ?.nome || 'Serviço'}
+                      code={firstServCode}
+                      label={firstServNome}
                       tone={firstServ?.tom as any || 'vapor'}
                     />
                     {extraCount > 0 && (
