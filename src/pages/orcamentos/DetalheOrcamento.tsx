@@ -74,7 +74,7 @@ import {
   resolverAgendamentoVinculadoOrcamento,
 } from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
-import { formatarDuracao, getLabelFromStatus } from '../../utils/agenda';
+import { formatarDuracao, getLabelFromStatus, obterLinkAgendaAgendamento } from '../../utils/agenda';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../../utils/pdfOrcamento';
 import { getFotoPublicUrl } from '../../utils/imagens';
 import { uploadOrcamentoFoto, getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
@@ -1460,7 +1460,7 @@ export const DetalheOrcamento: React.FC = () => {
 
       setShowAgendarModal(false);
       showSuccess('Orçamento convertido em agendamento com sucesso!');
-      navigate('/agenda');
+      navigate(obterLinkAgendaAgendamento(agendamentoIdCriado, dataHoraIso));
     } catch (err: any) {
       showError('Não foi possível agendar o atendimento. Tente novamente.', err);
     } finally {
@@ -2603,7 +2603,14 @@ export const DetalheOrcamento: React.FC = () => {
               <Button
                 tone="graphite"
                 size="sm"
-                onClick={() => navigate('/agenda')}
+                onClick={() =>
+                  navigate(
+                    obterLinkAgendaAgendamento(
+                      agendamentoAtivo?.id || orcamento.agendamento_id,
+                      agendamentoAtivo?.inicio
+                    )
+                  )
+                }
               >
                 Ver na Agenda
               </Button>

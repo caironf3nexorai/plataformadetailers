@@ -658,6 +658,7 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
       onClose();
     } catch (err: any) {
       console.error('[PainelAgendamento] erro não compareceu:', err);
+      setShowConfirmNaoCompareceu(false);
       setErrorMessage(err.message || 'Erro ao atualizar status.');
     } finally {
       setSavingNaoCompareceu(false);
