@@ -32,6 +32,7 @@ import {
   TERMO_CIENCIA_RISCO_PADRAO_ADVOGADO,
   TERMO_GARANTIA_PADRAO_ADVOGADO,
 } from '../../types/termos';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
 
 export const AbaTermosGarantia: React.FC = () => {
   const { tenant } = useAuth();
@@ -64,6 +65,9 @@ export const AbaTermosGarantia: React.FC = () => {
       if (tenant?.id) {
         localStorage.setItem(`termo_responsabilidade_${tenant.id}`, conteudo);
       }
+    }
+    if (tenant?.id) {
+      await marcarPassoOnboarding(tenant.id, { termos_revisados: true });
     }
     await carregarTermos();
   };
@@ -139,6 +143,7 @@ export const AbaTermosGarantia: React.FC = () => {
         console.warn('Fallback salvando termo de responsabilidade localmente:', error);
       }
       localStorage.setItem(`termo_responsabilidade_${tenant.id}`, textoFinal);
+      await marcarPassoOnboarding(tenant.id, { termos_revisados: true });
       showSuccess('Termo Fixo de Responsabilidade atualizado com sucesso!');
     } catch (err: any) {
       console.error('[Salvar Termo Responsabilidade Error]:', err);
@@ -253,6 +258,7 @@ export const AbaTermosGarantia: React.FC = () => {
         showSuccess('Novo termo de garantia cadastrado!');
       }
 
+      await marcarPassoOnboarding(tenant.id, { termos_revisados: true });
       setModalOpen(false);
       await carregarTermos();
     } catch (err: any) {

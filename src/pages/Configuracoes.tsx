@@ -27,6 +27,8 @@ import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, Extern
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
+import { marcarPassoOnboarding } from '../utils/onboarding';
+import { sanitizarSlugAoDigitar, validarSlugOficina } from '../utils/slug';
 
 interface ConfiguracoesProps {
   abaInicial?: 'perfil' | 'oficina' | 'horarios' | 'equipe' | 'categorias' | 'checklists' | 'despesas' | 'plano' | 'agendamento' | 'pdf' | 'meta' | 'feedbacks' | 'termos' | 'fiscal' | 'whatsapp';
@@ -163,6 +165,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       }
 
       setSucessoContatoOficina('Dados de contato e localização salvos com sucesso!');
+      await marcarPassoOnboarding(tenant.id, { oficina_personalizada: true });
       await refetchTenantData();
       setTimeout(() => {
         setModalEditarContatoOficina(false);
@@ -338,6 +341,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       if (error) throw error;
 
       setIdentidadeSuccess('Dados de identidade da oficina salvos com sucesso!');
+      await marcarPassoOnboarding(tenant.id, { oficina_personalizada: true });
       await refetchTenantData();
     } catch (err: any) {
       console.error('[Salvar Identidade Error]:', err);
@@ -406,6 +410,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       const slugRetornado = data?.slug || '';
       setSucessoNomeOficina(`Nome e endereço da oficina atualizados com sucesso! Novo link: /agendar/${slugRetornado}`);
+      await marcarPassoOnboarding(tenant?.id, { oficina_personalizada: true });
       await refetchTenantData();
       setTimeout(() => {
         setModalEditarNomeOficina(false);
@@ -415,6 +420,80 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setErroNomeOficina(err.message || 'Erro ao alterar o nome da oficina.');
     } finally {
       setSalvandoNomeOficina(false);
+    }
+  };
+
+  // Estados e Funções de Edição Direta do Slug Público (/agendar/{slug})
+  const [modalEditarSlug, setModalEditarSlug] = useState(false);
+  const [novoSlugInput, setNovoSlugInput] = useState('');
+  const [salvandoSlug, setSalvandoSlug] = useState(false);
+  const [erroSlug, setErroSlug] = useState<string | null>(null);
+  const [sucessoSlug, setSucessoSlug] = useState<string | null>(null);
+
+  const validacaoSlugAtual = validarSlugOficina(novoSlugInput, tenant?.slug);
+
+  const handleAbrirModalEditarSlug = () => {
+    setNovoSlugInput(tenant?.slug || '');
+    setErroSlug(null);
+    setSucessoSlug(null);
+    setModalEditarSlug(true);
+  };
+
+  const handleSalvarNovoSlug = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenant?.id) return;
+    setErroSlug(null);
+    setSucessoSlug(null);
+
+    const validacao = validarSlugOficina(novoSlugInput, tenant.slug);
+    if (!validacao.valido) {
+      setErroSlug(validacao.erro || 'Endereço inválido.');
+      return;
+    }
+
+    setSalvandoSlug(true);
+    try {
+      let slugFinal = validacao.slugSanitizado;
+
+      const { data, error } = await supabase.rpc('atualizar_slug_oficina', {
+        p_novo_slug: validacao.slugSanitizado,
+        p_tenant_id: tenant.id,
+      });
+
+      if (error) {
+        const msg = String(error.message || '');
+        const rpcIndisponivel =
+          error.code === 'PGRST202' ||
+          msg.includes('Could not find the function') ||
+          msg.includes('atualizar_slug_oficina');
+
+        if (!rpcIndisponivel) throw error;
+
+        // Fallback resiliente para RPC legada da migração 0005
+        const { data: legacySlug, error: legacyErr } = await supabase.rpc('atualizar_slug', {
+          p_tenant: tenant.id,
+          p_novo_slug: validacao.slugSanitizado,
+        });
+        if (legacyErr) throw legacyErr;
+        if (typeof legacySlug === 'string' && legacySlug) {
+          slugFinal = legacySlug;
+        }
+      } else if (data?.slug) {
+        slugFinal = String(data.slug);
+      }
+
+      setSucessoSlug(`Endereço atualizado com sucesso! Novo link: /agendar/${slugFinal}`);
+      await marcarPassoOnboarding(tenant.id, { oficina_personalizada: true });
+      await refetchTenantData();
+      setTimeout(() => {
+        setModalEditarSlug(false);
+        setSucessoSlug(null);
+      }, 1500);
+    } catch (err: any) {
+      console.error('[Atualizar Slug Oficina Error]:', err);
+      setErroSlug(err.message || 'Erro ao atualizar o slug da oficina.');
+    } finally {
+      setSalvandoSlug(false);
     }
   };
 
@@ -526,6 +605,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       if (updateError) throw updateError;
 
+      await marcarPassoOnboarding(tenant.id, { oficina_personalizada: true });
       await refetchTenantData();
     } catch (err: any) {
       console.error('[Logo Upload Error]:', err);
@@ -599,6 +679,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
 
       if (updateError) throw updateError;
 
+      await marcarPassoOnboarding(tenant.id, { oficina_personalizada: true });
       await refetchTenantData();
     } catch (err: any) {
       console.error('[Capa Upload Error]:', err);
@@ -871,14 +952,20 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                   )}
                 </div>
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-1">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 border-b border-graphite-700 gap-2">
                 <span className="text-vapor-400 shrink-0">Endereço Público (Slug):</span>
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <span className="font-mono text-amber-500 text-left sm:text-right break-all min-w-0">/{tenant?.slug || '—'}</span>
-                  {tenant?.nome_alterado_em && (
-                    <span className="text-[11px] text-vapor-500 font-mono" title={`Última alteração em ${new Date(tenant.nome_alterado_em).toLocaleDateString('pt-BR')}`}>
-                      • Atualizado em {new Date(tenant.nome_alterado_em).toLocaleDateString('pt-BR')}
-                    </span>
+                  {isDono && (
+                    <button
+                      type="button"
+                      onClick={handleAbrirModalEditarSlug}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold transition cursor-pointer shrink-0"
+                      title="Editar o endereço público (slug) da sua vitrine"
+                    >
+                      <Edit2 size={12} />
+                      <span>Editar Slug</span>
+                    </button>
                   )}
                 </div>
               </div>
@@ -1009,6 +1096,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                       .from('tenants')
                       .update({ porte_cidade: novoPorte })
                       .eq('id', tenant.id);
+                    await marcarPassoOnboarding(tenant.id, { oficina_personalizada: true });
                     await refetchTenantData();
                   } catch (err) {
                     console.error('[Configuracoes] Erro ao salvar porte da cidade:', err);
@@ -1283,7 +1371,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
             </p>
 
             <div className="flex flex-col gap-3">
-              <label className="font-sans text-[13px] text-vapor-300 font-medium">Link da Vitrine (Sincronizado):</label>
+              <label className="font-sans text-[13px] text-vapor-300 font-medium">Link da Vitrine Online (Slug):</label>
               
               <div className="flex flex-col sm:flex-row sm:items-center bg-graphite-950 border border-graphite-600 rounded-lg p-3 font-mono text-[13px] gap-1 sm:gap-2">
                 <span className="text-vapor-500 shrink-0 select-none text-xs sm:text-[13px]">{window.location.origin}/agendar/</span>
@@ -1294,31 +1382,43 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                 <Building2 size={16} className="shrink-0 mt-0.5 text-amber-500" />
                 <div className="space-y-1">
                   <div>
-                    O endereço público da vitrine é sincronizado com o <strong>nome registrado da sua oficina</strong> ({tenant?.nome || '—'}).
+                    Personalize o final do seu link (slug) para deixá-lo curto e fácil de memorizar nas redes sociais e cartões.
                   </div>
                   <div className="text-vapor-500 text-[11px]">
                     {oficinaEmCooldown
-                      ? `Próxima alteração disponível em ${diasRestantesCooldown} dia(s).`
-                      : 'Alterações de nome e link são permitidas uma vez a cada 15 dias.'}
+                      ? `Nome oficial da oficina (${tenant?.nome || '—'}) em intervalo de ${diasRestantesCooldown} dia(s); o slug pode ser editado livremente.`
+                      : 'Você pode editar o slug diretamente quando precisar, sem depender da troca do nome oficial.'}
                   </div>
                 </div>
               </div>
 
               {isDono && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleAbrirModalNomeOficina}
-                  className="w-full flex items-center justify-center gap-2 font-semibold border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-                >
-                  <Edit2 size={15} />
-                  <span>Alterar Nome e Link da Oficina</span>
-                  {oficinaEmCooldown && (
-                    <span className="text-[10px] bg-amber-500/20 px-1.5 py-0.5 rounded font-mono">
-                      {diasRestantesCooldown}d restantes
-                    </span>
-                  )}
-                </Button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleAbrirModalEditarSlug}
+                    className="w-full flex items-center justify-center gap-2 font-semibold border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <Globe size={15} />
+                    <span>Editar Slug (Link)</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleAbrirModalNomeOficina}
+                    className="w-full flex items-center justify-center gap-2 font-semibold border-graphite-600 text-vapor-200 hover:bg-graphite-700/60"
+                  >
+                    <Edit2 size={15} />
+                    <span>Alterar Nome</span>
+                    {oficinaEmCooldown && (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono">
+                        {diasRestantesCooldown}d
+                      </span>
+                    )}
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -1521,7 +1621,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                   {window.location.origin}/agendar/{calcularSlugPreview(novoNomeOficinaInput, tenant?.slug)}
                 </span>
                 <span className="text-[11px] text-vapor-500 block pt-0.5">
-                  Ao salvar, o link da sua vitrine e QR Code mudam automaticamente para acompanhar o novo nome.
+                  Ao salvar, o link da sua vitrine e QR Code mudam automaticamente para acompanhar o novo nome (você também pode personalizar o slug separadamente depois).
                 </span>
               </div>
 
@@ -1586,6 +1686,125 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
                     <>
                       <Save size={16} />
                       <span>Salvar Nome</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal de Edição Direta do Slug Público (/agendar/{slug}) */}
+      {modalEditarSlug && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-graphite-900 border border-graphite-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150 relative my-auto">
+            <button
+              type="button"
+              onClick={() => setModalEditarSlug(false)}
+              className="absolute top-2.5 right-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-vapor-400 hover:text-white transition cursor-pointer rounded-lg"
+              aria-label="Fechar modal de edição do slug"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-1 pr-8">
+              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+                <Globe size={24} />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-vapor-100 font-heading leading-snug">
+                  Editar Endereço Público (Slug)
+                </h3>
+                <p className="text-xs text-vapor-400 leading-snug">
+                  Personalize o link da Vitrine Online e do Agendamento 24h
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSalvarNovoSlug} className="flex flex-col gap-4">
+              <div className="p-3 bg-graphite-950 rounded-xl border border-graphite-800 text-xs text-vapor-300 space-y-1">
+                <div className="text-vapor-400 break-all">
+                  Slug atual: <span className="text-amber-400 font-mono">/{tenant?.slug}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-bold text-vapor-300">
+                  Novo Slug da Oficina *
+                </label>
+                <div className="flex items-center bg-graphite-950 border border-graphite-700 focus-within:border-amber-500 rounded-xl overflow-hidden transition">
+                  <span className="pl-3 pr-1.5 text-xs font-mono text-vapor-500 select-none shrink-0">
+                    /agendar/
+                  </span>
+                  <input
+                    type="text"
+                    value={novoSlugInput}
+                    onChange={(e) => setNovoSlugInput(sanitizarSlugAoDigitar(e.target.value))}
+                    placeholder="estetica-sua-marca"
+                    autoFocus
+                    required
+                    maxLength={60}
+                    disabled={salvandoSlug}
+                    className="flex-1 min-w-0 py-3 pr-3 bg-transparent text-xs text-vapor-100 font-mono font-bold outline-none disabled:opacity-50"
+                  />
+                </div>
+                <span className="text-[11px] text-vapor-500">
+                  Use apenas letras minúsculas, números e hífen (3 a 60 caracteres). Ex: <code className="text-vapor-300">premium-detail</code>
+                </span>
+              </div>
+
+              <div className="p-3 bg-graphite-950/80 border border-graphite-800/80 rounded-xl space-y-1 text-xs">
+                <span className="text-vapor-400 block text-[11px] font-mono uppercase">
+                  Preview do Novo Link:
+                </span>
+                <span className="font-mono font-bold text-amber-400 text-xs break-all">
+                  {window.location.origin}/agendar/{validacaoSlugAtual.slugSanitizado || '—'}
+                </span>
+              </div>
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-300 text-[11px] flex items-start gap-2 leading-relaxed">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-400" />
+                <span>
+                  Ao salvar um novo slug, links antigos enviados no WhatsApp/Instagram e QR Codes já impressos deixarão de abrir o endereço anterior. Lembre-se de atualizar o link da bio e baixar o novo QR Code.
+                </span>
+              </div>
+
+              {erroSlug && (
+                <div className="p-2.5 bg-flare-400/10 border border-flare-400/30 rounded text-flare-400 text-[12px] flex items-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{erroSlug}</span>
+                </div>
+              )}
+
+              {sucessoSlug && (
+                <div className="p-2.5 bg-mint-500/10 border border-mint-500/30 rounded text-mint-400 text-[12px] flex items-center gap-2">
+                  <Check size={14} className="shrink-0" />
+                  <span>{sucessoSlug}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarSlug(false)}
+                  className="flex-1 min-h-[48px] py-2.5 bg-graphite-800 hover:bg-graphite-700 text-vapor-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={salvandoSlug || !validacaoSlugAtual.valido}
+                  className="flex-1 min-h-[48px] py-2.5 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg flex items-center justify-center gap-2"
+                >
+                  {salvandoSlug ? (
+                    'Salvando...'
+                  ) : (
+                    <>
+                      <Save size={16} />
+                      <span>Salvar Slug</span>
                     </>
                   )}
                 </button>

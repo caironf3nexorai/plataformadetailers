@@ -18,6 +18,7 @@ import {
 import type { HorarioFuncionamento, BloqueioAgenda } from '../../types/agenda';
 import { getNomeDiaSemana } from '../../utils/agenda';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
 
 export const AbaHorarios: React.FC = () => {
   const { tenant } = useAuth();
@@ -102,6 +103,7 @@ export const AbaHorarios: React.FC = () => {
         .update({ grade_minutos: novaGrade })
         .eq('id', tenant.id);
       if (error) throw error;
+      await marcarPassoOnboarding(tenant.id, { horarios_revisados: true });
       setMessage({ text: 'Intervalo da grade atualizado com sucesso!', type: 'success' });
     } catch (err: any) {
       setMessage({ text: 'Erro ao atualizar grade: ' + err.message, type: 'error' });
@@ -122,6 +124,7 @@ export const AbaHorarios: React.FC = () => {
         .update({ antecedencia_minima_horas: novaAntecedencia })
         .eq('id', tenant.id);
       if (error) throw error;
+      await marcarPassoOnboarding(tenant.id, { horarios_revisados: true });
       setMessage({ text: 'Antecedência mínima para agendamento online atualizada com sucesso!', type: 'success' });
     } catch (err: any) {
       setMessage({ text: 'Erro ao atualizar antecedência: ' + err.message, type: 'error' });
@@ -141,6 +144,7 @@ export const AbaHorarios: React.FC = () => {
         .update({ vistoria_obrigatoria: obrigatoria })
         .eq('id', tenant.id);
       if (error) throw error;
+      await marcarPassoOnboarding(tenant.id, { horarios_revisados: true });
       setMessage({
         text: obrigatoria
           ? 'Vistoria de entrada configurada como OBRIGATÓRIA para toda a equipe!'
@@ -182,6 +186,7 @@ export const AbaHorarios: React.FC = () => {
         .upsert(updates);
 
       if (error) throw error;
+      await marcarPassoOnboarding(tenant.id, { horarios_revisados: true });
       setMessage({ text: 'Horários de funcionamento salvos com sucesso!', type: 'success' });
     } catch (err: any) {
       setMessage({ text: 'Erro ao salvar horários: ' + err.message, type: 'error' });

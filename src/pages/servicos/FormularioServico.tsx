@@ -42,6 +42,7 @@ import {
 import { AlertaErro } from '../../components/ui/AlertaErro';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { BIBLIOTECA_RISCOS_SERVICOS, contemPalavraChave } from '../../types/termos';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
 
 const GRUPOS_SUGESTOES = [
   'Lavagem',
@@ -661,6 +662,8 @@ export const FormularioServico: React.FC = () => {
         );
         await Promise.all(promessas);
       }
+
+      await marcarPassoOnboarding(tenant.id, { catalogo_revisado: true });
 
       setSuccessMsg('Serviço e tempos de execução atualizados com sucesso!');
       setTimeout(() => {

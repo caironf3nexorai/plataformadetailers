@@ -22,8 +22,15 @@ import {
   Upload,
   Trash,
   Package,
-  TrendingUp
+  TrendingUp,
+  Info,
+  CheckCircle2,
 } from 'lucide-react';
+import {
+  lerProgressLocal,
+  marcarPassoOnboarding,
+  mergeOnboardingFlags,
+} from '../utils/onboarding';
 import { GerenciadorCombos } from '../components/servicos/GerenciadorCombos';
 import {
   slugifyGrupo,
@@ -38,7 +45,7 @@ interface ServicoComPrecos extends Servico {
 }
 
 export const Servicos: React.FC = () => {
-  const { tenant, membership } = useAuth();
+  const { tenant, membership, refetchTenantData } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'servicos' | 'combos'>('servicos');
@@ -73,6 +80,8 @@ export const Servicos: React.FC = () => {
   
   // Se o usuário clicar em "Prefiro cadastrar do zero", ocultamos temporariamente o onboarding
   const [forceHideOnboarding, setForceHideOnboarding] = useState(false);
+  const [confirmandoTabelaMedia, setConfirmandoTabelaMedia] = useState(false);
+  const [avisoPrecoMediaDispensado, setAvisoPrecoMediaDispensado] = useState(false);
 
   const fetchServicesAndModels = async () => {
     if (!tenant) return;
@@ -359,6 +368,31 @@ export const Servicos: React.FC = () => {
   };
 
   const gruposAtivos = agruparPorGrupo(activeServices);
+  const possuiPrecosSugeridos = activeServices.some((s) =>
+    (s.servico_precos || []).some((p) => !p.duracao_confirmada)
+  );
+  const onboardingFlags = mergeOnboardingFlags(
+    tenant?.onboarding_progress,
+    lerProgressLocal(tenant?.id)
+  );
+  const mostrarLembretePrecosMedios =
+    canManage &&
+    activeServices.length > 0 &&
+    possuiPrecosSugeridos &&
+    !onboardingFlags.catalogo_revisado &&
+    !avisoPrecoMediaDispensado;
+
+  const handleConfirmarPrecosSugeridos = async () => {
+    if (!tenant?.id) return;
+    setConfirmandoTabelaMedia(true);
+    try {
+      await marcarPassoOnboarding(tenant.id, { catalogo_revisado: true });
+      await refetchTenantData();
+      setAvisoPrecoMediaDispensado(true);
+    } finally {
+      setConfirmandoTabelaMedia(false);
+    }
+  };
 
   // Define se exibe o estado de onboarding/catálogo pronto
   const exibirOnboarding = services.length === 0 && !forceHideOnboarding;
@@ -557,6 +591,44 @@ export const Servicos: React.FC = () => {
           <AlertTriangle size={18} className="shrink-0" />
           <span>{errorMsg}</span>
         </div>
+      )}
+
+      {/* Lembrete calmo sobre preços médios de mercado carregados no cadastro */}
+      {activeTab === 'servicos' && mostrarLembretePrecosMedios && (
+        <Card className="p-3.5 sm:p-4 bg-amber-500/5 border-amber-500/25 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <Info size={18} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <span className="font-sans text-[13px] font-bold text-vapor-100">
+                Catálogo pronto com valores médios sugeridos de mercado
+              </span>
+              <span className="font-sans text-[12px] text-vapor-300 leading-relaxed">
+                Você já pode simular e enviar orçamentos normalmente. Quando puder, ajuste os preços e tempos na matriz para refletir a realidade da sua região.
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate('/servicos/precos')}
+              className="text-xs px-3 py-1.5 min-h-[36px] border-amber-500/35 text-amber-300 hover:bg-amber-500/15"
+            >
+              Revisar na Matriz de Preços
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={confirmandoTabelaMedia}
+              onClick={handleConfirmarPrecosSugeridos}
+              className="text-xs px-3 py-1.5 min-h-[36px] text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/10 flex items-center gap-1.5"
+            >
+              <CheckCircle2 size={14} />
+              <span>{confirmandoTabelaMedia ? 'Confirmando...' : 'Manter médias por enquanto'}</span>
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* Conteúdo da Aba Ativa */}

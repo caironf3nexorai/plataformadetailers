@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -39,8 +39,10 @@ import {
 import { formatarData } from '../utils/datas';
 import { formatarCodigoProposta, formatarMoeda } from '../utils/formatters';
 import { formatarDuracao } from '../utils/duracao';
+import { ONBOARDING_EVENT_PROGRESSO } from '../utils/onboarding';
 
 export const Orcamentos: React.FC = () => {
+  const location = useLocation();
   const navigate = useNavigate();
   const { tenant } = useAuth();
   const { showError, showSuccess } = useToast();
@@ -172,6 +174,33 @@ export const Orcamentos: React.FC = () => {
     fetchDadosFormulario();
   }, [tenant?.id]);
 
+  // Abre automaticamente o modal de novo orçamento quando acessado via ?novo=1 (Onboarding Progressivo)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('novo') === '1') {
+      setModoEntrada('rapido');
+      setClienteId('');
+      setVeiculoId('');
+      setCategoriaId('');
+      setTitulo('');
+      setNovoNome('');
+      setNovoTelefone('');
+      setNovoSemCelular(false);
+      setNovoModelo('');
+      setNovaCor('');
+      setNovaPlaca('');
+      setShowModal(true);
+      navigate('/orcamentos', { replace: true });
+    }
+  }, [location.search, navigate]);
+
+  // Garante primeira categoria selecionada assim que as categorias terminam de carregar com o modal aberto
+  useEffect(() => {
+    if (showModal && !categoriaId && categorias.length > 0) {
+      setCategoriaId(categorias[0].id);
+    }
+  }, [showModal, categoriaId, categorias]);
+
   // Carrega veículos do cliente selecionado no modal
   useEffect(() => {
     if (!clienteId || !tenant) {
@@ -296,6 +325,9 @@ export const Orcamentos: React.FC = () => {
         }
         await supabase.from('orcamentos').update(updatePayload).eq('id', newId);
 
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(ONBOARDING_EVENT_PROGRESSO, { detail: { tenantId: tenant.id } }));
+        }
         setShowModal(false);
         navigate(`/orcamentos/${newId}`);
       }

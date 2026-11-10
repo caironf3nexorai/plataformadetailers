@@ -45,6 +45,15 @@ export interface Tenant {
   placa_balcao_config?: PlacaBalcaoConfig | null;
   onboarding_concluido?: boolean;
   onboarding_concluido_em?: string | null;
+  welcome_modal_seen?: boolean;
+  onboarding_progress?: Record<string, any> | null;
+  onboarding_widget_oculto?: boolean;
+  pix_chave?: string | null;
+  sinal_ativo?: boolean;
+  agendamento_online_ativo?: boolean;
+  termo_responsabilidade?: string | null;
+  porte_cidade?: string | null;
+  grade_minutos?: number | null;
   created_at?: string;
   updated_at?: string;
 }

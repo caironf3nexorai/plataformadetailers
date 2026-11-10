@@ -22,6 +22,18 @@ describe('PlayerVideoSeguro - Utilitários de Segurança e Extração de URL', (
     expect(res.embedUrl).toContain('&start=45');
   });
 
+  it('adiciona parâmetro end quando tempoFinal é maior que tempoInicial', () => {
+    const res = analisarUrlVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ', 30, false, 75);
+    expect(res.embedUrl).toContain('&start=30');
+    expect(res.embedUrl).toContain('&end=75');
+  });
+
+  it('ignora parâmetro end quando tempoFinal não é maior que tempoInicial', () => {
+    const res = analisarUrlVideo('https://www.youtube.com/watch?v=dQw4w9WgXcQ', 60, false, 45);
+    expect(res.embedUrl).toContain('&start=60');
+    expect(res.embedUrl).not.toContain('&end=');
+  });
+
   it('identifica e extrai URL encurtada do YouTube youtu.be', () => {
     const res = analisarUrlVideo('https://youtu.be/dQw4w9WgXcQ?si=abcdef');
     expect(res.plataforma).toBe('youtube');

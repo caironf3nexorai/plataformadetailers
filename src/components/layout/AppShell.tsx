@@ -13,6 +13,10 @@ import { ModalOnboardingVideoFlutuante } from '../onboarding/ModalOnboardingVide
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
+import {
+  lerWelcomeVistoLocal,
+  ONBOARDING_EVENT_WELCOME_VISIBILITY,
+} from '../../utils/onboarding';
 
 export const AppShell: React.FC = () => {
   const location = useLocation();
@@ -22,6 +26,23 @@ export const AppShell: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [radarAberto, setRadarAberto] = useState(false);
   const [radarDados, setRadarDados] = useState<any>(null);
+  const [welcomeModalAtivo, setWelcomeModalAtivo] = useState(false);
+
+  useEffect(() => {
+    const handleWelcomeVis = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      setWelcomeModalAtivo(Boolean(detail?.aberto));
+    };
+    window.addEventListener(ONBOARDING_EVENT_WELCOME_VISIBILITY, handleWelcomeVis);
+    return () => window.removeEventListener(ONBOARDING_EVENT_WELCOME_VISIBILITY, handleWelcomeVis);
+  }, []);
+
+  const welcomePendenteNaEntrada =
+    Boolean(tenant?.id) &&
+    (isDono || isGerente) &&
+    !tenant?.welcome_modal_seen &&
+    !tenant?.onboarding_concluido &&
+    !lerWelcomeVistoLocal(tenant?.id);
 
   const isTelaCheiaOperacional = location.pathname.startsWith('/execucao/') || location.pathname.startsWith('/checkin/');
 
@@ -50,7 +71,15 @@ export const AppShell: React.FC = () => {
   // Disparo diário automático: ao entrar no sistema, verifica contas e cobranças do dia para Dono e Gerente (Apenas planos pagos/trial)
   useEffect(() => {
     const isTenantFree = !tenant?.plano || tenant.plano === 'free';
-    if (!tenant?.id || (!isDono && !isGerente) || isTenantFree) return;
+    if (
+      !tenant?.id ||
+      (!isDono && !isGerente) ||
+      isTenantFree ||
+      welcomePendenteNaEntrada ||
+      welcomeModalAtivo
+    ) {
+      return;
+    }
 
     const hojeStr = new Date().toISOString().slice(0, 10);
     const chaveVisto = `radar_financeiro_visto_${tenant.id}_${hojeStr}`;
@@ -80,7 +109,7 @@ export const AppShell: React.FC = () => {
     }
 
     verificarRadarDiario();
-  }, [tenant?.id, isDono, isGerente]);
+  }, [tenant?.id, isDono, isGerente, welcomePendenteNaEntrada, welcomeModalAtivo]);
 
   const handleDispensarRadarHoje = () => {
     if (tenant?.id) {

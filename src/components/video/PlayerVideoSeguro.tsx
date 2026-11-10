@@ -19,6 +19,7 @@ export interface PlayerVideoSeguroProps {
   titulo?: string;
   autoPlay?: boolean;
   tempoInicial?: number;
+  tempoFinal?: number;
   mostrarWatermark?: boolean;
   textoWatermark?: string;
   modoCompacto?: boolean;
@@ -60,7 +61,12 @@ export function formatarTempoVideo(segundos: number): string {
 /**
  * Analisa e extrai informacoes essenciais do video, desativando controles nativos
  */
-export function analisarUrlVideo(rawUrl: string, tempoInicial = 0, autoPlay = false): DadosVideoParsed {
+export function analisarUrlVideo(
+  rawUrl: string,
+  tempoInicial = 0,
+  autoPlay = false,
+  tempoFinal?: number
+): DadosVideoParsed {
   if (!rawUrl || !rawUrl.trim()) {
     return {
       plataforma: 'desconhecido',
@@ -81,7 +87,12 @@ export function analisarUrlVideo(rawUrl: string, tempoInicial = 0, autoPlay = fa
     // controls=0 remove a barra e logo do YouTube. enablejsapi=1 permite controle via postMessage sem script externo
     const originParam = typeof window !== 'undefined' && window.location && window.location.origin ? `&origin=${encodeURIComponent(window.location.origin)}` : '';
     const autoPlayParam = autoPlay ? '&autoplay=1' : '';
-    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${autoPlayParam}${originParam}${tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : ''}`;
+    const startParam = tempoInicial && tempoInicial > 0 ? `&start=${Math.floor(tempoInicial)}` : '';
+    const endParam =
+      tempoFinal && tempoFinal > 0 && (!tempoInicial || Math.floor(tempoFinal) > Math.floor(tempoInicial))
+        ? `&end=${Math.floor(tempoFinal)}`
+        : '';
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1&disablekb=1&fs=0&cc_load_policy=0&cc_lang_pref=off${autoPlayParam}${originParam}${startParam}${endParam}`;
     return {
       plataforma: 'youtube',
       videoId,
@@ -126,6 +137,7 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
   titulo,
   autoPlay = false,
   tempoInicial = 0,
+  tempoFinal,
   mostrarWatermark = true,
   textoWatermark,
   modoCompacto = false,
@@ -136,22 +148,29 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
 }) => {
   const { tenant, user } = useAuth();
 
-  // Armazena o tempo inicial apenas no momento de montagem do componente.
-  // Isso e CRUCIAL: impede que re-renderizacoes com progresso recalculado alterem a embedUrl
-  // e forcem o navegador a recarregar o iframe do YouTube continuamente a cada segundo.
+  // Armazena o tempo inicial apenas quando muda o video ou o recorte (tempoInicial/tempoFinal).
+  // Impede recarregamentos acidentais do iframe durante reproducao normal.
+  const chaveSegmento = `${url}|${tempoInicial || 0}|${tempoFinal || 0}`;
   const tempoInicialMontagemRef = useRef(tempoInicial || 0);
+  const tempoFinalSegmentoRef = useRef<number | undefined>(
+    tempoFinal && tempoFinal > 0 ? Math.floor(tempoFinal) : undefined
+  );
   const jaFezSeekInicialRef = useRef(false);
-  const urlAnteriorRef = useRef(url);
+  const jaConcluiuSegmentoRef = useRef(false);
+  const chaveAnteriorRef = useRef(chaveSegmento);
 
-  if (urlAnteriorRef.current !== url) {
-    urlAnteriorRef.current = url;
+  if (chaveAnteriorRef.current !== chaveSegmento) {
+    chaveAnteriorRef.current = chaveSegmento;
     tempoInicialMontagemRef.current = tempoInicial || 0;
+    tempoFinalSegmentoRef.current =
+      tempoFinal && tempoFinal > 0 ? Math.floor(tempoFinal) : undefined;
     jaFezSeekInicialRef.current = false;
+    jaConcluiuSegmentoRef.current = false;
   }
 
   const videoData = useMemo(() => {
-    return analisarUrlVideo(url, tempoInicialMontagemRef.current);
-  }, [url]);
+    return analisarUrlVideo(url, tempoInicialMontagemRef.current, false, tempoFinalSegmentoRef.current);
+  }, [url, tempoInicial, tempoFinal]);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -288,13 +307,28 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
         estaReproduzindo: reproduzindo,
       });
 
-      if (duracao > 0 && segs >= duracao) {
+      const limiteFinal = tempoFinalSegmentoRef.current;
+      if (limiteFinal && segs >= limiteFinal && !jaConcluiuSegmentoRef.current) {
+        jaConcluiuSegmentoRef.current = true;
+        if (videoData.plataforma === 'youtube') {
+          enviarComandoIframe('pauseVideo');
+        } else if (videoTagRef.current) {
+          videoTagRef.current.pause();
+        }
+        setEstaReproduzindo(false);
+        setEstaConcluido(true);
+        onConcluido?.();
+        return;
+      }
+
+      if (duracao > 0 && segs >= duracao && !jaConcluiuSegmentoRef.current) {
+        jaConcluiuSegmentoRef.current = true;
         setEstaReproduzindo(false);
         setEstaConcluido(true);
         onConcluido?.();
       }
     },
-    [onProgresso, onConcluido]
+    [onProgresso, onConcluido, videoData.plataforma, enviarComandoIframe]
   );
 
   // 1. ESCUTA TELEMETRIA E MENSAGENS POSTMESSAGE DO PLAYER
@@ -423,14 +457,16 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
     resetarTemporizadorControles();
 
     if (estaConcluido) {
+      const inicioSegmento = tempoInicialMontagemRef.current || 0;
+      jaConcluiuSegmentoRef.current = false;
       setEstaConcluido(false);
-      tempoAtualRef.current = 0;
-      setTempoAtual(0);
+      tempoAtualRef.current = inicioSegmento;
+      setTempoAtual(inicioSegmento);
       if (videoData.plataforma === 'youtube') {
-        enviarComandoIframe('seekTo', [0, true]);
+        enviarComandoIframe('seekTo', [inicioSegmento, true]);
         enviarComandoIframe('playVideo');
       } else if (videoTagRef.current) {
-        videoTagRef.current.currentTime = 0;
+        videoTagRef.current.currentTime = inicioSegmento;
         videoTagRef.current.play();
       }
       setEstaReproduzindo(true);
@@ -637,14 +673,16 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
 
   // REINICIAR VIDEO
   const reiniciarVideo = useCallback(() => {
+    const inicioSegmento = tempoInicialMontagemRef.current || 0;
+    jaConcluiuSegmentoRef.current = false;
     setEstaConcluido(false);
-    tempoAtualRef.current = 0;
-    setTempoAtual(0);
+    tempoAtualRef.current = inicioSegmento;
+    setTempoAtual(inicioSegmento);
     if (videoTagRef.current) {
-      videoTagRef.current.currentTime = 0;
+      videoTagRef.current.currentTime = inicioSegmento;
       videoTagRef.current.play();
     } else if (videoData.plataforma === 'youtube') {
-      enviarComandoIframe('seekTo', [0, true]);
+      enviarComandoIframe('seekTo', [inicioSegmento, true]);
       enviarComandoIframe('playVideo');
     }
     setEstaReproduzindo(true);
@@ -742,6 +780,15 @@ export const PlayerVideoSeguro: React.FC<PlayerVideoSeguroProps> = ({
                 porcentagem: pct,
                 estaReproduzindo: true,
               });
+
+              const limiteFinal = tempoFinalSegmentoRef.current;
+              if (limiteFinal && el.currentTime >= limiteFinal && !jaConcluiuSegmentoRef.current) {
+                jaConcluiuSegmentoRef.current = true;
+                el.pause();
+                setEstaReproduzindo(false);
+                setEstaConcluido(true);
+                onConcluido?.();
+              }
             }
           }}
           className="w-full h-full object-contain bg-black pointer-events-none"

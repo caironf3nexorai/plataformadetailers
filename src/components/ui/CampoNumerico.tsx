@@ -105,8 +105,8 @@ export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoPro
       } else {
         // Permite números, uma vírgula ou um ponto, e sinal negativo no início
         rawStr = rawStr.replace(/[^0-9,.-]/g, '');
-        // Se houver ponto e vírgula, padroniza para vírgula
-        rawStr = rawStr.replace('.', ',');
+        // Se houver ponto e vírgula, padroniza todos os pontos para vírgula antes de normalizar
+        rawStr = rawStr.replace(/\./g, ',');
         // Garante no máximo uma vírgula
         const parts = rawStr.split(',');
         if (parts.length > 2) {

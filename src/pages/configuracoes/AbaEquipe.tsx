@@ -24,12 +24,18 @@ import {
   Trash2,
   Trophy,
   Users,
+  UserCheck,
 } from 'lucide-react';
 import { gerarId } from '../../utils/uuid';
 import { PainelRankingEquipe } from '../../components/equipe/PainelRankingEquipe';
+import {
+  lerProgressLocal,
+  marcarPassoOnboarding,
+  mergeOnboardingFlags,
+} from '../../utils/onboarding';
 
 export const AbaEquipe: React.FC = () => {
-  const { tenant } = useAuth();
+  const { tenant, refetchTenantData } = useAuth();
   const { podeGerirEquipe } = usePermissao();
   const { limiteDe, nomePlano, planoAtual } = usePlano();
 
@@ -60,6 +66,39 @@ export const AbaEquipe: React.FC = () => {
   const [memberToDelete, setMemberToDelete] = useState<TenantMember | null>(null);
   const [deletingMember, setDeletingMember] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [trabalhoSozinhoMarcado, setTrabalhoSozinhoMarcado] = useState<boolean>(() =>
+    Boolean(
+      mergeOnboardingFlags(
+        tenant?.onboarding_progress,
+        lerProgressLocal(tenant?.id)
+      ).trabalho_sozinho
+    )
+  );
+  const [salvandoSolo, setSalvandoSolo] = useState(false);
+
+  useEffect(() => {
+    const merged = mergeOnboardingFlags(
+      tenant?.onboarding_progress,
+      lerProgressLocal(tenant?.id)
+    );
+    setTrabalhoSozinhoMarcado(Boolean(merged.trabalho_sozinho));
+  }, [tenant?.id, tenant?.onboarding_progress]);
+
+  const handleConfirmarTrabalhoSozinho = async () => {
+    if (!tenant?.id) return;
+    setSalvandoSolo(true);
+    try {
+      await marcarPassoOnboarding(tenant.id, {
+        trabalho_sozinho: true,
+        manual: { etapa_8: true },
+      });
+      setTrabalhoSozinhoMarcado(true);
+      await refetchTenantData();
+    } finally {
+      setSalvandoSolo(false);
+    }
+  };
 
   const limUsuarios = limiteDe('usuarios');
   const activeAndInvitedCount = members.filter((m) => m.status !== 'inativo').length;
@@ -145,6 +184,11 @@ export const AbaEquipe: React.FC = () => {
         const generatedUrl = `${window.location.origin}/convite/${token}`;
         setInviteLink(generatedUrl);
         setInviteEmail('');
+        await marcarPassoOnboarding(tenant?.id, {
+          equipe_configurada: true,
+          trabalho_sozinho: false,
+        });
+        setTrabalhoSozinhoMarcado(false);
         await fetchEquipeData();
       }
     } catch (err: any) {
@@ -225,6 +269,62 @@ export const AbaEquipe: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Atalho calmo para dono solo ou equipe inicial */}
+      {!loading && activeAndInvitedCount <= 1 && (
+        <div
+          className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            trabalhoSozinhoMarcado
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+              : 'bg-graphite-900/90 border-graphite-700 text-vapor-200'
+          }`}
+        >
+          <div className="flex items-start sm:items-center gap-2.5 text-xs">
+            <UserCheck
+              size={16}
+              className={
+                trabalhoSozinhoMarcado
+                  ? 'text-emerald-400 shrink-0 mt-0.5 sm:mt-0'
+                  : 'text-amber-400 shrink-0 mt-0.5 sm:mt-0'
+              }
+            />
+            <span>
+              {trabalhoSozinhoMarcado
+                ? 'Modo atendimento individual confirmado: sua etapa de Equipe já está concluída. Quando contratar alguém, basta convidar na aba Membros & Cargos.'
+                : 'Você trabalha sozinho no estúdio ou vai convidar operadores para sua equipe?'}
+            </span>
+          </div>
+
+          {!trabalhoSozinhoMarcado && (
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={salvandoSolo}
+                onClick={handleConfirmarTrabalhoSozinho}
+                className="text-xs px-3 py-1.5 min-h-[36px] border-emerald-500/35 text-emerald-300 hover:bg-emerald-500/15"
+              >
+                {salvandoSolo ? 'Confirmando...' : 'Trabalho sozinho'}
+              </Button>
+              {!isLimitReached && (
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    setSubAba('membros');
+                    setInviteLink(null);
+                    setInviteError(null);
+                    setShowInviteModal(true);
+                  }}
+                  className="text-xs px-3 py-1.5 min-h-[36px]"
+                >
+                  Convidar Membro
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Sub-abas: Ranking & Gamificação vs Membros & Cargos */}
       <div className="flex flex-wrap items-center gap-2 border-b border-graphite-800 pb-3">
         <button

@@ -46,6 +46,7 @@ import {
   Search,
   X,
   Eye,
+  Info,
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
@@ -87,6 +88,7 @@ interface ServicoComPrecoDuracao extends Servico {
   precoMatriz: number;
   duracaoMatriz: number;
   temPrecoCadastrado: boolean;
+  duracaoConfirmada: boolean;
 }
 
 interface ServicoAvulsoItem {
@@ -257,6 +259,7 @@ export const DetalheOrcamento: React.FC = () => {
 
   // Pesquisa rápida na seleção de serviços
   const [buscaServico, setBuscaServico] = useState<string>('');
+  const [avisoPrecoSugeridoFechado, setAvisoPrecoSugeridoFechado] = useState<boolean>(false);
 
   // Modal de Serviço Único (avulso)
   const [showModalServicoUnico, setShowModalServicoUnico] = useState<boolean>(false);
@@ -738,12 +741,14 @@ export const DetalheOrcamento: React.FC = () => {
         const matchDuracaoCat = duracoesDoServico.find((sp: any) => sp.categoria_id === quote.categoria_id);
         const spDuracao = matchDuracaoCat || duracoesDoServico[0];
         const dMatriz = spDuracao ? Number(spDuracao.duracao_minutos) : (s.duracao_minutos ?? 60);
+        const duracaoConfirmada = spEscolhido ? Boolean(spEscolhido.duracao_confirmada) : true;
 
         return {
           ...s,
           precoMatriz: precoFinal,
           temPrecoCadastrado: temPreco,
           duracaoMatriz: Number(dMatriz),
+          duracaoConfirmada,
         };
       });
 
@@ -867,6 +872,11 @@ export const DetalheOrcamento: React.FC = () => {
     });
     return filtered;
   }, [servicosPorGrupo, termoBuscaNorm]);
+
+  const possuiPrecosSugeridosNoCatalogo = useMemo(
+    () => servicosCatalogo.some((s) => s.temPrecoCadastrado && !s.duracaoConfirmada),
+    [servicosCatalogo]
+  );
 
   const customPrecosRef = useRef(customPrecos);
   customPrecosRef.current = customPrecos;
@@ -3496,6 +3506,36 @@ export const DetalheOrcamento: React.FC = () => {
           <span>Serviço Único (Avulso)</span>
         </button>
       </div>
+
+      {/* LEMBRETE CALMO: SERVIÇOS COM PREÇOS MÉDIOS SUGERIDOS */}
+      {possuiPrecosSugeridosNoCatalogo && !avisoPrecoSugeridoFechado && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-vapor-300">
+          <div className="flex items-start sm:items-center gap-2">
+            <Info size={15} className="text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <span>
+              <strong className="text-amber-300">Preços sugeridos de mercado:</strong> você já pode simular e enviar seus orçamentos agora — depois lembre-se de ajustar os valores para a sua região ou editar direto em cada item.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => navigate('/servicos/precos')}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-semibold transition-colors whitespace-nowrap"
+            >
+              Ajustar Matriz de Preços
+            </button>
+            <button
+              type="button"
+              onClick={() => setAvisoPrecoSugeridoFechado(true)}
+              className="p-1 text-vapor-400 hover:text-vapor-200 rounded transition-colors"
+              title="Ocultar aviso"
+              aria-label="Ocultar aviso de preços sugeridos"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* SELETOR DE NÍVEL EM ABAS (< 1280px / xl) */}
       {(orcamento as any)?.modo_orcamento !== 'simples' && (

@@ -18,6 +18,10 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  lerWelcomeVistoLocal,
+  ONBOARDING_EVENT_WELCOME_VISIBILITY,
+} from '../../utils/onboarding';
 
 interface ComunicadoAtivo {
   id: string;
@@ -41,18 +45,36 @@ interface ComunicadoAtivo {
 export const ModalComunicadoGlobal: React.FC = () => {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
-  const { tenant, loading: authLoading } = useAuth();
+  const { tenant, membership, loading: authLoading } = useAuth();
 
   const [comunicado, setComunicado] = useState<ComunicadoAtivo | null>(null);
   const [visivel, setVisivel] = useState(false);
+  const [welcomeBloqueando, setWelcomeBloqueando] = useState(false);
   const [processandoAcao, setProcessandoAcao] = useState(false);
   const [resgatadoSucesso, setResgatadoSucesso] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState('');
   const [cupomCopiado, setCupomCopiado] = useState(false);
 
+  const ehGestor = membership?.role === 'dono' || membership?.role === 'gerente';
+  const welcomePendente =
+    Boolean(tenant?.id) &&
+    ehGestor &&
+    !tenant?.welcome_modal_seen &&
+    !tenant?.onboarding_concluido &&
+    !lerWelcomeVistoLocal(tenant?.id);
+
   useEffect(() => {
-    // Só busca comunicados quando a autenticação e o tenant estiverem prontos
-    if (authLoading || !tenant?.id) return;
+    const handleWelcomeEvent = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      setWelcomeBloqueando(Boolean(detail?.aberto));
+    };
+    window.addEventListener(ONBOARDING_EVENT_WELCOME_VISIBILITY, handleWelcomeEvent);
+    return () => window.removeEventListener(ONBOARDING_EVENT_WELCOME_VISIBILITY, handleWelcomeEvent);
+  }, []);
+
+  useEffect(() => {
+    // Só busca comunicados quando autenticação e tenant estiverem prontos e sem Modal de Boas-Vindas pendente no primeiro acesso
+    if (authLoading || !tenant?.id || welcomePendente || welcomeBloqueando) return;
 
     let ativo = true;
 
@@ -68,7 +90,7 @@ export const ModalComunicadoGlobal: React.FC = () => {
           setComunicado(data);
           // Aguarda 800ms para renderizar a interface primeiro
           setTimeout(() => {
-            if (ativo) setVisivel(true);
+            if (ativo && !welcomeBloqueando) setVisivel(true);
           }, 800);
         }
       } catch (err) {
@@ -81,9 +103,9 @@ export const ModalComunicadoGlobal: React.FC = () => {
     return () => {
       ativo = false;
     };
-  }, [authLoading, tenant?.id]);
+  }, [authLoading, tenant?.id, welcomePendente, welcomeBloqueando]);
 
-  if (!visivel || !comunicado) return null;
+  if (!visivel || !comunicado || welcomePendente || welcomeBloqueando) return null;
 
   const handleDispensar = async () => {
     try {

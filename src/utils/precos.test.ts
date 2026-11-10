@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { formatFaixaPreco, formatDuracao } from './precos';
+import {
+  formatFaixaPreco,
+  formatDuracao,
+  parsePrecoMatrizInput,
+  normalizarDuracaoMinutosMatriz,
+} from './precos';
 
 describe('formatFaixaPreco', () => {
   it('deve retornar "Sob avaliação" se o serviço for sob consulta', () => {
@@ -88,5 +93,33 @@ describe('formatDuracao', () => {
   it('deve retornar "0 min" para valores inválidos ou zero', () => {
     expect(formatDuracao(0)).toBe('0 min');
     expect(formatDuracao(-10)).toBe('0 min');
+  });
+});
+
+describe('parsePrecoMatrizInput', () => {
+  it('retorna null para vazio, caracteres parciais ou sob consulta', () => {
+    expect(parsePrecoMatrizInput('')).toBeNull();
+    expect(parsePrecoMatrizInput('-')).toBeNull();
+    expect(parsePrecoMatrizInput(',')).toBeNull();
+    expect(parsePrecoMatrizInput('150', true)).toBeNull();
+  });
+
+  it('converte formatos PT-BR, ponto decimal e milhar corretamente sem gerar NaN', () => {
+    expect(parsePrecoMatrizInput('120,50')).toBe(120.5);
+    expect(parsePrecoMatrizInput('120.5')).toBe(120.5);
+    expect(parsePrecoMatrizInput('1.250,90')).toBe(1250.9);
+    expect(parsePrecoMatrizInput('1.250.000')).toBe(1250000);
+    expect(parsePrecoMatrizInput('0')).toBe(0);
+    expect(parsePrecoMatrizInput(-10)).toBe(0);
+  });
+});
+
+describe('normalizarDuracaoMinutosMatriz', () => {
+  it('arredonda decimais e aplica fallback seguro para zero ou valores inválidos', () => {
+    expect(normalizarDuracaoMinutosMatriz(90.6)).toBe(91);
+    expect(normalizarDuracaoMinutosMatriz(0)).toBe(60);
+    expect(normalizarDuracaoMinutosMatriz(-15)).toBe(60);
+    expect(normalizarDuracaoMinutosMatriz(NaN)).toBe(60);
+    expect(normalizarDuracaoMinutosMatriz(45)).toBe(45);
   });
 });

@@ -8,6 +8,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { usePlano } from '../../hooks/usePlano';
 import { formatValorMoeda } from '../../utils/precos';
 import { CampoNumerico } from '../ui/CampoNumerico';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
 
 interface ConfigAgendamento {
   agendamento_online_ativo: boolean;
@@ -25,7 +26,7 @@ interface ConfigAgendamento {
 }
 
 export function AbaAgendamentoOnline() {
-  const { tenant } = useAuth();
+  const { tenant, refetchTenantData } = useAuth();
   const { showToast } = useToast();
   const { temFeature, nomePlano } = usePlano();
   const agendamentoLiberado = temFeature('agendamento_online');
@@ -135,6 +136,8 @@ export function AbaAgendamentoOnline() {
         .eq('id', tenant.id);
 
       if (error) throw error;
+      await marcarPassoOnboarding(tenant.id, { vitrine_revisada: true });
+      await refetchTenantData();
       showToast('Configurações de agendamento online salvas!', 'success');
     } catch (err: any) {
       showToast('Falha ao salvar: ' + err.message, 'error');

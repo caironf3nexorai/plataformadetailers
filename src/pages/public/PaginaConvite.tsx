@@ -13,14 +13,14 @@ export const PaginaConvite: React.FC = () => {
   const isUUID = (val: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
-  if (codigo && isUUID(codigo)) {
-    return <Convite />;
-  }
+  const ehConviteEquipe = Boolean(codigo && isUUID(codigo));
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!ehConviteEquipe);
   const [indicadorNome, setIndicadorNome] = useState<string | null>(null);
 
   useEffect(() => {
+    if (ehConviteEquipe) return;
+
     async function carregarIndicador() {
       if (!codigo) {
         setLoading(false);
@@ -46,7 +46,11 @@ export const PaginaConvite: React.FC = () => {
     }
 
     carregarIndicador();
-  }, [codigo]);
+  }, [codigo, ehConviteEquipe]);
+
+  if (ehConviteEquipe) {
+    return <Convite />;
+  }
 
   const handleIrParaCadastro = () => {
     const codLimpo = (codigo || '').trim().toUpperCase();

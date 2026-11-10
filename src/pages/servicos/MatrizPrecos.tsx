@@ -2,20 +2,31 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import type { Servico } from '../../types/servicos';
+import type { Servico, MatrizPrecoLinha } from '../../types/servicos';
 import type { CategoriaVeiculo } from '../../types/clientes';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { CampoNumerico } from '../../components/ui/CampoNumerico';
-import { 
-  ArrowLeft, 
-  Save, 
-  AlertTriangle,
+import { AlertaErro } from '../../components/ui/AlertaErro';
+import {
+  ArrowLeft,
+  Save,
   Info,
   Clock,
   DollarSign,
-  Pencil
+  Pencil,
+  CheckCircle2,
 } from 'lucide-react';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
+import {
+  parsePrecoMatrizInput,
+  normalizarDuracaoMinutosMatriz,
+} from '../../utils/precos';
+import {
+  traduzirErro,
+  reportarErroAutomatico,
+  type ErroTraduzido,
+} from '../../utils/erros';
 import {
   type UnidadeDuracao,
   converterParaMinutos,
@@ -26,34 +37,37 @@ import {
 interface CeldaMatriz {
   preco_base: string; // Mantido como string para digitação direta
   duracao_minutos: number;
+  unidade_duracao?: UnidadeDuracao | null;
   duracao_confirmada: boolean;
 }
 
 export const MatrizPrecos: React.FC = () => {
-  const { tenant } = useAuth();
+  const { tenant, refetchTenantData } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Servico[]>([]);
   const [categories, setCategories] = useState<CategoriaVeiculo[]>([]);
-  
+
   // Tab ativa: 'preco' | 'duracao'
   const [activeTab, setActiveTab] = useState<'preco' | 'duracao'>('preco');
   const [unidadeMatriz, setUnidadeMatriz] = useState<UnidadeDuracao>('min');
-  
+
   // Estado da matriz: [servico_id][categoria_id] -> CeldaMatriz
   const [matriz, setMatriz] = useState<Record<string, Record<string, CeldaMatriz>>>({});
-  
+
   // Rastreia quais células foram modificadas
   const [modified, setModified] = useState<Record<string, Record<string, boolean>>>({});
   const [saving, setSaving] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<ErroTraduzido | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (options?: { preserveMessages?: boolean }) => {
     if (!tenant) return;
     setLoading(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
+    if (!options?.preserveMessages) {
+      setErrorMsg(null);
+      setSuccessMsg(null);
+    }
 
     try {
       // 1. Busca categorias ativas do tenant
@@ -88,16 +102,17 @@ export const MatrizPrecos: React.FC = () => {
 
       // 4. Monta a estrutura inicial da matriz
       const tempMatriz: Record<string, Record<string, CeldaMatriz>> = {};
-      
+
       servs?.forEach((s) => {
         tempMatriz[s.id] = {};
         cats?.forEach((c) => {
           // Busca correspondência
           const pMatch = prices?.find((p) => p.servico_id === s.id && p.categoria_id === c.id);
-          
+
           tempMatriz[s.id][c.id] = {
             preco_base: pMatch?.preco_base !== null && pMatch?.preco_base !== undefined ? String(pMatch.preco_base) : '',
-            duracao_minutos: pMatch?.duracao_minutos || 60,
+            duracao_minutos: normalizarDuracaoMinutosMatriz(pMatch?.duracao_minutos, 60),
+            unidade_duracao: (pMatch?.unidade_duracao as UnidadeDuracao | null | undefined) || null,
             duracao_confirmada: pMatch?.duracao_confirmada || false,
           };
         });
@@ -107,7 +122,9 @@ export const MatrizPrecos: React.FC = () => {
       setModified({});
     } catch (err: any) {
       console.error('[MatrizPrecos Load Error]:', err);
-      setErrorMsg(err.message || 'Erro ao carregar dados da matriz.');
+      const traduzido = traduzirErro(err, 'Matriz de Preços');
+      setErrorMsg(traduzido);
+      reportarErroAutomatico(traduzido, '/servicos/precos');
     } finally {
       setLoading(false);
     }
@@ -117,79 +134,201 @@ export const MatrizPrecos: React.FC = () => {
     fetchData();
   }, [tenant?.id]);
 
-  const handleCellChange = (servicoId: string, categoriaId: string, field: keyof CeldaMatriz, value: any) => {
+  const handleCellChange = (
+    servicoId: string,
+    categoriaId: string,
+    field: keyof CeldaMatriz,
+    value: any,
+    unidadeAlterada?: UnidadeDuracao
+  ) => {
     setMatriz((prev) => {
-      const updatedServico = { ...prev[servicoId] };
-      const currentCell = { ...updatedServico[categoriaId] };
+      const prevServico = prev[servicoId] || {};
+      const currentCell: CeldaMatriz = {
+        ...(prevServico[categoriaId] || {
+          preco_base: '',
+          duracao_minutos: 60,
+          unidade_duracao: null,
+          duracao_confirmada: false,
+        }),
+      };
 
       if (field === 'preco_base') {
-        currentCell.preco_base = value;
+        currentCell.preco_base = String(value ?? '');
       } else if (field === 'duracao_minutos') {
         currentCell.duracao_minutos = Number(value) || 0;
+        if (unidadeAlterada) {
+          currentCell.unidade_duracao = unidadeAlterada;
+        }
         // Qualquer alteração manual grava duracao_confirmada = true
         currentCell.duracao_confirmada = true;
       }
 
-      updatedServico[categoriaId] = currentCell;
-      return { ...prev, [servicoId]: updatedServico };
+      return {
+        ...prev,
+        [servicoId]: {
+          ...prevServico,
+          [categoriaId]: currentCell,
+        },
+      };
     });
 
-    setModified((prev) => {
-      const updatedServico = { ...prev[servicoId] };
-      updatedServico[categoriaId] = true;
-      return { ...prev, [servicoId]: updatedServico };
-    });
+    setModified((prev) => ({
+      ...prev,
+      [servicoId]: {
+        ...(prev[servicoId] || {}),
+        [categoriaId]: true,
+      },
+    }));
   };
 
   const handleDuracaoCellChange = (servicoId: string, categoriaId: string, val: number | string) => {
     const minutos = converterParaMinutos(Number(val) || 0, unidadeMatriz);
-    handleCellChange(servicoId, categoriaId, 'duracao_minutos', minutos);
+    handleCellChange(servicoId, categoriaId, 'duracao_minutos', minutos, unidadeMatriz);
+  };
+
+  const montarLinhasServico = (servico: Servico): MatrizPrecoLinha[] =>
+    categories.map((c) => {
+      const cell = matriz[servico.id]?.[c.id];
+      const duracaoNormalizada = normalizarDuracaoMinutosMatriz(cell?.duracao_minutos, 60);
+      const unidadeFinal = cell?.unidade_duracao || undefined;
+      return {
+        categoria_id: c.id,
+        preco_base: parsePrecoMatrizInput(cell?.preco_base, servico.sob_consulta),
+        duracao_minutos: duracaoNormalizada,
+        ...(unidadeFinal ? { unidade_duracao: unidadeFinal } : {}),
+        duracao_confirmada: true,
+      };
+    });
+
+  const salvarLinhasServico = async (servico: Servico, linhas: MatrizPrecoLinha[]) => {
+    if (!tenant?.id || linhas.length === 0) return;
+
+    const { error: rpcError } = await supabase.rpc('salvar_matriz_precos', {
+      p_servico: servico.id,
+      p_linhas: linhas,
+    });
+
+    if (!rpcError) return;
+
+    const rpcMsg = String(rpcError.message || '').toLowerCase();
+    if (
+      rpcMsg.includes('apenas donos ou gerentes') ||
+      rpcMsg.includes('apenas o dono ou gerente') ||
+      rpcMsg.includes('não autenticado')
+    ) {
+      throw rpcError;
+    }
+
+    console.warn(
+      `[MatrizPrecos] RPC salvar_matriz_precos falhou para "${servico.nome}" (${servico.id}), executando fallback direto:`,
+      rpcError
+    );
+
+    const rows = linhas.map((linha) => {
+      const row: Record<string, unknown> = {
+        tenant_id: tenant.id,
+        servico_id: servico.id,
+        categoria_id: linha.categoria_id,
+        preco_base: servico.sob_consulta ? null : linha.preco_base,
+        duracao_minutos: linha.duracao_minutos,
+        duracao_confirmada: true,
+        ativo: true,
+      };
+      if (linha.unidade_duracao) {
+        row.unidade_duracao = linha.unidade_duracao;
+      }
+      return row;
+    });
+
+    const { error: upsertError } = await supabase
+      .from('servico_precos')
+      .upsert(rows, { onConflict: 'servico_id,categoria_id' });
+
+    if (upsertError) {
+      const upsertMsg = String(upsertError.message || '').toLowerCase();
+      if (upsertMsg.includes('unidade_duracao') && upsertMsg.includes('column')) {
+        const rowsSemUnidade = rows.map(({ unidade_duracao: _u, ...rest }) => rest);
+        const { error: retryError } = await supabase
+          .from('servico_precos')
+          .upsert(rowsSemUnidade, { onConflict: 'servico_id,categoria_id' });
+        if (retryError) throw retryError;
+        return;
+      }
+      throw upsertError;
+    }
+  };
+
+  const executarSalvamentoEmLotes = async (servicosAlvo: Servico[]) => {
+    const TAMANHO_LOTE = 4;
+    for (let i = 0; i < servicosAlvo.length; i += TAMANHO_LOTE) {
+      const lote = servicosAlvo.slice(i, i + TAMANHO_LOTE);
+      await Promise.all(
+        lote.map((servico) => salvarLinhasServico(servico, montarLinhasServico(servico)))
+      );
+    }
   };
 
   // Verifica se há alguma alteração pendente
   const hasUnsavedChanges = Object.values(modified).some((s) => Object.values(s).some((val) => val));
 
   const handleSaveAll = async () => {
+    if (!tenant?.id) return;
     setErrorMsg(null);
     setSuccessMsg(null);
     setSaving(true);
 
     try {
-      // Loop por serviços modificados
-      const promises = Object.keys(modified).map(async (servicoId) => {
-        const servicoModifications = modified[servicoId];
-        const hasMods = Object.values(servicoModifications).some((val) => val);
-        if (!hasMods) return;
+      const servicosModificados = services.filter((s) =>
+        Object.values(modified[s.id] || {}).some((val) => val)
+      );
 
-        // Prepara as linhas jsonb para esse serviço
-        const pLinhas = categories.map((c) => {
-          const cell = matriz[servicoId][c.id];
-          return {
-            categoria_id: c.id,
-            preco_base: cell.preco_base === '' ? null : Number(cell.preco_base.replace(',', '.')),
-            duracao_minutos: cell.duracao_minutos,
-            unidade_duracao: unidadeMatriz,
-            duracao_confirmada: true,
-          };
-        });
-
-        const { error } = await supabase.rpc('salvar_matriz_precos', {
-          p_servico: servicoId,
-          p_linhas: pLinhas,
-        });
-
-        if (error) throw error;
-      });
-
-      await Promise.all(promises);
-      setSuccessMsg('Matriz de preços e durações salva com sucesso!');
+      await executarSalvamentoEmLotes(servicosModificados);
+      await marcarPassoOnboarding(tenant.id, { catalogo_revisado: true });
+      try {
+        await refetchTenantData();
+      } catch {
+        // Não bloqueia se apenas o refresh de contexto oscilar
+      }
       setModified({});
-      
-      // Recarrega do banco para garantir sincronia
-      await fetchData();
+
+      // Recarrega do banco preservando mensagens e exibe confirmação após recarregar
+      await fetchData({ preserveMessages: true });
+      setSuccessMsg('Matriz de preços e durações salva com sucesso!');
     } catch (err: any) {
       console.error('[MatrizPrecos Save Error]:', err);
-      setErrorMsg(err.message || 'Erro ao salvar alterações da matriz.');
+      const traduzido = traduzirErro(err, 'Matriz de Preços');
+      setErrorMsg(traduzido);
+      reportarErroAutomatico(traduzido, '/servicos/precos');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const temValoresSugeridos = services.some((s) =>
+    categories.some((c) => !matriz[s.id]?.[c.id]?.duracao_confirmada)
+  );
+
+  const handleConfirmarTabelaAtual = async () => {
+    if (!tenant?.id) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setSaving(true);
+    try {
+      await executarSalvamentoEmLotes(services);
+      await marcarPassoOnboarding(tenant.id, { catalogo_revisado: true });
+      try {
+        await refetchTenantData();
+      } catch {
+        // Não bloqueia se apenas o refresh de contexto oscilar
+      }
+      setModified({});
+      await fetchData({ preserveMessages: true });
+      setSuccessMsg('Tabela de preços e durações confirmada com sucesso!');
+    } catch (err: any) {
+      console.error('[MatrizPrecos Confirm Error]:', err);
+      const traduzido = traduzirErro(err, 'Matriz de Preços');
+      setErrorMsg(traduzido);
+      reportarErroAutomatico(traduzido, '/servicos/precos');
     } finally {
       setSaving(false);
     }
@@ -269,7 +408,7 @@ export const MatrizPrecos: React.FC = () => {
           </div>
         </div>
 
-        {hasUnsavedChanges && (
+        {hasUnsavedChanges ? (
           <Button
             type="button"
             variant="primary"
@@ -280,19 +419,34 @@ export const MatrizPrecos: React.FC = () => {
             <Save size={18} />
             {saving ? 'Salvando...' : 'Salvar Alterações'}
           </Button>
-        )}
+        ) : temValoresSugeridos ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={saving}
+            onClick={handleConfirmarTabelaAtual}
+            className="w-full sm:w-auto font-semibold min-h-[44px] px-5 flex items-center gap-2 text-emerald-300 border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20"
+          >
+            <CheckCircle2 size={17} />
+            {saving ? 'Confirmando...' : 'Confirmar Preços e Tempos Atuais'}
+          </Button>
+        ) : null}
       </div>
 
-      {errorMsg && (
-        <div className="p-3.5 bg-flare-400/10 border border-flare-400/30 rounded flex items-center gap-2 text-flare-400 text-[13px]">
-          <AlertTriangle size={18} className="shrink-0" />
-          <span>{errorMsg}</span>
+      {temValoresSugeridos && (
+        <div className="p-3.5 bg-amber-500/5 border border-amber-500/25 rounded-lg flex items-start gap-2.5 text-[12px] text-vapor-300">
+          <Info size={16} className="text-amber-400 shrink-0 mt-0.5" />
+          <span>
+            <strong className="text-amber-300">Referência de mercado carregada:</strong> os valores iniciais facilitam seu primeiro orçamento. Ajuste o que desejar para os preços da sua região e clique em <strong>Salvar Alterações</strong> (ou confirme os valores atuais acima).
+          </span>
         </div>
       )}
 
+      {errorMsg && <AlertaErro erro={errorMsg} />}
+
       {successMsg && (
         <div className="p-3.5 bg-mint-400/10 border border-mint-400/30 rounded flex items-center gap-2 text-mint-400 text-[13px]">
-          <Info size={18} className="shrink-0" />
+          <CheckCircle2 size={18} className="shrink-0" />
           <span>{successMsg}</span>
         </div>
       )}
@@ -302,11 +456,10 @@ export const MatrizPrecos: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('preco')}
-          className={`pb-3 font-display text-[13px] uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === 'preco'
-              ? 'text-amber-500 border-amber-500'
-              : 'text-vapor-400 border-transparent hover:text-vapor-200'
-          }`}
+          className={`pb-3 font-display text-[13px] uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${activeTab === 'preco'
+            ? 'text-amber-500 border-amber-500'
+            : 'text-vapor-400 border-transparent hover:text-vapor-200'
+            }`}
         >
           <DollarSign size={16} />
           A partir de (R$)
@@ -314,11 +467,10 @@ export const MatrizPrecos: React.FC = () => {
         <button
           type="button"
           onClick={() => setActiveTab('duracao')}
-          className={`pb-3 font-display text-[13px] uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${
-            activeTab === 'duracao'
-              ? 'text-amber-500 border-amber-500'
-              : 'text-vapor-400 border-transparent hover:text-vapor-200'
-          }`}
+          className={`pb-3 font-display text-[13px] uppercase tracking-wider transition-colors border-b-2 flex items-center gap-2 ${activeTab === 'duracao'
+            ? 'text-amber-500 border-amber-500'
+            : 'text-vapor-400 border-transparent hover:text-vapor-200'
+            }`}
         >
           <Clock size={16} />
           Duração
@@ -339,11 +491,10 @@ export const MatrizPrecos: React.FC = () => {
                   key={opt.valor}
                   type="button"
                   onClick={() => setUnidadeMatriz(opt.valor)}
-                  className={`px-2.5 py-1 text-[11px] rounded font-bold transition-all ${
-                    unidadeMatriz === opt.valor
-                      ? 'bg-amber-500 text-graphite-950 shadow-sm'
-                      : 'text-vapor-400 hover:text-vapor-200'
-                  }`}
+                  className={`px-2.5 py-1 text-[11px] rounded font-bold transition-all ${unidadeMatriz === opt.valor
+                    ? 'bg-amber-500 text-graphite-950 shadow-sm'
+                    : 'text-vapor-400 hover:text-vapor-200'
+                    }`}
                 >
                   {opt.rotulo}
                 </button>
@@ -375,7 +526,7 @@ export const MatrizPrecos: React.FC = () => {
               return (
                 <tr key={serv.id} className="hover:bg-graphite-900/40 transition-colors">
                   <td className="p-4">
-                    <div 
+                    <div
                       className="flex flex-col gap-0.5 cursor-pointer group/item"
                       onClick={() => navigate(`/servicos/${serv.id}`)}
                       title="Editar detalhes do serviço"
@@ -401,12 +552,12 @@ export const MatrizPrecos: React.FC = () => {
                             value={cell.preco_base}
                             onChange={(_, valStr) => handleCellChange(serv.id, cat.id, 'preco_base', valStr)}
                             onKeyDown={(e) => handleKeyDown(e, servIdx, catIdx)}
+                            allowNull
                             prefix="R$"
                             align="right"
                             placeholder="--"
-                            wrapperClassName={`w-full max-w-[110px] mx-auto ${
-                              isCellModified ? 'border-amber-500/80 bg-amber-500/5' : ''
-                            }`}
+                            wrapperClassName={`w-full max-w-[110px] mx-auto ${isCellModified ? 'border-amber-500/80 bg-amber-500/5' : ''
+                              }`}
                           />
                         ) : (
                           <CampoNumerico
@@ -417,13 +568,12 @@ export const MatrizPrecos: React.FC = () => {
                             suffix={unidadeMatriz === 'horas' ? 'h' : unidadeMatriz === 'dias' ? 'd' : 'min'}
                             align="center"
                             placeholder="0"
-                            wrapperClassName={`w-full max-w-[110px] mx-auto ${
-                              !cell.duracao_confirmada
-                                ? 'border-amber-500 bg-amber-500/5 font-semibold text-amber-500'
-                                : isCellModified
+                            wrapperClassName={`w-full max-w-[110px] mx-auto ${!cell.duracao_confirmada
+                              ? 'border-amber-500 bg-amber-500/5 font-semibold text-amber-500'
+                              : isCellModified
                                 ? 'border-amber-500/80 bg-amber-500/5'
                                 : ''
-                            }`}
+                              }`}
                           />
                         )}
                       </td>
@@ -476,6 +626,7 @@ export const MatrizPrecos: React.FC = () => {
                             <CampoNumerico
                               value={cell.preco_base}
                               onChange={(_, valStr) => handleCellChange(serv.id, cat.id, 'preco_base', valStr)}
+                              allowNull
                               prefix="R$"
                               align="right"
                               placeholder="--"
@@ -488,9 +639,8 @@ export const MatrizPrecos: React.FC = () => {
                               suffix={unidadeMatriz === 'horas' ? 'h' : unidadeMatriz === 'dias' ? 'd' : 'min'}
                               align="center"
                               placeholder="0"
-                              wrapperClassName={`flex-1 ${
-                                !cell.duracao_confirmada ? 'border-amber-500 bg-amber-500/5 font-semibold text-amber-500' : ''
-                              }`}
+                              wrapperClassName={`flex-1 ${!cell.duracao_confirmada ? 'border-amber-500 bg-amber-500/5 font-semibold text-amber-500' : ''
+                                }`}
                             />
                           )}
                         </div>

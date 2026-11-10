@@ -22,6 +22,13 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { CampoNumerico } from '../../components/ui/CampoNumerico';
+import {
+  ETAPAS_TUTORIAIS_ORDEM,
+  TUTORIAL_VIDEOS,
+  type TutorialEtapaOverride,
+} from '../../config/tutorialVideos';
+import type { EtapaOnboardingId } from '../../utils/onboarding';
 
 export interface CampanhaItem {
   id: string;
@@ -81,14 +88,18 @@ export const AdminCampanhas: React.FC = () => {
   const [salvandoPixels, setSalvandoPixels] = useState(false);
   const [painelPixelsAberto, setPainelPixelsAberto] = useState(false);
 
-  // Configuração do Vídeo Tutorial de Onboarding Flutuante (Aberto para Todos)
+  // Configuração dos Vídeos de Onboarding & Tutoriais do Guia Progressivo
   const [videoOnboardingUrl, setVideoOnboardingUrl] = useState('');
-  const [videoOnboardingTitulo, setVideoOnboardingTitulo] = useState('Guia Rápido: Configuração Completa da Sua Oficina');
+  const [videoOnboardingTitulo, setVideoOnboardingTitulo] = useState('Bem-vindo ao Nuvem Wash (60s)');
   const [videoOnboardingAtivo, setVideoOnboardingAtivo] = useState(true);
+  const [videosEtapasConfig, setVideosEtapasConfig] = useState<
+    Partial<Record<EtapaOnboardingId | 'boas_vindas', TutorialEtapaOverride>>
+  >({});
   const [salvandoOnboardingVideo, setSalvandoOnboardingVideo] = useState(false);
   const [painelOnboardingAberto, setPainelOnboardingAberto] = useState(false);
-  const [enviandoVideoMp4, setEnviandoVideoMp4] = useState(false);
+  const [enviandoVideoTarget, setEnviandoVideoTarget] = useState<string | null>(null);
   const fileInputVideoRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetRef = useRef<'boas_vindas' | EtapaOnboardingId>('boas_vindas');
 
   // Previne rolagem de fundo no modal
   useEffect(() => {
@@ -119,13 +130,16 @@ export const AdminCampanhas: React.FC = () => {
         if (data.video_onboarding_url) setVideoOnboardingUrl(data.video_onboarding_url);
         if (data.video_onboarding_titulo) setVideoOnboardingTitulo(data.video_onboarding_titulo);
         if (typeof data.video_onboarding_ativo === 'boolean') setVideoOnboardingAtivo(data.video_onboarding_ativo);
+        if (data.videos_tutoriais_etapas && typeof data.videos_tutoriais_etapas === 'object') {
+          setVideosEtapasConfig(data.videos_tutoriais_etapas);
+        }
       }
 
       // Fallback para carregar diretamente da tabela caso a RPC antiga não retorne os novos campos
-      if (!data?.meta_pixel_id && !data?.google_ads_id) {
+      if (!data?.meta_pixel_id && !data?.google_ads_id && !data?.videos_tutoriais_etapas) {
         const { data: directData } = await supabase
           .from('plataforma_config')
-          .select('meta_pixel_id, google_ads_id, google_analytics_id, tiktok_pixel_id, video_onboarding_url, video_onboarding_titulo, video_onboarding_ativo')
+          .select('meta_pixel_id, google_ads_id, google_analytics_id, tiktok_pixel_id, video_onboarding_url, video_onboarding_titulo, video_onboarding_ativo, videos_tutoriais_etapas')
           .eq('id', 1)
           .single();
         if (directData) {
@@ -136,6 +150,9 @@ export const AdminCampanhas: React.FC = () => {
           if (directData.video_onboarding_url) setVideoOnboardingUrl(directData.video_onboarding_url);
           if (directData.video_onboarding_titulo) setVideoOnboardingTitulo(directData.video_onboarding_titulo);
           if (typeof directData.video_onboarding_ativo === 'boolean') setVideoOnboardingAtivo(directData.video_onboarding_ativo);
+          if (directData.videos_tutoriais_etapas && typeof directData.videos_tutoriais_etapas === 'object') {
+            setVideosEtapasConfig(directData.videos_tutoriais_etapas);
+          }
         }
       }
     } catch (err) {
@@ -143,7 +160,25 @@ export const AdminCampanhas: React.FC = () => {
     }
   };
 
-    const handleUploadVideoMp4 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const atualizarEtapaVideo = (
+    chave: EtapaOnboardingId | 'boas_vindas',
+    patch: Partial<TutorialEtapaOverride>
+  ) => {
+    setVideosEtapasConfig((prev) => ({
+      ...prev,
+      [chave]: {
+        ...(prev?.[chave] || {}),
+        ...patch,
+      },
+    }));
+  };
+
+  const abrirSeletorUploadVideo = (target: 'boas_vindas' | EtapaOnboardingId) => {
+    uploadTargetRef.current = target;
+    fileInputVideoRef.current?.click();
+  };
+
+  const handleUploadVideoMp4 = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -152,64 +187,130 @@ export const AdminCampanhas: React.FC = () => {
       return;
     }
 
-    setEnviandoVideoMp4(true);
+    const target = uploadTargetRef.current;
+    setEnviandoVideoTarget(target);
     try {
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const filePath = `videos_onboarding/${timestamp}_${safeName}`;
+      const filePath = `${target}/${timestamp}_${safeName}`;
 
+      let bucketUsado = 'onboarding-videos';
       const { error: uploadErr } = await supabase.storage
-        .from('academia-materiais')
+        .from(bucketUsado)
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false,
         });
 
-      if (uploadErr) throw uploadErr;
+      if (uploadErr) {
+        // Fallback caso a migração 0172 ainda não tenha criado o bucket público onboarding-videos
+        bucketUsado = 'academia-materiais';
+        const fallbackPath = `videos_onboarding/${timestamp}_${safeName}`;
+        const { error: fallbackErr } = await supabase.storage
+          .from(bucketUsado)
+          .upload(fallbackPath, file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+        if (fallbackErr) throw fallbackErr;
+
+        const { data: fallbackUrlData } = supabase.storage
+          .from(bucketUsado)
+          .getPublicUrl(fallbackPath);
+
+        if (fallbackUrlData?.publicUrl) {
+          if (target === 'boas_vindas') {
+            setVideoOnboardingUrl(fallbackUrlData.publicUrl);
+          } else {
+            atualizarEtapaVideo(target, { url: fallbackUrlData.publicUrl });
+          }
+          showSuccess('Vídeo enviado! Execute a migração 0172 para liberar o bucket público e clique em Salvar.');
+        }
+        return;
+      }
 
       const { data: publicUrlData } = supabase.storage
-        .from('academia-materiais')
+        .from(bucketUsado)
         .getPublicUrl(filePath);
 
       if (publicUrlData?.publicUrl) {
-        setVideoOnboardingUrl(publicUrlData.publicUrl);
-        showSuccess('Vídeo MP4 hospedado com sucesso na plataforma! Clique em "Salvar Vídeo de Iniciação".');
+        if (target === 'boas_vindas') {
+          setVideoOnboardingUrl(publicUrlData.publicUrl);
+        } else {
+          atualizarEtapaVideo(target, { url: publicUrlData.publicUrl });
+        }
+        showSuccess('Vídeo hospedado com sucesso! Clique em "Salvar Vídeos de Onboarding" para aplicar.');
       }
     } catch (err: any) {
       showError('Erro ao fazer upload do vídeo: ' + err.message);
     } finally {
-      setEnviandoVideoMp4(false);
+      setEnviandoVideoTarget(null);
       if (fileInputVideoRef.current) fileInputVideoRef.current.value = '';
     }
+  };
+
+  const limparPayloadVideosEtapas = () => {
+    const payload: Record<string, TutorialEtapaOverride> = {};
+    const chaves: Array<EtapaOnboardingId | 'boas_vindas'> = [
+      'boas_vindas',
+      ...ETAPAS_TUTORIAIS_ORDEM,
+    ];
+    for (const chave of chaves) {
+      const item = videosEtapasConfig[chave];
+      if (!item) continue;
+      const urlLimpa = (item.url || '').trim();
+      const temInicio = typeof item.tempoInicial === 'number' && !Number.isNaN(item.tempoInicial) && item.tempoInicial > 0;
+      const temFim = typeof item.tempoFinal === 'number' && !Number.isNaN(item.tempoFinal) && item.tempoFinal > 0;
+      if (urlLimpa || temInicio || temFim) {
+        payload[chave] = {
+          ...(urlLimpa ? { url: urlLimpa } : {}),
+          ...(temInicio ? { tempoInicial: item.tempoInicial } : {}),
+          ...(temFim ? { tempoFinal: item.tempoFinal } : {}),
+        };
+      }
+    }
+    return payload;
   };
 
   const handleSalvarVideoOnboarding = async () => {
     setSalvandoOnboardingVideo(true);
     try {
+      const videosEtapasLimpo = limparPayloadVideosEtapas();
       const { error } = await supabase.rpc('admin_salvar_config_onboarding', {
         p_video_url: videoOnboardingUrl.trim() || null,
         p_titulo: videoOnboardingTitulo.trim() || null,
         p_ativo: videoOnboardingAtivo,
+        p_videos_etapas: videosEtapasLimpo,
       });
 
       if (error) {
-        const { error: directErr } = await supabase
-          .from('plataforma_config')
-          .update({
-            video_onboarding_url: videoOnboardingUrl.trim() || null,
-            video_onboarding_titulo: videoOnboardingTitulo.trim() || null,
-            video_onboarding_ativo: videoOnboardingAtivo,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', 1);
+        // Fallback 1: assinatura antiga (3 parâmetros) caso migração 0172 ainda não tenha rodado
+        const { error: legacyRpcErr } = await supabase.rpc('admin_salvar_config_onboarding', {
+          p_video_url: videoOnboardingUrl.trim() || null,
+          p_titulo: videoOnboardingTitulo.trim() || null,
+          p_ativo: videoOnboardingAtivo,
+        });
 
-        if (directErr) throw directErr;
+        if (legacyRpcErr) {
+          const { error: directErr } = await supabase
+            .from('plataforma_config')
+            .update({
+              video_onboarding_url: videoOnboardingUrl.trim() || null,
+              video_onboarding_titulo: videoOnboardingTitulo.trim() || null,
+              video_onboarding_ativo: videoOnboardingAtivo,
+              videos_tutoriais_etapas: videosEtapasLimpo,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', 1);
+
+          if (directErr) throw directErr;
+        }
       }
 
-      showSuccess('Configurações do vídeo tutorial de onboarding salvas com sucesso!');
+      showSuccess('Vídeos de boas-vindas e tutoriais salvos com sucesso!');
     } catch (err: any) {
-      console.error('Erro ao salvar vídeo de onboarding:', err);
-      showError('Erro ao salvar vídeo: ' + (err.message || 'Falha de permissão'));
+      console.error('Erro ao salvar vídeos de onboarding:', err);
+      showError('Erro ao salvar vídeos: ' + (err.message || 'Falha de permissão'));
     } finally {
       setSalvandoOnboardingVideo(false);
     }
@@ -635,7 +736,7 @@ export const AdminCampanhas: React.FC = () => {
         )}
       </div>
 
-      {/* 🎬 Card de Configuração do Vídeo Tutorial de Iniciação (Onboarding Flutuante) */}
+      {/* 🎬 Card de Configuração dos Vídeos de Onboarding & Tutoriais Curtos */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
           <div className="flex items-center gap-3">
@@ -643,16 +744,16 @@ export const AdminCampanhas: React.FC = () => {
               <PlaySquare size={20} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-display text-sm font-bold text-slate-100 uppercase tracking-wide">
-                  Vídeo Tutorial de Iniciação (Onboarding Flutuante)
+                  Vídeos de Onboarding & Tutoriais do Painel
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Aberto a Todos
+                  Boas-vindas (60s) + 7 Etapas
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Vídeo gravado que abre em modal e se transforma em mini-player flutuante para novos usuários acompanharem enquanto configuram a plataforma.
+                Configure aqui o vídeo rápido de boas-vindas do 1º acesso e os tutoriais curtos abertos nos botões "Ver Tutorial" do Painel Principal.
               </p>
             </div>
           </div>
@@ -660,114 +761,211 @@ export const AdminCampanhas: React.FC = () => {
           <button
             type="button"
             onClick={() => setPainelOnboardingAberto(!painelOnboardingAberto)}
-            className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors self-start sm:self-center"
+            className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors self-start sm:self-center shrink-0 cursor-pointer"
           >
-            {painelOnboardingAberto ? 'Recolher Painel ▲' : 'Configurar Vídeo ▼'}
+            {painelOnboardingAberto ? 'Recolher Painel ▲' : 'Configurar Vídeos ▼'}
           </button>
         </div>
 
         {painelOnboardingAberto && (
-          <div className="space-y-4 pt-1 animate-fade-in">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* URL do Vídeo */}
-              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Video className="w-4 h-4 text-amber-400" />
-                    Link do Vídeo Gravado (YouTube, Vimeo ou MP4)
-                  </label>
-                  <span className="text-[10px] font-mono text-slate-500">Ex: https://youtu.be/... ou https://youtube.com/watch?v=...</span>
-                </div>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    placeholder="Cole aqui o link do YouTube, Vimeo ou link direto .mp4 do tutorial..."
-                    value={videoOnboardingUrl}
-                    onChange={(e) => setVideoOnboardingUrl(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
-                  />
-                  <input
-                    type="file"
-                    ref={fileInputVideoRef}
-                    accept="video/mp4,video/webm"
-                    onChange={handleUploadVideoMp4}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    disabled={enviandoVideoMp4}
-                    onClick={() => fileInputVideoRef.current?.click()}
-                    className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
-                    title="Hospedar vídeo diretamente na plataforma (sem YouTube)"
-                  >
-                    {enviandoVideoMp4 ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                        <span>Hospedando Vídeo...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Upload MP4 Nativo</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <span className="text-[10px] text-slate-400">
-                  Suporta qualquer link público ou não-listado do YouTube, Vimeo ou link direto .mp4.
+          <div className="space-y-5 pt-1 animate-fade-in">
+            <input
+              type="file"
+              ref={fileInputVideoRef}
+              accept="video/mp4,video/webm,video/quicktime"
+              onChange={handleUploadVideoMp4}
+              className="hidden"
+            />
+
+            {/* Bloco 1: Boas-vindas (60s) */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
+                  1. Vídeo de Boas-Vindas (Modal de Primeiro Acesso — 60s)
                 </span>
               </div>
 
-              {/* Título do Vídeo */}
-              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
-                <label className="text-xs font-semibold text-slate-200">
-                  Título Exibido no Player
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Guia Rápido: Como Configurar Tudo na Plataforma"
-                  value={videoOnboardingTitulo}
-                  onChange={(e) => setVideoOnboardingTitulo(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 md:col-span-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                      <Video className="w-4 h-4 text-amber-400" />
+                      Link do Vídeo de Boas-Vindas (YouTube, Vimeo ou MP4)
+                    </label>
+                    <span className="text-[10px] font-mono text-slate-500">Ex: https://youtu.be/...</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      placeholder="Cole aqui o link do YouTube, Vimeo ou MP4 do vídeo de 60 segundos..."
+                      value={videoOnboardingUrl}
+                      onChange={(e) => setVideoOnboardingUrl(e.target.value)}
+                      className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                    <button
+                      type="button"
+                      disabled={enviandoVideoTarget !== null}
+                      onClick={() => abrirSeletorUploadVideo('boas_vindas')}
+                      className="px-3 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                      title="Hospedar MP4 diretamente no storage da plataforma"
+                    >
+                      {enviandoVideoTarget === 'boas_vindas' ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                          <span>Enviando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Upload MP4</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                  <label className="text-xs font-semibold text-slate-200">
+                    Título do Player
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Bem-vindo ao Nuvem Wash (60s)"
+                    value={videoOnboardingTitulo}
+                    onChange={(e) => setVideoOnboardingTitulo(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col justify-between bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-200 block">
+                        Exibir Player no Modal de Boas-Vindas
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        Desative para exibir apenas o resumo sem vídeo na tela inicial.
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={videoOnboardingAtivo}
+                        onChange={(e) => setVideoOnboardingAtivo(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bloco 2: 7 Tutoriais Curtos das Etapas */}
+            <div className="space-y-3 pt-3 border-t border-slate-800/80">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400 block">
+                    2. Tutoriais Curtos do Guia no Painel (Botão "Ver Tutorial" — Etapas 2 a 8)
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    Cole um vídeo individual para cada etapa ou use o mesmo link definindo Início/Fim (em segundos).
+                  </span>
+                </div>
               </div>
 
-              {/* Status Ativo/Inativo */}
-              <div className="flex flex-col justify-between bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-200 block">
-                      Exibir Tutorial Automaticamente
-                    </label>
-                    <span className="text-[10px] text-slate-400">
-                      Se ativo, abre para todo usuário que ainda não marcou "Plataforma Configurada".
-                    </span>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={videoOnboardingAtivo}
-                      onChange={(e) => setVideoOnboardingAtivo(e.target.checked)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                  </label>
-                </div>
+              <div className="grid grid-cols-1 gap-2.5">
+                {ETAPAS_TUTORIAIS_ORDEM.map((etapaId, idx) => {
+                  const baseInfo = TUTORIAL_VIDEOS.etapas[etapaId];
+                  const atual = videosEtapasConfig[etapaId] || {};
+                  const enviandoEsta = enviandoVideoTarget === etapaId;
+
+                  return (
+                    <div
+                      key={etapaId}
+                      className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 flex flex-col lg:flex-row lg:items-center gap-3"
+                    >
+                      <div className="lg:w-64 shrink-0">
+                        <span className="text-xs font-bold text-slate-100 block">
+                          Etapa {idx + 2}: {baseInfo.titulo}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Destino: {baseInfo.rotaDestino}
+                        </span>
+                      </div>
+
+                      <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="URL do YouTube, Vimeo ou .mp4..."
+                          value={atual.url ?? ''}
+                          onChange={(e) => atualizarEtapaVideo(etapaId, { url: e.target.value })}
+                          className="flex-1 bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <CampoNumerico
+                            integerOnly
+                            allowNull
+                            placeholder="Início (s)"
+                            title="Segundo inicial opcional"
+                            value={typeof atual.tempoInicial === 'number' ? atual.tempoInicial : null}
+                            onChange={(val) =>
+                              atualizarEtapaVideo(etapaId, {
+                                tempoInicial: val === null ? undefined : Math.max(0, val),
+                              })
+                            }
+                            wrapperClassName="w-24 bg-slate-900 border-slate-700/80"
+                            className="px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-600"
+                          />
+                          <CampoNumerico
+                            integerOnly
+                            allowNull
+                            placeholder="Fim (s)"
+                            title="Segundo final opcional"
+                            value={typeof atual.tempoFinal === 'number' ? atual.tempoFinal : null}
+                            onChange={(val) =>
+                              atualizarEtapaVideo(etapaId, {
+                                tempoFinal: val === null ? undefined : Math.max(0, val),
+                              })
+                            }
+                            wrapperClassName="w-24 bg-slate-900 border-slate-700/80"
+                            className="px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-600"
+                          />
+                          <button
+                            type="button"
+                            disabled={enviandoVideoTarget !== null}
+                            onClick={() => abrirSeletorUploadVideo(etapaId)}
+                            className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                            title="Enviar vídeo MP4 para esta etapa"
+                          >
+                            {enviandoEsta ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                            ) : (
+                              <Upload className="w-3.5 h-3.5 text-amber-400" />
+                            )}
+                            <span className="hidden sm:inline">{enviandoEsta ? 'Enviando' : 'MP4'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 flex-wrap gap-3">
               <span className="text-[11px] text-slate-400 font-sans">
-                ðŸ’¡ <strong>Dica:</strong> Quando o cliente assiste ou clica em <em>"Plataforma Configurada"</em>, o player desaparece definitivamente do painel dele.
+                Dica: Você também pode definir os links direto em código em <code className="text-amber-300">src/config/tutorialVideos.ts</code> como padrão.
               </span>
               <button
                 type="button"
                 onClick={handleSalvarVideoOnboarding}
                 disabled={salvandoOnboardingVideo}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
               >
                 <Save size={14} />
-                <span>{salvandoOnboardingVideo ? 'Salvando...' : 'Salvar Vídeo de Iniciação'}</span>
+                <span>{salvandoOnboardingVideo ? 'Salvando...' : 'Salvar Vídeos de Onboarding'}</span>
               </button>
             </div>
           </div>

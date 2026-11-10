@@ -89,3 +89,66 @@ export const formatDuracao = (minutos: number): string => {
   
   return `${horas}h ${minsRestantes}min`;
 };
+
+/**
+ * Converte texto digitado na Matriz de Preços para número válido (ou null se vazio/sob consulta).
+ * Evita NaN, valores negativos e overflow do numeric(10,2) no PostgreSQL.
+ */
+export const parsePrecoMatrizInput = (
+  valor: string | number | null | undefined,
+  sobConsulta: boolean = false
+): number | null => {
+  if (sobConsulta) return null;
+  if (valor === null || valor === undefined) return null;
+
+  if (typeof valor === 'number') {
+    if (!Number.isFinite(valor)) return null;
+    const clamped = Math.min(99999999.99, Math.max(0, valor));
+    return Math.round(clamped * 100) / 100;
+  }
+
+  let texto = valor.trim().replace(/^R\$\s*/i, '').replace(/\s+/g, '');
+  if (!texto || texto === '-' || texto === ',' || texto === '.' || texto.toLowerCase() === 'null' || texto.toLowerCase() === 'nan') {
+    return null;
+  }
+
+  const temVirgula = texto.includes(',');
+  const temPonto = texto.includes('.');
+
+  if (temVirgula && temPonto) {
+    if (texto.lastIndexOf(',') > texto.lastIndexOf('.')) {
+      texto = texto.replace(/\./g, '').replace(',', '.');
+    } else {
+      texto = texto.replace(/,/g, '');
+    }
+  } else if (temVirgula) {
+    const partes = texto.split(',');
+    texto = `${partes[0]}.${partes.slice(1).join('')}`;
+  } else if ((texto.match(/\./g) || []).length > 1) {
+    texto = texto.replace(/\./g, '');
+  }
+
+  const num = Number(texto);
+  if (!Number.isFinite(num)) return null;
+
+  const clamped = Math.min(99999999.99, Math.max(0, num));
+  return Math.round(clamped * 100) / 100;
+};
+
+/**
+ * Garante duração em minutos inteira e válida (>= 1 min) ao salvar na Matriz de Preços.
+ */
+export const normalizarDuracaoMinutosMatriz = (
+  duracaoMinutos: number | string | null | undefined,
+  fallback: number = 60
+): number => {
+  const num = typeof duracaoMinutos === 'number'
+    ? duracaoMinutos
+    : Number(String(duracaoMinutos ?? '').replace(',', '.'));
+
+  if (!Number.isFinite(num) || num <= 0) {
+    return fallback;
+  }
+
+  return Math.min(525600, Math.max(1, Math.round(num)));
+};
