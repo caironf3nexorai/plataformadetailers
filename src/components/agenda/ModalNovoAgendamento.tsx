@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { ServiceChip } from '../ui/ServiceChip';
+import { CampoNumerico } from '../ui/CampoNumerico';
 import { 
   Search, 
   Plus, 
@@ -293,8 +294,17 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
     } else if (v && v.categoria_id) {
       const match = categoriasList.find((c) => c.id === v.categoria_id);
       if (match) setSelectedCategoria(match);
+    } else if (!selectedCategoria && categoriasList.length > 0) {
+      setSelectedCategoria(categoriasList[0]);
     }
   };
+
+  // Auto-seleciona primeira categoria ao chegar no Passo 2 sem veículo definido
+  useEffect(() => {
+    if (step === 2 && !selectedCategoria && categoriasList.length > 0) {
+      setSelectedCategoria(categoriasList[0]);
+    }
+  }, [step, selectedCategoria, categoriasList]);
 
   const handleSelectCategoria = (cat: any) => {
     setSelectedCategoria(cat);
@@ -303,11 +313,9 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
   };
 
   // Atualizar Preço Customizado do Item
-  const handleAtualizarPrecoItem = (servico_id: string, novoPrecoStr: string) => {
-    const limpo = novoPrecoStr.replace(',', '.');
-    const valorNum = parseFloat(limpo);
+  const handleAtualizarPrecoItem = (servico_id: string, novoPreco: number | null) => {
     setSelectedItens((prev) =>
-      prev.map((it) => (it.servico_id === servico_id ? { ...it, preco: isNaN(valorNum) ? 0 : valorNum } : it))
+      prev.map((it) => (it.servico_id === servico_id ? { ...it, preco: novoPreco ?? 0 } : it))
     );
   };
 
@@ -440,9 +448,9 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
     }
   });
 
-  // Carrega horários livres no Passo 5
+  // Carrega horários livres no Passo 4 (Data & Horário)
   useEffect(() => {
-    if (step !== 5 || !tenant || selectedItens.length === 0 || !selectedCategoria || !selectedData) return;
+    if (step !== 4 || !tenant || selectedItens.length === 0 || !selectedCategoria || !selectedData) return;
     const currentTenantId = tenant.id;
 
     setSelectedHorario(null);
@@ -581,12 +589,11 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Novo Agendamento"
-      subtitle={`Passo ${step} de 6 — ${
+      subtitle={`Passo ${step} de 5 — ${
         step === 1 ? '1. Cliente' :
         step === 2 ? '2. Veículo & Categoria' :
         step === 3 ? '3. Serviços & Combos' :
-        step === 4 ? '4. Data' :
-        step === 5 ? '5. Horário Disponível' : '6. Confirmação'
+        step === 4 ? '4. Data e Horário Disponível' : '5. Confirmação'
       }`}
       icon={<CalendarIcon size={20} className="text-amber-500" />}
       maxWidth="xl"
@@ -814,16 +821,14 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 w-32 shrink-0">
-                          <span className="text-xs font-mono text-vapor-400">R$</span>
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={it.preco !== undefined ? it.preco : ''}
-                            onChange={(e) => handleAtualizarPrecoItem(it.servico_id, e.target.value)}
-                            className="w-full bg-graphite-950 border border-graphite-700 rounded px-2 py-1 text-right font-mono text-xs text-vapor-100 font-bold outline-none focus:border-amber-500"
-                          />
-                        </div>
+                        <CampoNumerico
+                          prefix="R$"
+                          value={it.preco ?? 0}
+                          onChange={(val) => handleAtualizarPrecoItem(it.servico_id, val)}
+                          align="right"
+                          wrapperClassName="w-32 shrink-0"
+                          className="px-2 py-1 text-xs font-bold"
+                        />
                       </div>
                     ))}
                   </div>
@@ -832,15 +837,13 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
             </div>
           )}
 
-          {/* PASSO 4: DATA */}
+          {/* PASSO 4: DATA E HORÁRIO DISPONÍVEL */}
           {step === 4 && (
             <div className="flex flex-col gap-4">
-              <span className="font-sans text-[13px] text-vapor-300 font-medium">
-                Escolha a data do agendamento:
-              </span>
-
-              <div className="flex flex-col gap-2">
-                <label className="font-mono text-[12px] text-vapor-400">Data *</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="font-sans text-[13px] text-vapor-300 font-medium">
+                  Escolha a data do agendamento *
+                </label>
                 <input
                   type="date"
                   min={todayStr}
@@ -852,13 +855,8 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                   className="bg-graphite-800 border border-graphite-700 rounded px-3 py-2.5 font-mono text-[14px] text-vapor-100 outline-none focus:border-amber-500 min-h-[48px]"
                 />
               </div>
-            </div>
-          )}
 
-          {/* PASSO 5: HORÁRIO DISPONÍVEL */}
-          {step === 5 && (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-1">
                 <span className="font-sans text-[13px] text-vapor-300 font-medium">
                   Horários livres em <strong className="font-mono text-amber-400">{selectedData}</strong>:
                 </span>
@@ -977,8 +975,8 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
             </div>
           )}
 
-          {/* PASSO 6: CONFIRMAÇÃO */}
-          {step === 6 && (
+          {/* PASSO 5: CONFIRMAÇÃO */}
+          {step === 5 && (
             <div className="flex flex-col gap-4">
               <span className="font-display text-[13px] text-amber-400 font-bold uppercase tracking-wider">
                 Resumo do Agendamento
@@ -1106,7 +1104,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
             <div />
           )}
 
-          {step < 6 ? (
+          {step < 5 ? (
             <Button
               type="button"
               variant="primary"
@@ -1114,8 +1112,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
                 (step === 1 && !selectedCliente) ||
                 (step === 2 && !selectedCategoria) ||
                 (step === 3 && selectedItens.length === 0) ||
-                (step === 4 && !selectedData) ||
-                (step === 5 && !selectedHorario)
+                (step === 4 && (!selectedData || !selectedHorario))
               }
               onClick={() => setStep((prev) => prev + 1)}
               className="flex items-center gap-1 font-semibold"

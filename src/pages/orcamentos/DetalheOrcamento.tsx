@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
+import { CampoNumerico } from '../../components/ui/CampoNumerico';
 import {
   ArrowLeft,
   Send,
@@ -2764,17 +2765,16 @@ export const DetalheOrcamento: React.FC = () => {
                   Validade da Proposta (em dias):
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
+                  <CampoNumerico
+                    integerOnly
                     value={validadeDiasOrcamento}
-                    onChange={(e) => {
-                      const val = Math.max(1, parseInt(e.target.value) || 1);
-                      setValidadeDiasOrcamento(val);
+                    onChange={(val) => {
+                      const next = val && val >= 1 ? Math.min(365, val) : 1;
+                      setValidadeDiasOrcamento(next);
                     }}
                     onBlur={() => handleAlterarValidade(validadeDiasOrcamento)}
-                    className="w-24 bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono text-base font-bold outline-none focus:border-amber-500"
+                    wrapperClassName="w-24 bg-graphite-950"
+                    className="text-amber-400 text-base font-bold px-3 py-1.5"
                   />
                   <span className="text-xs font-sans text-vapor-300 font-medium">dias</span>
                   <button
@@ -3740,22 +3740,18 @@ export const DetalheOrcamento: React.FC = () => {
                             }}
                           />
 
-                          <div className="flex items-center gap-1 bg-graphite-950/80 px-2 py-0.5 rounded border border-cyan-500/40">
-                            <span className="text-cyan-300 font-bold text-[11px]">R$</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={av.preco}
-                              onChange={(e) => {
-                                const val = parseFloat(e.target.value);
-                                handleAtualizarServicoUnico(nivelKey, av.uid, {
-                                  preco: isNaN(val) ? 0 : Math.max(0, val),
-                                });
-                              }}
-                              className="w-20 bg-transparent text-right font-mono font-bold text-cyan-300 text-xs outline-none focus:text-white"
-                            />
-                          </div>
+                          <CampoNumerico
+                            prefix="R$"
+                            align="right"
+                            value={av.preco}
+                            onChange={(val) => {
+                              handleAtualizarServicoUnico(nivelKey, av.uid, {
+                                preco: Math.max(0, val ?? 0),
+                              });
+                            }}
+                            wrapperClassName="w-28 bg-graphite-950/80 border-cyan-500/40 focus-within:border-cyan-400"
+                            className="px-2 py-0.5 font-bold text-cyan-300 text-xs focus:text-white"
+                          />
                         </div>
                       </div>
                     ))}
@@ -3862,21 +3858,19 @@ export const DetalheOrcamento: React.FC = () => {
                                         title="Clique para editar o valor deste serviço no orçamento"
                                       >
                                         <span className="text-amber-400 font-bold text-[11px]">R$</span>
-                                        <input
-                                          type="number"
-                                          step="0.01"
-                                          min="0"
+                                        <CampoNumerico
                                           value={
                                             customPrecos[`${nivelKey}_${serv.id}`] !== undefined
                                               ? customPrecos[`${nivelKey}_${serv.id}`]
-                                              : serv.precoMatriz || ''
+                                              : serv.precoMatriz || 0
                                           }
-                                          onChange={(e) => {
-                                            const val = parseFloat(e.target.value);
-                                            handleAtualizarPrecoItem(nivelKey, serv.id, isNaN(val) ? 0 : val);
+                                          onChange={(val) => {
+                                            handleAtualizarPrecoItem(nivelKey, serv.id, Math.max(0, val ?? 0));
                                           }}
+                                          align="right"
                                           placeholder="0,00"
-                                          className="w-20 bg-transparent text-right font-mono font-bold text-amber-400 text-xs outline-none focus:text-white"
+                                          wrapperClassName="w-20 bg-transparent border-none rounded-none"
+                                          className="px-0 py-0 font-bold text-amber-400 text-xs focus:text-white"
                                         />
                                         {customPrecos[`${nivelKey}_${serv.id}`] !== undefined &&
                                           customPrecos[`${nivelKey}_${serv.id}`] !== serv.precoMatriz && (
@@ -4352,15 +4346,15 @@ export const DetalheOrcamento: React.FC = () => {
               <label className="font-sans text-[13px] font-bold text-vapor-200">
                 Valor (R$) <span className="text-amber-500">*</span>
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
+              <CampoNumerico
+                allowNull
+                prefix="R$"
                 value={suValor}
-                onChange={(e) => setSuValor(e.target.value)}
-                placeholder="Ex: 150.00"
+                onChange={(_, valStr) => setSuValor(valStr)}
+                placeholder="Ex: 150,00"
                 required
-                className="bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-vapor-100 font-mono text-[14px] focus:border-cyan-400 focus:outline-none min-h-[44px]"
+                wrapperClassName="bg-graphite-900 min-h-[44px] focus-within:border-cyan-400"
+                className="text-vapor-100 text-[14px]"
               />
             </div>
 

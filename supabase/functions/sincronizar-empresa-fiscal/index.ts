@@ -36,23 +36,43 @@ serve(async (req) => {
       });
     }
 
-    // 2. Obter tenant do usuário
-    const { data: member, error: memberError } = await supabase
+    // 2. Validar autorização e obter tenant do usuário (apenas dono ou gerente ativo)
+    const body = await req.json().catch(() => ({}));
+    const rawRequestedTenant = typeof body?.tenant_id === 'string' ? body.tenant_id.trim() : '';
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (rawRequestedTenant && !uuidRegex.test(rawRequestedTenant)) {
+      return new Response(JSON.stringify({ error: 'tenant_id inválido' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let memberQuery = supabase
       .from('tenant_members')
       .select('tenant_id, role')
       .eq('user_id', user.id)
+      .eq('status', 'ativo')
+      .in('role', ['dono', 'gerente']);
+
+    if (rawRequestedTenant) {
+      memberQuery = memberQuery.eq('tenant_id', rawRequestedTenant);
+    } else {
+      memberQuery = memberQuery.order('created_at', { ascending: true });
+    }
+
+    const { data: member, error: memberError } = await memberQuery
       .limit(1)
       .maybeSingle();
 
     if (memberError || !member?.tenant_id) {
-      return new Response(JSON.stringify({ error: 'Oficina não encontrada para este usuário' }), {
+      return new Response(JSON.stringify({ error: 'Acesso negado: apenas proprietário ou gerente ativo pode configurar dados fiscais desta oficina.' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     const tenantId = member.tenant_id;
-    const body = await req.json();
 
     const {
       cnpj,
@@ -77,11 +97,22 @@ serve(async (req) => {
       });
     }
 
-    let certStatus = 'pendente';
-    let certValidoAte: string | null = null;
+    const { data: existingConfig, error: existingErr } = await supabase
+      .from('tenant_config_fiscal')
+      .select('id, certificado_status, certificado_valido_ate, certificado_nome_arquivo, certificado_enviado_em')
+      .eq('tenant_id', tenantId)
+      .maybeSingle();
+
+    if (existingErr) {
+      throw existingErr;
+    }
+
+    let certStatus = existingConfig?.certificado_status || 'pendente';
+    let certValidoAte: string | null = existingConfig?.certificado_valido_ate || null;
+    const hasNewCert = Boolean(certificado_base64 && senha_certificado);
 
     // 3. Se enviou novo certificado digital A1, transmite via API para a Focus NFe
-    if (certificado_base64 && senha_certificado) {
+    if (hasNewCert) {
       if (!FOCUS_NFE_TOKEN) {
         console.warn('[sincronizar-empresa-fiscal] FOCUS_NFE_TOKEN não configurado nas variáveis do ambiente.');
       } else {
@@ -150,28 +181,41 @@ serve(async (req) => {
       }
     }
 
-    // 4. Salvar configurações no Supabase
-    const dbPayload: any = {
+    // 4. Salvar configurações no Supabase preservando token_focus_nfe e metadados existentes
+    const nowIso = new Date().toISOString();
+    const parsedAliquota = Number.parseFloat(String(aliquota_iss ?? '').replace(',', '.'));
+    const aliquotaFinal = Number.isFinite(parsedAliquota) && parsedAliquota >= 0 ? parsedAliquota : 2.0;
+    const cleanCnae = String(cnae_padrao || '4520-0/05').trim() || '4520-0/05';
+
+    const upsertPayload: Record<string, any> = {
+      tenant_id: tenantId,
       cnpj: cleanCnpj,
-      razao_social: razao_social,
-      nome_fantasia: nome_fantasia || razao_social,
-      inscricao_municipal: inscricao_municipal || '',
-      cnae_padrao: cnae_padrao || '4520-0/05',
-      item_lista_servico: item_lista_servico || '14.01',
-      aliquota_iss: parseFloat(aliquota_iss) || 2.0,
-      regime_tributario: regime_tributario || '1',
-      ambiente: ambiente || 'homologacao',
+      razao_social: String(razao_social || '').trim(),
+      nome_fantasia: String(nome_fantasia || razao_social || '').trim(),
+      inscricao_municipal: String(inscricao_municipal || '').trim(),
+      cnae: cleanCnae,
+      cnae_padrao: cleanCnae,
+      item_lista_servico: String(item_lista_servico || '14.01').trim() || '14.01',
+      aliquota_iss: aliquotaFinal,
+      regime_tributario: String(regime_tributario || '1'),
+      ambiente: ambiente === 'producao' ? 'producao' : 'homologacao',
+      updated_at: nowIso,
     };
 
-    if (certificado_base64 && senha_certificado) {
-      dbPayload.certificado_status = certStatus;
-      dbPayload.certificado_valido_ate = certValidoAte;
-      dbPayload.certificado_nome_arquivo = certificado_nome_arquivo || 'certificado.pfx';
+    if (hasNewCert) {
+      upsertPayload.certificado_status = certStatus;
+      upsertPayload.certificado_valido_ate = certValidoAte || existingConfig?.certificado_valido_ate || null;
+      upsertPayload.certificado_nome_arquivo = certificado_nome_arquivo || existingConfig?.certificado_nome_arquivo || 'certificado.pfx';
+      upsertPayload.certificado_enviado_em = certStatus === 'ativo'
+        ? nowIso
+        : (existingConfig?.certificado_enviado_em || null);
+    } else if (!existingConfig) {
+      upsertPayload.certificado_status = 'pendente';
     }
 
-    const { error: dbError } = await supabase.rpc('salvar_config_fiscal_tenant', {
-      p_config: dbPayload
-    });
+    const { error: dbError } = await supabase
+      .from('tenant_config_fiscal')
+      .upsert(upsertPayload, { onConflict: 'tenant_id' });
 
     if (dbError) {
       throw dbError;

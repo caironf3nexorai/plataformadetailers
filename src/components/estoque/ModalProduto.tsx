@@ -43,14 +43,22 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
   const [categoria, setCategoria] = useState<string>('Geral');
   
   // Bloco de Compra
-  const [qtdCompraInput, setQtdCompraInput] = useState<number | ''>(5);
+  const [qtdCompraInput, setQtdCompraInput] = useState<number | ''>('');
   const [unidadeDisplay, setUnidadeDisplay] = useState<UnidadeCompraDisplay>('L');
-  const [precoCompraInput, setPrecoCompraInput] = useState<number | ''>(120);
+  const [precoCompraInput, setPrecoCompraInput] = useState<number | ''>('');
   
   // Estoque Mínimo e Inicial
-  const [estoqueMinimoInput, setEstoqueMinimoInput] = useState<number | ''>(500);
-  const [estoqueAtualInput, setEstoqueAtualInput] = useState<number | ''>(5000);
+  const [estoqueMinimoInput, setEstoqueMinimoInput] = useState<number | ''>('');
+  const [estoqueAtualInput, setEstoqueAtualInput] = useState<number | ''>('');
   const [userEditedEstoqueInicial, setUserEditedEstoqueInicial] = useState(false);
+
+  const PACKAGING_PRESETS: { label: string; qty: number; unit: UnidadeCompraDisplay }[] = [
+    { label: '500 mL', qty: 500, unit: 'ml' },
+    { label: '1 L', qty: 1, unit: 'L' },
+    { label: '2 L', qty: 2, unit: 'L' },
+    { label: '5 L', qty: 5, unit: 'L' },
+    { label: '1 un', qty: 1, unit: 'un' },
+  ];
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -103,11 +111,11 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
       setNome('');
       setMarca('');
       setCategoria('Geral');
-      setQtdCompraInput(5);
+      setQtdCompraInput('');
       setUnidadeDisplay('L');
-      setPrecoCompraInput(120);
-      setEstoqueMinimoInput(500);
-      setEstoqueAtualInput(5000); // Estoque inicial pré-preenchido com tamanho_compra (5L = 5000mL)
+      setPrecoCompraInput('');
+      setEstoqueMinimoInput('');
+      setEstoqueAtualInput('');
       setUserEditedEstoqueInicial(false);
     }
   }, [produto, isOpen]);
@@ -115,7 +123,7 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
   // Atualizar estoque inicial automaticamente ao mudar tamanho_compra para novos produtos (se usuário não alterou manualmente)
   useEffect(() => {
     if (!produto && !userEditedEstoqueInicial) {
-      setEstoqueAtualInput(tamanhoBase);
+      setEstoqueAtualInput(tamanhoBase > 0 ? tamanhoBase : '');
     }
   }, [tamanhoBase, produto, userEditedEstoqueInicial]);
 
@@ -215,14 +223,39 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
 
         {/* Bloco de Compra (Central UX Point) */}
         <div className="p-4 bg-graphite-900 border border-amber-500/30 rounded-lg flex flex-col gap-3">
-          <label className="text-[13px] font-semibold text-amber-500 uppercase tracking-wide">
-            Como você compra este produto?
-          </label>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <label className="text-[13px] font-semibold text-amber-500 uppercase tracking-wide">
+              Como você compra este produto?
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {PACKAGING_PRESETS.map((preset) => {
+                const isSelected = qtdCompraInput === preset.qty && unidadeDisplay === preset.unit;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => {
+                      setQtdCompraInput(preset.qty);
+                      setUnidadeDisplay(preset.unit);
+                    }}
+                    className={`px-2 py-1 rounded text-[11px] font-mono border transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500 text-graphite-950 font-bold border-amber-400'
+                        : 'bg-graphite-800 text-vapor-300 border-graphite-700 hover:border-amber-500/50'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-[1fr_auto_1.5fr] gap-3 items-end">
             <div className="flex flex-col gap-1">
-              <span className="text-[12px] text-vapor-400 block min-h-[20px] flex items-end">Quantidade</span>
+              <span className="text-[12px] text-vapor-400 block min-h-[20px] flex items-end">Quantidade *</span>
               <CampoNumerico
+                allowNull
                 placeholder="Ex: 5"
                 value={qtdCompraInput}
                 onChange={(val) => setQtdCompraInput(val ?? '')}
@@ -246,10 +279,11 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
             </div>
 
             <div className="flex flex-col gap-1 col-span-2 sm:col-span-1">
-              <span className="text-[12px] text-vapor-400 block min-h-[20px] flex items-end">Preço de Compra</span>
+              <span className="text-[12px] text-vapor-400 block min-h-[20px] flex items-end">Preço de Compra (Opcional)</span>
               <CampoNumerico
+                allowNull
                 prefix="R$"
-                placeholder="120.00"
+                placeholder="0,00"
                 value={precoCompraInput}
                 onChange={(val) => setPrecoCompraInput(val ?? '')}
                 wrapperClassName="min-h-[56px] h-[56px] w-full"
@@ -259,7 +293,7 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
 
           {/* Custo unitário formatado com pt-BR e 4 casas decimais */}
           <div className="p-3 bg-graphite-800/80 rounded border border-graphite-700 flex items-center justify-between text-[13px]">
-            <span className="text-vapor-300">Custo calculated:</span>
+            <span className="text-vapor-300">Custo unitário estimado:</span>
             <span className="font-mono font-bold text-emerald-400 text-[14px]">
               {formatarCustoUnitario(custoCalculado, unidadeSymbol)}
             </span>
@@ -273,6 +307,7 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
               Estoque Mínimo ({unidadeSymbol})
             </label>
             <CampoNumerico
+              allowNull
               placeholder="Ex: 500"
               value={estoqueMinimoInput}
               onChange={(val) => setEstoqueMinimoInput(val ?? '')}
@@ -294,7 +329,8 @@ export const ModalProduto: React.FC<ModalProdutoProps> = ({
                 Estoque Inicial ({unidadeSymbol})
               </label>
               <CampoNumerico
-                placeholder="Ex: 5000"
+                allowNull
+                placeholder="Ex: 1000"
                 value={estoqueAtualInput}
                 onChange={(val) => {
                   setEstoqueAtualInput(val ?? '');

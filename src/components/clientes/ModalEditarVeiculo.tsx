@@ -94,7 +94,7 @@ export const ModalEditarVeiculo: React.FC<ModalEditarVeiculoProps> = ({
   useEffect(() => {
     if (veiculo) {
       setPlaca(veiculo.placa || '');
-      setCategoriaId(veiculo.categoria_id || '');
+      setCategoriaId(veiculo.categoria_id || categorias[0]?.id || '');
       setMarca(veiculo.marca || '');
       setModelo(veiculo.modelo || '');
       setCor(veiculo.cor || '');
@@ -102,7 +102,7 @@ export const ModalEditarVeiculo: React.FC<ModalEditarVeiculoProps> = ({
       setObservacoes(veiculo.observacoes || '');
       setErrorMsg(null);
     }
-  }, [veiculo, isOpen]);
+  }, [veiculo, isOpen, categorias]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,15 +110,13 @@ export const ModalEditarVeiculo: React.FC<ModalEditarVeiculoProps> = ({
     setErrorMsg(null);
 
     const cleanPlaca = placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    if (!cleanPlaca) {
-      setErrorMsg('A placa do veículo é obrigatória.');
-      return;
-    }
+    const placaFinal = cleanPlaca || `PROV-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+    const categoriaFinal = categoriaId || categorias[0]?.id || '';
 
     setSaving(true);
     try {
       const updatePayload: Record<string, any> = {
-        placa: cleanPlaca,
+        placa: placaFinal,
         marca: marca.trim() || null,
         modelo: modelo.trim() || null,
         cor: cor.trim() || null,
@@ -127,8 +125,8 @@ export const ModalEditarVeiculo: React.FC<ModalEditarVeiculoProps> = ({
         updated_at: new Date().toISOString(),
       };
 
-      if (categoriaId) {
-        updatePayload.categoria_id = categoriaId;
+      if (categoriaFinal) {
+        updatePayload.categoria_id = categoriaFinal;
       }
 
       // 1. Tenta atualizar direto na tabela veiculos
@@ -147,8 +145,8 @@ export const ModalEditarVeiculo: React.FC<ModalEditarVeiculoProps> = ({
           p_marca: marca.trim() || null,
           p_modelo: modelo.trim() || null,
           p_ano: ano ? parseInt(ano, 10) : null,
-          p_placa: cleanPlaca,
-          p_categoria_id: categoriaId || null,
+          p_placa: placaFinal,
+          p_categoria_id: categoriaFinal || null,
           p_observacoes: observacoes.trim() || null,
         });
 
@@ -192,13 +190,12 @@ export const ModalEditarVeiculo: React.FC<ModalEditarVeiculoProps> = ({
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
-            <label className="font-sans text-[13px] text-vapor-300 font-medium">Placa *</label>
+            <label className="font-sans text-[13px] text-vapor-300 font-medium">Placa (Opcional)</label>
             <Input
               type="text"
-              placeholder="ABC-1234 ou ABC1D23"
+              placeholder="ABC-1234 ou deixe vazio p/ provisória"
               value={placa}
               onChange={(e) => setPlaca(formatPlaca(e.target.value))}
-              required
               className="min-h-[44px] font-mono text-[16px] uppercase tracking-wider text-amber-400 font-bold"
             />
           </div>

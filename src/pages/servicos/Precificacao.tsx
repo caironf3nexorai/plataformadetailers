@@ -5,6 +5,7 @@ import { PageHeader } from '../../components/layout/PageHeader';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
+import { CampoNumerico } from '../../components/ui/CampoNumerico';
 import { 
   AlertTriangle, 
   CheckCircle, 
@@ -858,15 +859,15 @@ export const Precificacao: React.FC = () => {
                           <label className="text-[11px] font-mono text-vapor-400 block uppercase">
                             Preço Simulado (R$)
                           </label>
-                          <input
-                            type="number"
-                            step="1"
+                          <CampoNumerico
+                            prefix="R$"
+                            align="right"
                             value={novoPrecoSimulado}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              setPrecosSimulados(prev => ({ ...prev, [item.servico_preco_id]: isNaN(val) ? 0 : val }));
+                            onChange={(val) => {
+                              setPrecosSimulados(prev => ({ ...prev, [item.servico_preco_id]: val ?? 0 }));
                             }}
-                            className="w-full bg-graphite-950 border border-graphite-600 rounded-lg px-3 py-2 font-mono text-base text-vapor-100 font-bold outline-none focus:border-amber-500 text-right"
+                            wrapperClassName="w-full border-graphite-600"
+                            className="text-base font-bold px-3 py-2"
                           />
                         </div>
                       </div>

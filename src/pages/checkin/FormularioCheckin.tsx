@@ -459,6 +459,23 @@ export const FormularioCheckin: React.FC = () => {
     if (step > 1) setStep((s) => s - 1);
   };
 
+  const CHECKIN_STEP_LABELS = [
+    'Veículo',
+    'Painel',
+    'Luzes',
+    'Avarias',
+    'Sujidade',
+    'Fluidos',
+    'Fotos',
+    'Assinatura',
+  ];
+
+  const irParaPasso = async (targetStep: number) => {
+    if (targetStep === step || savingStep || targetStep < 1 || targetStep > 8) return;
+    await saveProgress();
+    setStep(targetStep);
+  };
+
   // Handler para Adicionar Avaria no Diagrama
   const handleAddAvaria = async (avariaData: Omit<CheckinAvaria, 'id' | 'created_at'>) => {
     if (!checkin) return;
@@ -845,16 +862,42 @@ export const FormularioCheckin: React.FC = () => {
         </div>
       </div>
 
-      {/* Barra de Progresso em Passos */}
-      <div className="w-full max-w-full grid grid-cols-8 gap-1 h-2 bg-graphite-800 rounded-full overflow-hidden">
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-          <div
-            key={s}
-            className={`h-full transition-all ${
-              s <= step ? 'bg-amber-500' : 'bg-graphite-800'
-            }`}
-          />
-        ))}
+      {/* Barra de Progresso Interativa em Passos */}
+      <div className="w-full max-w-full grid grid-cols-8 gap-1">
+        {CHECKIN_STEP_LABELS.map((label, idx) => {
+          const s = idx + 1;
+          const isCurrent = s === step;
+          const isDone = s < step;
+          return (
+            <button
+              key={s}
+              type="button"
+              disabled={savingStep}
+              onClick={() => irParaPasso(s)}
+              title={`Ir para Passo ${s}: ${label}`}
+              className={`group flex flex-col items-center gap-1 py-1 px-0.5 rounded transition-colors cursor-pointer ${
+                isCurrent ? 'bg-amber-500/10' : 'hover:bg-graphite-800/80'
+              }`}
+            >
+              <span
+                className={`w-full h-2 rounded-full transition-all ${
+                  isCurrent
+                    ? 'bg-amber-400 ring-1 ring-amber-300/60'
+                    : isDone
+                    ? 'bg-amber-500/80'
+                    : 'bg-graphite-800 group-hover:bg-graphite-700'
+                }`}
+              />
+              <span
+                className={`hidden sm:block text-[10px] font-mono truncate max-w-full ${
+                  isCurrent ? 'text-amber-400 font-bold' : isDone ? 'text-vapor-300' : 'text-vapor-500'
+                }`}
+              >
+                {s}. {label}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* PASSO 1: Identificação do Veículo e Cliente */}
@@ -917,6 +960,20 @@ export const FormularioCheckin: React.FC = () => {
                 className="bg-graphite-900 border border-graphite-700 rounded-lg px-4 py-3 text-vapor-100 font-sans text-[15px] focus:border-amber-500 focus:outline-none min-h-[56px]"
               />
             </div>
+          </div>
+
+          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="text-[12px] text-vapor-200 font-sans">
+              <strong className="text-emerald-400">Vistoria expressa:</strong> veículo em condições normais sem avarias a registrar?
+            </div>
+            <button
+              type="button"
+              disabled={savingStep}
+              onClick={() => irParaPasso(8)}
+              className="w-full sm:w-auto px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[12px] font-semibold transition-colors whitespace-nowrap cursor-pointer"
+            >
+              Padrão OK → Ir p/ Assinatura
+            </button>
           </div>
         </Card>
       )}

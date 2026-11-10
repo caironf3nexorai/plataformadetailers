@@ -11,6 +11,7 @@ import { Modal } from '../components/ui/Modal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ScrollableTabs } from '../components/ui/ScrollableTabs';
 import { ModalConfirmacao } from '../components/ui/ModalConfirmacao';
+import { CampoNumerico } from '../components/ui/CampoNumerico';
 import {
   FileText,
   Plus,
@@ -975,14 +976,13 @@ export const Orcamentos: React.FC = () => {
               Validade da Proposta (em dias)
             </label>
             <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max="365"
+              <CampoNumerico
+                integerOnly
                 value={validadeDias}
-                onChange={(e) => setValidadeDias(Math.max(1, parseInt(e.target.value) || 1))}
-                placeholder="Ex: 30, 90..."
-                className="w-28 bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono text-base font-bold outline-none focus:border-amber-500"
+                onChange={(val) => setValidadeDias(val && val >= 1 ? Math.min(365, val) : 1)}
+                placeholder="30"
+                wrapperClassName="w-28 bg-graphite-900"
+                className="text-amber-400 text-base font-bold px-3 py-1.5"
               />
               <span className="text-vapor-300 font-sans text-xs">dias corridos</span>
               <div className="flex items-center gap-1 ml-auto flex-wrap">

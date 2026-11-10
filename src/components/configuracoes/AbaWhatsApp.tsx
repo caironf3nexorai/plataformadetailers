@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { CampoNumerico } from '../ui/CampoNumerico';
 import { 
   MessageCircle, 
   Smartphone, 
@@ -475,11 +476,12 @@ export const AbaWhatsApp: React.FC = () => {
               <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-3">
                   <label className="text-xs text-vapor-400">Dias após o serviço:</label>
-                  <input
-                    type="number"
+                  <CampoNumerico
+                    integerOnly
                     value={lembreteVitrificacaoDias}
-                    onChange={(e) => setLembreteVitrificacaoDias(Number(e.target.value))}
-                    className="w-24 bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-1.5 text-xs text-vapor-100 font-mono focus:border-emerald-500 outline-none"
+                    onChange={(val) => setLembreteVitrificacaoDias(val ?? 0)}
+                    wrapperClassName="w-24 focus-within:border-emerald-500"
+                    className="px-2.5 py-1 text-xs"
                   />
                   <span className="text-xs text-vapor-400">(Padrão: 180 dias / 6 meses)</span>
                 </div>
@@ -524,11 +526,12 @@ export const AbaWhatsApp: React.FC = () => {
               <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-3">
                   <label className="text-xs text-vapor-400">Dias de inatividade:</label>
-                  <input
-                    type="number"
+                  <CampoNumerico
+                    integerOnly
                     value={lembreteInativoDias}
-                    onChange={(e) => setLembreteInativoDias(Number(e.target.value))}
-                    className="w-24 bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-1.5 text-xs text-vapor-100 font-mono focus:border-cyan-500 outline-none"
+                    onChange={(val) => setLembreteInativoDias(val ?? 0)}
+                    wrapperClassName="w-24 focus-within:border-cyan-500"
+                    className="px-2.5 py-1 text-xs"
                   />
                   <span className="text-xs text-vapor-400">(Padrão: 60 dias)</span>
                 </div>

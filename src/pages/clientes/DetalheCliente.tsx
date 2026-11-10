@@ -211,8 +211,16 @@ export const DetalheCliente: React.FC = () => {
     if (!cliente || isOperador) return;
     setVeiculoError(null);
 
-    if (!vPlaca.trim() || !vCategoriaId) {
-      setVeiculoError('Placa e categoria são obrigatórias.');
+    const categoriaFinal = vCategoriaId || categorias[0]?.id || '';
+    const temDados = Boolean(vPlaca.trim() || vModelo.trim() || vMarca.trim() || vCor.trim());
+
+    if (!temDados) {
+      setVeiculoError('Informe ao menos a placa ou o modelo/marca do veículo.');
+      return;
+    }
+
+    if (!categoriaFinal) {
+      setVeiculoError('Selecione a categoria do veículo.');
       return;
     }
 
@@ -224,8 +232,8 @@ export const DetalheCliente: React.FC = () => {
       const { data: _vId, error } = await supabase.rpc('cadastro_rapido', {
         p_nome: cliente.nome,
         p_telefone: cliente.telefone || null,
-        p_placa: cleanPlaca,
-        p_categoria: vCategoriaId,
+        p_placa: cleanPlaca || null,
+        p_categoria: categoriaFinal,
         p_marca: vMarca.trim() || null,
         p_modelo: vModelo.trim() || null,
         p_cor: vCor.trim() || null,
@@ -452,6 +460,9 @@ export const DetalheCliente: React.FC = () => {
               variant="secondary"
               onClick={() => {
                 setVeiculoError(null);
+                if (!vCategoriaId && categorias.length > 0) {
+                  setVCategoriaId(categorias[0].id);
+                }
                 setShowAddVeiculoModal(true);
               }}
               className="min-h-[40px] px-3 text-[13px]"
@@ -554,15 +565,17 @@ export const DetalheCliente: React.FC = () => {
 
         <form onSubmit={handleAdicionarVeiculo} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
-            <label className="font-sans text-[13px] text-vapor-400 font-medium">Placa *</label>
+            <label className="font-sans text-[13px] text-vapor-400 font-medium">Placa (Opcional)</label>
             <Input
               type="text"
-              placeholder="ABC-1234"
+              placeholder="ABC-1234 (ou deixe em branco)"
               value={vPlaca}
               onChange={(e) => setVPlaca(formatPlaca(e.target.value))}
-              required
               className="min-h-[44px] font-mono text-[16px] uppercase tracking-wider text-amber-500 font-bold"
             />
+            <span className="font-sans text-[11px] text-vapor-400">
+              Se não souber agora, geramos um código provisório e você edita depois.
+            </span>
           </div>
 
           <div className="flex flex-col gap-1">

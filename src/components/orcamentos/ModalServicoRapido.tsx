@@ -5,7 +5,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Clock, Check, Wrench, Sparkles, Car } from 'lucide-react';
+import { CampoNumerico } from '../ui/CampoNumerico';
+import { Check, Wrench, Sparkles, Car } from 'lucide-react';
 import type { CategoriaVeiculo } from '../../types/clientes';
 import {
   type UnidadeDuracao,
@@ -548,16 +549,14 @@ export const ModalServicoRapido: React.FC<ModalServicoRapidoProps> = ({
                       </div>
 
                       {/* Campo de Tempo */}
-                      <div className="relative flex items-center">
-                        <span className="absolute left-2 text-vapor-500">
-                          <Clock size={12} />
-                        </span>
-                        <input
-                          type="number"
+                      <div className="flex items-center">
+                        <CampoNumerico
+                          allowNull
                           placeholder="60"
                           value={catDuracao}
-                          onChange={(e) => handleDuracaoChange(cat.id, e.target.value)}
-                          className="w-16 pl-6 pr-1 py-1.5 bg-graphite-900 border border-graphite-700 rounded text-xs font-mono text-vapor-100 outline-none focus:border-amber-500"
+                          onChange={(_, str) => handleDuracaoChange(cat.id, str)}
+                          wrapperClassName="w-20 bg-graphite-900"
+                          className="px-2 py-1 text-xs"
                           title="Duração estimada para esta categoria"
                         />
                         <select

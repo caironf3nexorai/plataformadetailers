@@ -179,21 +179,29 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
       return;
     }
 
-    if (incluirVeiculo && (!placa.trim() || !categoriaId)) {
-      setErrorMsg('Informe a placa e selecione a categoria do veículo.');
+    const categoriaFinal = categoriaId || categorias[0]?.id || '';
+    const temDadosVeiculo = Boolean(placa.trim() || modelo.trim() || marca.trim() || cor.trim());
+
+    if (incluirVeiculo && !temDadosVeiculo) {
+      setErrorMsg('Informe ao menos a placa ou o modelo/marca do veículo.');
+      return;
+    }
+
+    if (incluirVeiculo && !categoriaFinal) {
+      setErrorMsg('Selecione a categoria do veículo.');
       return;
     }
 
     setLoading(true);
 
     try {
-      const cleanPlaca = incluirVeiculo ? placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null;
+      const cleanPlaca = incluirVeiculo ? placa.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : '';
 
       const { data, error } = await supabase.rpc('cadastro_rapido', {
         p_nome: nome.trim(),
         p_telefone: telTrim || null,
-        p_placa: cleanPlaca,
-        p_categoria: incluirVeiculo ? categoriaId : null,
+        p_placa: incluirVeiculo ? (cleanPlaca || null) : null,
+        p_categoria: incluirVeiculo ? categoriaFinal : null,
         p_marca: incluirVeiculo && marca.trim() ? marca.trim() : null,
         p_modelo: incluirVeiculo && modelo.trim() ? modelo.trim() : null,
         p_cor: incluirVeiculo && cor.trim() ? cor.trim() : null,
@@ -349,15 +357,17 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         {incluirVeiculo && (
           <div className="p-4 bg-graphite-900/60 border border-graphite-700 rounded-md flex flex-col gap-4">
             <div className="flex flex-col gap-1">
-              <label className="font-sans text-[13px] text-vapor-400 font-medium">Placa *</label>
+              <label className="font-sans text-[13px] text-vapor-400 font-medium">Placa (Opcional)</label>
               <Input
                 type="text"
-                placeholder="ABC-1234 ou ABC1D23"
+                placeholder="ABC-1234 ou ABC1D23 (ou deixe em branco)"
                 value={placa}
                 onChange={(e) => setPlaca(formatPlaca(e.target.value))}
-                required={incluirVeiculo}
                 className="min-h-[48px] font-mono text-[16px] uppercase tracking-wider text-amber-500 font-bold"
               />
+              <span className="font-sans text-[11px] text-vapor-400">
+                Se não souber agora, geramos um código provisório e você edita depois.
+              </span>
             </div>
 
             {/* Aviso de placa existente */}

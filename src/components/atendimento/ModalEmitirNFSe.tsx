@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { CampoNumerico } from '../ui/CampoNumerico';
 import { 
   Receipt, 
   AlertTriangle, 
@@ -311,14 +312,13 @@ export const ModalEmitirNFSe: React.FC<ModalEmitirNFSeProps> = ({
                   <label className="block text-[11px] font-mono text-vapor-400 uppercase mb-1">
                     Valor Total dos Serviços (R$) *
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
+                  <CampoNumerico
+                    prefix="R$"
                     value={valorFinal}
-                    onChange={(e) => setValorFinal(parseFloat(e.target.value) || 0)}
-                    required
-                    className="w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-amber-400 font-mono font-bold outline-none focus:border-amber-500"
+                    onChange={(val) => setValorFinal(val ?? 0)}
+                    placeholder="0,00"
+                    className="text-amber-400 font-bold"
+                    wrapperClassName="w-full min-h-[42px]"
                   />
                 </div>
               </div>

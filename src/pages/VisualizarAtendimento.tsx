@@ -401,10 +401,10 @@ export const VisualizarAtendimento: React.FC = () => {
               setNotaFiscal(nfeData);
             }
 
-            // Busca dados da configuração fiscal da oficina (CNPJ, Inscrição Municipal, etc.)
+            // Busca dados da configuração fiscal da oficina (CNPJ, Inscrição Municipal, etc.) sem colunas secretas
             const { data: cfgFiscal } = await supabase
               .from('tenant_config_fiscal')
-              .select('*')
+              .select('id, tenant_id, cnpj, razao_social, nome_fantasia, inscricao_municipal, cnae, cnae_padrao, item_lista_servico, aliquota_iss, regime_tributario, ambiente, proximo_rps, serie_rps, ativo')
               .maybeSingle();
 
             if (cfgFiscal) {
@@ -798,7 +798,7 @@ export const VisualizarAtendimento: React.FC = () => {
     if (!fiscal) {
       const { data: directCfg } = await supabase
         .from('tenant_config_fiscal')
-        .select('*')
+        .select('id, tenant_id, cnpj, razao_social, nome_fantasia, inscricao_municipal, cnae, cnae_padrao, item_lista_servico, aliquota_iss, regime_tributario, ambiente, proximo_rps, serie_rps, ativo')
         .maybeSingle();
       if (directCfg) {
         fiscal = directCfg;

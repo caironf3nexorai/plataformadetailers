@@ -297,8 +297,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refetchTenantData = async () => {
-    if (user) {
-      await fetchUserData(user);
+    const activeUser = user || (await supabase.auth.getSession()).data.session?.user || null;
+    if (activeUser) {
+      setUser(activeUser);
+      await fetchUserData(activeUser);
     }
   };
 

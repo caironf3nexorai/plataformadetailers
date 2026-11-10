@@ -5,9 +5,10 @@ import { useToast } from '../../contexts/ToastContext';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { CampoNumerico } from '../ui/CampoNumerico';
 import { formatarMoeda } from '../../utils/formatters';
 import { montarLinkWhatsapp } from '../../utils/whatsapp';
-import { Check, Sparkles, Send, Clock } from 'lucide-react';
+import { Check, Sparkles, Send } from 'lucide-react';
 
 interface ServicoOpcao {
   id: string;
@@ -332,14 +333,15 @@ export const ModalOrcamentoComplementar: React.FC<ModalOrcamentoComplementarProp
             <label className="text-xs font-semibold text-vapor-300 uppercase tracking-wide">
               Tempo Estimado (minutos)
             </label>
-            <div className="relative flex items-center">
-              <span className="absolute left-3 text-vapor-500 font-mono text-sm"><Clock size={16} /></span>
-              <Input
-                type="number"
+            <div className="flex items-center gap-2">
+              <CampoNumerico
+                integerOnly
+                allowNull
+                suffix="min"
                 placeholder="30"
                 value={duracaoMinutos}
-                onChange={(e) => setDuracaoMinutos(e.target.value)}
-                className="pl-9 font-mono min-h-[44px]"
+                onChange={(_, valStr) => setDuracaoMinutos(valStr)}
+                wrapperClassName="w-full min-h-[44px]"
               />
             </div>
           </div>

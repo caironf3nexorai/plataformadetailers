@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 import { Card } from '../../components/ui/Card';
@@ -17,6 +17,7 @@ export const CriarConta: React.FC = () => {
   const { signUp, refetchTenantData } = useAuth();
 
   const [nome, setNome] = useState('');
+  const [nomeOficina, setNomeOficina] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -29,6 +30,11 @@ export const CriarConta: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [aceitouTermos, setAceitouTermos] = useState(false);
+  const signedUpEmailRef = useRef<string | null>(null);
+
+  const isUUID = (val: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+  const isConviteEquipe = Boolean((conviteToken && isUUID(conviteToken)) || conviteOficina);
 
   // Buscar configuração central da plataforma sobre Trial de Cadastro
   useEffect(() => {
@@ -63,9 +69,6 @@ export const CriarConta: React.FC = () => {
     //   - Convites de EQUIPE: token UUID longo (ex: "550e8400-e29b-41d4-a716-446655440000")
     //   - Códigos de INDICAÇÃO: código curto alfanumérico (ex: "OFICINA123")
     // Só salva como indicação se o valor NÃO parecer um UUID (convite de equipe)
-    const isUUID = (val: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
-
     const codIndicacao = searchParams.get('indicacao')
       || (!searchParams.get('parceiro')
         ? (() => {
@@ -143,6 +146,11 @@ export const CriarConta: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
 
+    if (!isConviteEquipe && nomeOficina.trim().length < 2) {
+      setErrorMsg('Informe o nome da sua estética ou oficina (mínimo 2 caracteres).');
+      return;
+    }
+
     if (password.length < 6) {
       setErrorMsg('A senha deve ter pelo menos 6 caracteres.');
       return;
@@ -151,71 +159,126 @@ export const CriarConta: React.FC = () => {
     setLoading(true);
 
     try {
-      const { data, error } = await signUp(email, password, nome, telefone);
-      
-      if (error) {
-        setErrorMsg(translateAuthError(error));
-        setLoading(false);
+      const cleanEmail = email.trim().toLowerCase();
+      let activeSession =
+        signedUpEmailRef.current === cleanEmail
+          ? (await supabase.auth.getSession()).data.session
+          : null;
+
+      if (!activeSession) {
+        const { data, error } = await signUp(cleanEmail, password, nome.trim(), telefone.trim() || undefined);
+
+        if (error) {
+          setErrorMsg(translateAuthError(error));
+          setLoading(false);
+          return;
+        }
+
+        signedUpEmailRef.current = cleanEmail;
+
+        // Dispara o evento de conversão para o Meta/Google Ads imediatamente
+        trackCompleteRegistration({
+          method: 'email',
+          email: cleanEmail,
+          phone: telefone?.replace(/\D/g, ''),
+          convite: isConviteEquipe,
+          plano: campanhaInfo?.plano_nome || (trialCadastroAtivo ? 'Trial 15 Dias Pro' : 'Free'),
+        });
+
+        activeSession = data?.session || (await supabase.auth.getSession()).data.session;
+
+        if (!activeSession) {
+          // Fallback instantâneo: autentica com senha para garantir sessão ativa sem delay
+          try {
+            const { data: signInData } = await supabase.auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+            if (signInData?.session) {
+              activeSession = signInData.session;
+            }
+          } catch (errSignIn) {
+            console.warn('[CriarConta] Tentativa de login imediato pós-signup:', errSignIn);
+          }
+        }
+      }
+
+      if (isConviteEquipe && conviteToken) {
+        if (!activeSession) {
+          navigate(`/nova-oficina?convite=${conviteToken}`);
+          return;
+        }
+        const { error: aceitarErr } = await supabase.rpc('aceitar_convite', { p_token: conviteToken });
+        if (aceitarErr) {
+          console.error('[Aceitar Convite RPC Error no Signup]:', aceitarErr);
+          setErrorMsg(aceitarErr.message || 'Erro ao aceitar convite da oficina.');
+          setLoading(false);
+          return;
+        }
+        await refetchTenantData();
+        navigate('/');
         return;
       }
 
-      // Dispara o evento de ouro de conversão para o Meta/Google Ads imediatamente
-      trackCompleteRegistration({
-        method: 'email',
-        email: email.trim().toLowerCase(),
-        phone: telefone?.replace(/\D/g, ''),
-        convite: !!conviteToken,
-        plano: campanhaInfo?.plano_nome || (trialCadastroAtivo ? 'Trial 15 Dias Pro' : 'Free'),
-      });
+      // Cadastro em 1 passo: cria a oficina e entra direto no painel pré-configurado
+      if (activeSession) {
+        const parceiroCodigo =
+          searchParams.get('parceiro') ||
+          searchParams.get('ref') ||
+          searchParams.get('cupom') ||
+          localStorage.getItem('parceiro_codigo');
 
-      // Salva flag de garantia para redundância na tela de destino (/nova-oficina)
+        const rawConvite =
+          searchParams.get('indicacao') ||
+          (!searchParams.get('parceiro') && conviteToken && !isUUID(conviteToken) ? conviteToken : null) ||
+          localStorage.getItem('convite_codigo');
+        const conviteCodigo = rawConvite && !isUUID(rawConvite) ? rawConvite : null;
+
+        const campanhaCodigo = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
+
+        const { error: oficinaErr } = await supabase.rpc('criar_oficina', {
+          p_nome: nomeOficina.trim(),
+          p_cidade: null,
+          p_uf: null,
+          p_telefone: telefone.trim() || null,
+          p_codigo_indicacao: conviteCodigo ? conviteCodigo.trim().toUpperCase() : null,
+          p_codigo_parceiro: parceiroCodigo ? parceiroCodigo.trim().toUpperCase() : null,
+          p_codigo_campanha: campanhaCodigo ? campanhaCodigo.trim().toUpperCase() : null,
+        });
+
+        if (oficinaErr) {
+          console.error('[CriarConta criar_oficina RPC Error]:', oficinaErr);
+          setErrorMsg(oficinaErr.message || 'Conta criada, mas houve erro ao preparar sua oficina. Clique novamente para concluir.');
+          setLoading(false);
+          return;
+        }
+
+        localStorage.removeItem('convite_codigo');
+        localStorage.removeItem('parceiro_codigo');
+        localStorage.removeItem('campanha_codigo');
+        try {
+          sessionStorage.removeItem('pending_meta_complete_registration');
+        } catch {}
+
+        await refetchTenantData();
+        navigate('/');
+        return;
+      }
+
+      // Fallback caso o provedor exija confirmação prévia antes da criação do tenant
       try {
         sessionStorage.setItem(
           'pending_meta_complete_registration',
           JSON.stringify({
-            email: email.trim().toLowerCase(),
+            email: cleanEmail,
             timestamp: Date.now(),
           })
         );
       } catch {}
 
-      // Garante sessão ativa imediatamente (como a confirmação de e-mail foi desativada no Supabase)
-      let activeSession = data?.session || (await supabase.auth.getSession()).data.session;
-
-      if (!activeSession) {
-        // Fallback instantâneo: autentica com senha para garantir sessão ativa sem delay
-        try {
-          const { data: signInData } = await supabase.auth.signInWithPassword({
-            email: email.trim().toLowerCase(),
-            password,
-          });
-          if (signInData?.session) {
-            activeSession = signInData.session;
-          }
-        } catch (errSignIn) {
-          console.warn('[CriarConta] Tentativa de login imediato pós-signup:', errSignIn);
-        }
-      }
-
-      if (conviteToken) {
-        // Aceite automático do convite após cadastro
-        try {
-          const { error: aceitarErr } = await supabase.rpc('aceitar_convite', { p_token: conviteToken });
-          if (aceitarErr) {
-            console.error('[Aceitar Convite RPC Error no Signup]:', aceitarErr);
-          }
-          await refetchTenantData();
-          navigate('/');
-          return;
-        } catch (err) {
-          console.error('[Aceitar Convite Exception no Signup]:', err);
-        }
-      }
-
-      // Redireciona diretamente para a criação da oficina sem nenhuma tela intermediária
       const navParams = new URLSearchParams();
       const pCod = searchParams.get('parceiro') || localStorage.getItem('parceiro_codigo');
-      const cCod = searchParams.get('convite') || localStorage.getItem('convite_codigo');
+      const cCod = (conviteToken && !isUUID(conviteToken) ? conviteToken : null) || localStorage.getItem('convite_codigo');
       const campCod = searchParams.get('campanha') || localStorage.getItem('campanha_codigo');
       if (pCod) navParams.set('parceiro', pCod);
       if (cCod) navParams.set('convite', cCod);
@@ -273,6 +336,24 @@ export const CriarConta: React.FC = () => {
                   className="min-h-[48px]"
                 />
               </div>
+
+              {!isConviteEquipe && (
+                <div className="flex flex-col gap-1">
+                  <label className="font-sans text-[13px] text-vapor-400 font-medium">Nome da sua Estética / Oficina *</label>
+                  <Input
+                    type="text"
+                    placeholder="Ex: Studio Auto Detail"
+                    value={nomeOficina}
+                    onChange={(e) => setNomeOficina(e.target.value)}
+                    required
+                    disabled={loading}
+                    className="min-h-[48px]"
+                  />
+                  <span className="font-sans text-[11px] text-vapor-400">
+                    Sua oficina já entra pré-configurada com serviços e preços médios do mercado.
+                  </span>
+                </div>
+              )}
 
               <div className="flex flex-col gap-1">
                 <label className="font-sans text-[13px] text-vapor-400 font-medium">E-mail *</label>
@@ -384,7 +465,7 @@ export const CriarConta: React.FC = () => {
                 ) : (
                   <>
                     <UserPlus size={18} />
-                    {conviteToken ? 'Criar conta e Aceitar Convite' : 'Criar conta grátis'}
+                    {isConviteEquipe ? 'Criar conta e Aceitar Convite' : 'Criar conta grátis e Entrar'}
                   </>
                 )}
               </Button>

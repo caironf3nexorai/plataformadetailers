@@ -8,6 +8,7 @@ import { User, Car, Wrench, Plus, ChevronDown, Check, RotateCcw, ShieldCheck } f
 import { SeletorServicos, type ItemSelecionado } from '../servicos/SeletorServicos';
 import { AlertaErro } from '../ui/AlertaErro';
 import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
+import { CampoNumerico } from '../ui/CampoNumerico';
 
 interface ModalEntradaAvulsaProps {
   isOpen: boolean;
@@ -268,11 +269,9 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
   };
 
   // Atualizar Preço Customizado do Item
-  const handleAtualizarPrecoItem = (servico_id: string, novoPrecoStr: string) => {
-    const limpo = novoPrecoStr.replace(',', '.');
-    const valorNum = parseFloat(limpo);
+  const handleAtualizarPrecoItem = (servico_id: string, novoPreco: number | null) => {
     setSelectedItens((prev) =>
-      prev.map((it) => (it.servico_id === servico_id ? { ...it, preco: isNaN(valorNum) ? 0 : valorNum } : it))
+      prev.map((it) => (it.servico_id === servico_id ? { ...it, preco: novoPreco ?? 0 } : it))
     );
   };
 
@@ -384,21 +383,25 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
 
   // Confirmar Veículo Rápido em memória (salva apenas no registro da entrada)
   const handleCriarVeiculo = () => {
-    if (!novoVeiculoModelo.trim() || !novoVeiculoPlaca.trim()) return;
+    if (!novoVeiculoModelo.trim() && !novoVeiculoPlaca.trim()) return;
+    const rawPlaca = novoVeiculoPlaca.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const placaFinal = rawPlaca || `PROV-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+    const modeloFinal = novoVeiculoModelo.trim() || (rawPlaca ? `Veículo ${placaFinal}` : 'Veículo');
+    const categoriaIdFinal = selectedCategoriaObj?.id || categorias[0]?.id || null;
     const tempId = `temp_novo_veiculo_${Date.now()}`;
     const novoObj = {
       id: tempId,
-      modelo: novoVeiculoModelo.trim(),
-      placa: novoVeiculoPlaca.trim().toUpperCase(),
+      modelo: modeloFinal,
+      placa: placaFinal,
       cor: novoVeiculoCor.trim() || null,
-      categoria_id: selectedCategoriaObj?.id || null,
+      categoria_id: categoriaIdFinal,
       isTemp: true,
     };
     setNovoVeiculoData({
-      modelo: novoVeiculoModelo.trim(),
-      placa: novoVeiculoPlaca.trim().toUpperCase(),
+      modelo: modeloFinal,
+      placa: placaFinal,
       cor: novoVeiculoCor.trim() || null,
-      categoria_id: selectedCategoriaObj?.id || null,
+      categoria_id: categoriaIdFinal,
     });
     setVeiculos((prev) => [novoObj, ...prev.filter((v) => !v.isTemp)]);
     setSelectedVeiculo(tempId);
@@ -410,7 +413,8 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
 
   // Submeter Entrada Avulsa (com persistência atômica de cliente e veículo se forem novos)
   const handleSubmit = async () => {
-    if (!selectedCliente || !selectedVeiculo || selectedItens.length === 0 || !selectedCategoriaObj) {
+    const categoriaFinal = selectedCategoriaObj || categorias[0] || null;
+    if (!selectedCliente || !selectedVeiculo || selectedItens.length === 0 || !categoriaFinal) {
       setError('Por favor, preencha todos os campos obrigatórios e selecione ao menos um serviço.');
       return;
     }
@@ -447,7 +451,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
             modelo: novoVeiculoData.modelo,
             placa: novoVeiculoData.placa,
             cor: novoVeiculoData.cor || null,
-            categoria_id: selectedCategoriaObj?.id || null,
+            categoria_id: novoVeiculoData.categoria_id || categoriaFinal.id,
           })
           .select('id')
           .single();
@@ -468,7 +472,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
           p_cliente: clienteIdFinal,
           p_veiculo: veiculoIdFinal,
           p_itens: payloadItens,
-          p_categoria: selectedCategoriaObj.id,
+          p_categoria: categoriaFinal.id,
           p_observacoes: null,
           p_termo_garantia_id: selectedTermoGarantia || null,
         });
@@ -679,7 +683,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <input
                     type="text"
-                    placeholder="Placa (ex: NKT4469)"
+                    placeholder="Placa (Opcional · ex: ABC1D23)"
                     value={novoVeiculoPlaca}
                     onChange={(e) => setNovoVeiculoPlaca(e.target.value)}
                     className="bg-graphite-950 border border-graphite-700 rounded p-2.5 text-vapor-100 font-sans text-[14px] uppercase"
@@ -694,7 +698,7 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="secondary" onClick={() => setShowNovoVeiculo(false)}>Cancelar</Button>
-                  <Button type="button" variant="primary" onClick={handleCriarVeiculo} disabled={!novoVeiculoModelo.trim() || !novoVeiculoPlaca.trim()}>Salvar Veículo</Button>
+                  <Button type="button" variant="primary" onClick={handleCriarVeiculo} disabled={!novoVeiculoModelo.trim() && !novoVeiculoPlaca.trim()}>Salvar Veículo</Button>
                 </div>
               </div>
             ) : veiculos.length === 0 ? (
@@ -786,16 +790,14 @@ export const ModalEntradaAvulsa: React.FC<ModalEntradaAvulsaProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 w-32 shrink-0">
-                        <span className="text-xs font-mono text-vapor-400">R$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={it.preco !== undefined ? it.preco : ''}
-                          onChange={(e) => handleAtualizarPrecoItem(it.servico_id, e.target.value)}
-                          className="w-full bg-graphite-950 border border-graphite-700 rounded px-2 py-1 text-right font-mono text-xs text-vapor-100 font-bold outline-none focus:border-amber-500"
-                        />
-                      </div>
+                      <CampoNumerico
+                        prefix="R$"
+                        value={it.preco ?? 0}
+                        onChange={(val) => handleAtualizarPrecoItem(it.servico_id, val)}
+                        align="right"
+                        wrapperClassName="w-32 shrink-0"
+                        className="px-2 py-1 text-xs font-bold"
+                      />
                     </div>
                   ))}
                 </div>

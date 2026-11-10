@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { CampoNumerico } from '../ui/CampoNumerico';
 import { supabase } from '../../lib/supabase';
 import type { RegraRetorno } from '../../types/oportunidades';
 import { 
@@ -248,13 +249,12 @@ export const ModalConfigRegrasRetorno: React.FC<ModalConfigRegrasRetornoProps> =
                   Prazo de Retorno (Dias) *
                 </label>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={1}
-                    required
+                  <CampoNumerico
+                    integerOnly
                     value={novaRegra.dias_retorno}
-                    onChange={e => setNovaRegra({ ...novaRegra, dias_retorno: parseInt(e.target.value, 10) || 30 })}
-                    className="w-24 bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:border-amber-500"
+                    onChange={(val) => setNovaRegra({ ...novaRegra, dias_retorno: val && val >= 1 ? val : 30 })}
+                    wrapperClassName="w-24 bg-graphite-900"
+                    className="font-bold text-white px-2.5 py-1.5 text-xs"
                   />
                   <span className="text-xs text-vapor-400">dias (~{Math.round(novaRegra.dias_retorno / 30)} meses)</span>
                 </div>
@@ -387,12 +387,13 @@ export const ModalConfigRegrasRetorno: React.FC<ModalConfigRegrasRetornoProps> =
                         Prazo de Retorno:
                       </label>
                       <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={1}
+                        <CampoNumerico
+                          integerOnly
+                          align="center"
                           value={regra.dias_retorno}
-                          onChange={e => handleAtualizarRegra(regra.id, 'dias_retorno', parseInt(e.target.value, 10) || 30)}
-                          className="w-20 bg-graphite-950 border border-graphite-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono font-bold text-center focus:outline-none focus:border-amber-500"
+                          onChange={(val) => handleAtualizarRegra(regra.id, 'dias_retorno', val && val >= 1 ? val : 30)}
+                          wrapperClassName="w-20"
+                          className="font-bold text-white px-2 py-1 text-xs"
                         />
                         <span className="text-xs text-vapor-300">
                           dias (~{Math.round(regra.dias_retorno / 30)} meses)
