@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
+import { useAdminAuth } from '../../components/admin/AdminGuard';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { Award, Plus, DollarSign, Upload, CheckCircle2, Search, Ticket, Zap, Pencil, X } from 'lucide-react';
+import { Award, Plus, DollarSign, Upload, CheckCircle2, Search, Ticket, Zap, Pencil, X, Trash2, AlertTriangle } from 'lucide-react';
+import { calcularImpactoExclusaoParceiro } from '../../utils/adminContas';
 
 interface ParceiroItem {
   id: string;
@@ -26,6 +29,7 @@ interface ParceiroItem {
 
 interface ComissãoItem {
   id: string;
+  parceiro_id?: string;
   competencia: string;
   valor_base: number;
   valor_comissao: number;
@@ -56,6 +60,8 @@ interface UsuarioPlataformaItem {
 
 export const AdminParceiros: React.FC = () => {
   const { showSuccess, showError } = useToast();
+  const { adminLevel } = useAdminAuth();
+  const isReadOnly = adminLevel === 'suporte';
 
   const [parceiros, setParceiros] = useState<ParceiroItem[]>([]);
   const [comissoes, setComissoes] = useState<ComissãoItem[]>([]);
@@ -107,6 +113,11 @@ export const AdminParceiros: React.FC = () => {
   const [editAtivo, setEditAtivo] = useState(true);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
+  // Modal Excluir Parceiro
+  const [parceiroParaExcluir, setParceiroParaExcluir] = useState<ParceiroItem | null>(null);
+  const [desativarCuponsAoExcluir, setDesativarCuponsAoExcluir] = useState(true);
+  const [excluindoParceiro, setExcluindoParceiro] = useState(false);
+
   // Pagamento de Competência Manual
   const [tenantIdPagamento, setTenantIdPagamento] = useState('');
   const [competenciaInput, setCompetenciaInput] = useState(() => {
@@ -132,6 +143,7 @@ export const AdminParceiros: React.FC = () => {
         .from('parceiro_comissoes')
         .select(`
           id,
+          parceiro_id,
           competencia,
           valor_base,
           valor_comissao,
@@ -348,6 +360,67 @@ export const AdminParceiros: React.FC = () => {
     }
   };
 
+  const handleDesvincularOficina = async (oficina: OficinaItem) => {
+    if (isReadOnly) return;
+    if (!confirm(`Desvincular a oficina "${oficina.nome}" deste parceiro?`)) return;
+
+    try {
+      const { error } = await supabase.rpc('admin_vincular_oficina_parceiro', {
+        p_tenant_id: oficina.id,
+        p_parceiro_id: null,
+      });
+      if (error) throw error;
+
+      showSuccess(`Oficina "${oficina.nome}" desvinculada do parceiro.`);
+      await carregarDados();
+    } catch (err: any) {
+      console.error('Erro ao desvincular oficina:', err);
+      showError(err.message || 'Erro ao desvincular oficina');
+    }
+  };
+
+  const handleAbrirExclusaoParceiro = (p: ParceiroItem) => {
+    if (isReadOnly) return;
+    setParceiroParaExcluir(p);
+    setDesativarCuponsAoExcluir(true);
+  };
+
+  const handleConfirmarExclusaoParceiro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!parceiroParaExcluir || isReadOnly) return;
+
+    setExcluindoParceiro(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_excluir_parceiro', {
+        p_parceiro_id: parceiroParaExcluir.id,
+        p_desativar_cupons: desativarCuponsAoExcluir,
+      });
+
+      if (error) throw error;
+
+      const oficinasMsg = data?.oficinas_desvinculadas
+        ? ` ${data.oficinas_desvinculadas} oficina(s) desvinculada(s).`
+        : '';
+      const comissoesMsg = data?.comissoes_removidas
+        ? ` ${data.comissoes_removidas} comissão(ões) removida(s).`
+        : '';
+
+      showSuccess(`Parceiro "${parceiroParaExcluir.nome}" (${parceiroParaExcluir.codigo}) excluído com sucesso!${oficinasMsg}${comissoesMsg}`);
+
+      if (parceiroIdPagamento === parceiroParaExcluir.id) {
+        setParceiroIdPagamento('');
+        setTenantIdPagamento('');
+      }
+      setParceiroParaExcluir(null);
+      await carregarDados();
+    } catch (err: any) {
+      console.error('Erro ao excluir parceiro:', err);
+      showError(err.message || 'Erro ao excluir parceiro comercial');
+    } finally {
+      setExcluindoParceiro(false);
+    }
+  };
+
   const handleCriarParceiro = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim() || !email.trim() || !codigo.trim()) {
@@ -500,8 +573,9 @@ export const AdminParceiros: React.FC = () => {
         <Button
           type="button"
           variant="primary"
+          disabled={isReadOnly}
           onClick={() => setModalNovoParceiro(true)}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 disabled:opacity-50"
         >
           <Plus size={18} />
           <span>Novo Parceiro</span>
@@ -657,16 +731,17 @@ export const AdminParceiros: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => handleRegistrarPagamentoOficina()}
-              disabled={registrandoPagamento || !tenantIdPagamento}
-              className="w-full text-xs"
+              disabled={isReadOnly || registrandoPagamento || !tenantIdPagamento}
+              className="w-full text-xs disabled:opacity-40"
             >
               {registrandoPagamento ? 'Registrando...' : 'Confirmar Pagamento'}
             </Button>
             <Button
               type="button"
               variant="primary"
+              disabled={isReadOnly}
               onClick={handleGerarComissoesMensais}
-              className="w-full text-xs bg-indigo-600 hover:bg-indigo-500 text-white border-none"
+              className="w-full text-xs bg-indigo-600 hover:bg-indigo-500 text-white border-none disabled:opacity-40"
             >
               Apurar Comissões
             </Button>
@@ -768,29 +843,42 @@ export const AdminParceiros: React.FC = () => {
                                   <span className="text-vapor-200 font-medium truncate max-w-[130px]">
                                     {of.nome}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setTenantIdPagamento(of.id);
-                                      handleRegistrarPagamentoOficina(of.id);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition"
-                                    title="Confirmar pagamento de competência para esta oficina"
-                                  >
-                                    <Zap size={10} />
-                                    <span>Pgto</span>
-                                  </button>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      disabled={isReadOnly}
+                                      onClick={() => {
+                                        setTenantIdPagamento(of.id);
+                                        handleRegistrarPagamentoOficina(of.id);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition disabled:opacity-40"
+                                      title="Confirmar pagamento de competência para esta oficina"
+                                    >
+                                      <Zap size={10} />
+                                      <span>Pgto</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isReadOnly}
+                                      onClick={() => handleDesvincularOficina(of)}
+                                      className="inline-flex items-center justify-center p-1 rounded bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/20 text-[10px] transition disabled:opacity-40"
+                                      title={`Desvincular ${of.nome} deste parceiro`}
+                                    >
+                                      <X size={11} />
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           )}
                           <button
                             type="button"
+                            disabled={isReadOnly}
                             onClick={() => {
                               setParceiroVinculoTarget(p);
                               setTenantIdVinculo('');
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-semibold transition"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-semibold transition disabled:opacity-40"
                           >
                             <Plus size={12} />
                             <span>Atribuir Oficina</span>
@@ -817,15 +905,29 @@ export const AdminParceiros: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => handleAbrirEdicao(p)}
-                          className="px-2.5 py-1 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-1 ml-auto"
-                        >
-                          <Pencil size={13} />
-                          <span>Editar</span>
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={isReadOnly}
+                            onClick={() => handleAbrirEdicao(p)}
+                            className="px-2.5 py-1 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-1 disabled:opacity-40"
+                          >
+                            <Pencil size={13} />
+                            <span>Editar</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            disabled={isReadOnly}
+                            onClick={() => handleAbrirExclusaoParceiro(p)}
+                            className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/25 rounded-lg flex items-center gap-1 disabled:opacity-40"
+                            title="Excluir parceiro comercial"
+                          >
+                            <Trash2 size={13} />
+                            <span>Excluir</span>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1403,6 +1505,120 @@ export const AdminParceiros: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal Confirmar Exclusão de Parceiro */}
+      {parceiroParaExcluir && createPortal(
+        (() => {
+          const impacto = calcularImpactoExclusaoParceiro(parceiroParaExcluir.id, oficinas, comissoes);
+          return (
+            <div
+              className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-150"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !excluindoParceiro) {
+                  setParceiroParaExcluir(null);
+                }
+              }}
+            >
+              <div className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl shadow-rose-950/50 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400">
+                      <Trash2 size={18} />
+                    </div>
+                    <div>
+                      <h3 className="font-heading text-base font-bold text-white uppercase tracking-wide">
+                        Excluir Parceiro Comercial
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Código: <span className="font-mono text-amber-400 font-bold">{parceiroParaExcluir.codigo}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={excluindoParceiro}
+                    onClick={() => setParceiroParaExcluir(null)}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition disabled:opacity-50"
+                    aria-label="Fechar"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-1 text-xs">
+                  <div className="text-white font-semibold">{parceiroParaExcluir.nome}</div>
+                  <div className="text-slate-400 font-mono">{parceiroParaExcluir.email}</div>
+                </div>
+
+                <div className="p-3.5 bg-rose-950/30 border border-rose-500/30 rounded-xl space-y-2 text-xs text-slate-200">
+                  <div className="font-bold text-rose-300 flex items-center gap-1.5">
+                    <AlertTriangle size={14} className="text-rose-400 shrink-0" />
+                    <span>Resumo do impacto ao excluir este parceiro:</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-300 pl-0.5">
+                    <li>
+                      <strong>{impacto.oficinasCount}</strong> oficina(s) vinculada(s) serão apenas desvinculadas
+                      <span className="text-slate-400"> (os dados das oficinas NÃO são apagados).</span>
+                    </li>
+                    <li>
+                      <strong>{impacto.comissoesCount}</strong> comissão(ões) registrada(s) (total R${' '}
+                      {impacto.valorTotalComissoes.toFixed(2)}) serão removidas deste histórico.
+                      {impacto.comissoesPagasCount > 0 && (
+                        <span className="text-amber-300 font-semibold block pl-4 mt-0.5">
+                          Atenção: {impacto.comissoesPagasCount} comissão(ões) já consta(m) como PAGA(S).
+                        </span>
+                      )}
+                    </li>
+                    <li>
+                      A conta de login do usuário no Supabase (caso tenha) permanecerá intacta; se também quiser remover o login, acesse <strong>Contas (Auth)</strong>.
+                    </li>
+                  </ul>
+                </div>
+
+                <form onSubmit={handleConfirmarExclusaoParceiro} className="space-y-4">
+                  <label className="flex items-start gap-2.5 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition">
+                    <input
+                      type="checkbox"
+                      checked={desativarCuponsAoExcluir}
+                      onChange={(e) => setDesativarCuponsAoExcluir(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 rounded bg-slate-900 border-slate-700 text-rose-500 focus:ring-0 cursor-pointer"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-slate-200 block">
+                        Desativar cupons vinculados a este parceiro
+                      </span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">
+                        Desatrelará e desativará na Central de Cupons qualquer cupom ligado ao parceiro.
+                      </span>
+                    </div>
+                  </label>
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setParceiroParaExcluir(null)}
+                      disabled={excluindoParceiro}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      disabled={excluindoParceiro}
+                      className="bg-rose-600 hover:bg-rose-500 text-white border-none flex items-center gap-1.5"
+                    >
+                      <Trash2 size={14} />
+                      <span>{excluindoParceiro ? 'Excluindo...' : 'Confirmar Exclusão'}</span>
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          );
+        })(),
+        document.body
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAdminAuth } from '../../components/admin/AdminGuard';
 import { 
   Search, 
   Filter, 
@@ -20,6 +21,7 @@ import {
   Award,
   Trash2,
   UserX,
+  UserCheck,
   Save,
   MessageCircle,
   Gift,
@@ -86,6 +88,8 @@ export const AdminOficinas: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
   const { trocarTenant } = useAuth();
+  const { adminLevel } = useAdminAuth();
+  const isReadOnly = adminLevel === 'suporte';
 
   const handleAcessarOficina = (id: string) => {
     trocarTenant(id);
@@ -322,6 +326,8 @@ export const AdminOficinas: React.FC = () => {
 
   const handleConfirmarPurgarEmail = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
+
     const cleanEmail = emailParaPurgar.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       showError('Informe um e-mail válido para liberar.');
@@ -330,13 +336,16 @@ export const AdminOficinas: React.FC = () => {
 
     setPurgandoEmail(true);
     try {
-      const { error } = await supabase.rpc('admin_purgar_usuario_por_email', {
+      const { data, error } = await supabase.rpc('admin_purgar_usuario_por_email', {
         p_email: cleanEmail,
       });
 
       if (error) throw error;
 
-      showSuccess(`E-mail "${cleanEmail}" liberado com sucesso do banco de dados e do auth.users!`);
+      showSuccess(
+        data?.mensagem ||
+          `E-mail "${cleanEmail}" liberado com sucesso do banco de dados e do auth.users!`
+      );
       setEmailParaPurgar('');
       setModalPurgarEmailOpen(false);
       fetchTenants();
@@ -349,6 +358,7 @@ export const AdminOficinas: React.FC = () => {
   };
 
   const handleAbrirModalExcluir = (id: string, nome: string, slug: string) => {
+    if (isReadOnly) return;
     setTenantParaExcluir({ id, nome, slug });
     setConfirmacaoNome('');
     setExcluirAuthUsers(true);
@@ -357,7 +367,7 @@ export const AdminOficinas: React.FC = () => {
 
   const handleConfirmarExclusao = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantParaExcluir) return;
+    if (!tenantParaExcluir || isReadOnly) return;
 
     if (confirmacaoNome.trim().toLowerCase() !== tenantParaExcluir.nome.trim().toLowerCase()) {
       showError(`Digite exatamente "${tenantParaExcluir.nome}" para confirmar.`);
@@ -719,14 +729,25 @@ export const AdminOficinas: React.FC = () => {
             Visualização agregada do ecossistema de oficinas parceiras e gestão de planos.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
+            onClick={() => navigate('/admin/contas')}
+            className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+            title="Ver todas as contas no Supabase Auth (órfãs, equipe extra, parceiros e admins)"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Contas Auth</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isReadOnly}
             onClick={() => {
               setEmailParaPurgar('');
               setModalPurgarEmailOpen(true);
             }}
-            className="flex items-center space-x-1.5 text-xs font-mono font-bold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
+            className="flex items-center space-x-1.5 text-xs font-mono font-bold text-red-400 hover:text-red-300 disabled:opacity-40 disabled:cursor-not-allowed bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
             title="Exclui um e-mail do auth.users e de todas as tabelas para liberar novo cadastro"
           >
             <UserX className="w-3.5 h-3.5" />
@@ -943,7 +964,8 @@ export const AdminOficinas: React.FC = () => {
 
                         <button
                           onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
-                          className="inline-flex items-center space-x-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 px-2.5 py-1 rounded text-xs font-medium border border-red-500/30 transition cursor-pointer"
+                          disabled={isReadOnly}
+                          className="inline-flex items-center space-x-1 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-red-400 hover:text-red-300 px-2.5 py-1 rounded text-xs font-medium border border-red-500/30 transition cursor-pointer"
                           title="Excluir oficina e liberar e-mail"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1087,8 +1109,9 @@ export const AdminOficinas: React.FC = () => {
 
                       <button
                         type="button"
+                        disabled={isReadOnly}
                         onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
-                        className="w-full bg-red-500/10 hover:bg-red-500/20 active:scale-95 text-red-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-red-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer col-span-2 sm:col-span-1"
+                        className="w-full bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 text-red-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-red-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer col-span-2 sm:col-span-1"
                         title="Excluir oficina"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

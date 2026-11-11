@@ -66,6 +66,7 @@ const AdminGuard = lazyWithRetry(() => import('./components/admin/AdminGuard').t
 const AdminErrorBoundary = lazyWithRetry(() => import('./components/admin/AdminErrorBoundary').then(m => ({ default: m.AdminErrorBoundary })));
 const AdminLayout = lazyWithRetry(() => import('./components/admin/AdminLayout').then(m => ({ default: m.AdminLayout })));
 const AdminOficinas = lazyWithRetry(() => import('./pages/admin/AdminOficinas').then(m => ({ default: m.AdminOficinas })));
+const AdminContasAuth = lazyWithRetry(() => import('./pages/admin/AdminContasAuth').then(m => ({ default: m.AdminContasAuth })));
 const AdminAssinaturas = lazyWithRetry(() => import('./pages/admin/AdminAssinaturas').then(m => ({ default: m.AdminAssinaturas })));
 const AdminPlanos = lazyWithRetry(() => import('./pages/admin/AdminPlanos').then(m => ({ default: m.AdminPlanos })));
 const AdminPermissoes = lazyWithRetry(() => import('./pages/admin/AdminPermissoes').then(m => ({ default: m.AdminPermissoes })));
@@ -144,6 +145,7 @@ function App() {
             >
               <Route index element={<Navigate to="/admin/oficinas" replace />} />
               <Route path="oficinas" element={<AdminOficinas />} />
+              <Route path="contas" element={<AdminContasAuth />} />
               <Route path="comunicados" element={<AdminComunicados />} />
               <Route path="campanhas" element={<AdminCampanhas />} />
               <Route path="cupons" element={<AdminCupons />} />
