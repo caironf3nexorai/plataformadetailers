@@ -137,5 +137,29 @@ describe('onboarding progress calculation', () => {
       tempoFinal: 62,
     });
   });
+
+  it('informa de forma honesta quando serviços carregados ainda não possuem preços definidos', () => {
+    const semPrecos = calcularProgressoOnboarding({
+      ...baseInput,
+      servicosCount: 15,
+      servicosComPrecoCount: 0,
+    });
+    expect(semPrecos.etapa1Texto).toBe(
+      'Conta criada e 15 serviços padrão carregados (defina os preços na Matriz)'
+    );
+    const etapa4SemPreco = semPrecos.etapas.find((e) => e.id === 'etapa_4');
+    expect(etapa4SemPreco?.subtitulo).toContain('Defina os preços iniciais');
+
+    const comPrecos = calcularProgressoOnboarding({
+      ...baseInput,
+      servicosCount: 15,
+      servicosComPrecoCount: 15,
+    });
+    expect(comPrecos.etapa1Texto).toBe(
+      'Conta criada e 15 serviços padrão carregados (com valores médios sugeridos)'
+    );
+    const etapa4ComPreco = comPrecos.etapas.find((e) => e.id === 'etapa_4');
+    expect(etapa4ComPreco?.subtitulo).toContain('médias nacionais');
+  });
 });
 

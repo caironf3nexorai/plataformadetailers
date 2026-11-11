@@ -42,6 +42,7 @@ import { ModalTutorialVideoCurto } from './ModalTutorialVideoCurto';
 interface RawStatusRpc {
   plano?: string;
   servicos_count?: number;
+  servicos_com_preco_count?: number;
   servicos_confirmados_count?: number;
   orcamentos_count?: number;
   termos_garantia_count?: number;
@@ -135,6 +136,10 @@ export const WidgetProgressoOnboarding: React.FC = () => {
         setStatusInput({
           plano: raw.plano || tenant.plano || 'free',
           servicosCount: Number(raw.servicos_count ?? 0),
+          servicosComPrecoCount:
+            raw.servicos_com_preco_count !== undefined
+              ? Number(raw.servicos_com_preco_count)
+              : undefined,
           servicosConfirmadosCount: Number(raw.servicos_confirmados_count ?? 0),
           orcamentosCount: Number(raw.orcamentos_count ?? 0),
           termosGarantiaCount: Number(raw.termos_garantia_count ?? 0),
@@ -150,19 +155,18 @@ export const WidgetProgressoOnboarding: React.FC = () => {
         return;
       }
 
-      // Fallback resiliente caso a migração 0171 ainda não tenha sido executada no banco
-      const [resServs, resConfirmados, resOrcs, resTermos, resMembros] = await Promise.all([
+      // Fallback resiliente caso a migração 0171/0175 ainda não tenha sido executada no banco
+      const [resServs, resPrecos, resOrcs, resTermos, resMembros] = await Promise.all([
         supabase
           .from('servicos')
-          .select('id', { count: 'exact', head: true })
+          .select('id, sob_consulta')
           .eq('tenant_id', tenant.id)
           .eq('ativo', true),
         supabase
           .from('servico_precos')
-          .select('servico_id')
+          .select('servico_id, duracao_confirmada, preco_base')
           .eq('tenant_id', tenant.id)
-          .eq('ativo', true)
-          .eq('duracao_confirmada', true),
+          .eq('ativo', true),
         supabase
           .from('orcamentos')
           .select('id', { count: 'exact', head: true })
@@ -179,9 +183,34 @@ export const WidgetProgressoOnboarding: React.FC = () => {
           .in('status', ['ativo', 'convidado']),
       ]);
 
+      const servsAtivos = resServs.data || [];
+      const servsAtivosIds = new Set(servsAtivos.map((s: any) => s.id));
+      const precosAtivos = (resPrecos.data || []).filter((p: any) =>
+        servsAtivosIds.has(p.servico_id)
+      );
+
       const servicosConfirmadosDistintos = new Set(
-        (resConfirmados.data || []).map((row: any) => row.servico_id).filter(Boolean)
+        precosAtivos
+          .filter((row: any) => Boolean(row.duracao_confirmada))
+          .map((row: any) => row.servico_id)
+          .filter(Boolean)
       ).size;
+
+      const idsComPrecoPositivo = new Set(
+        precosAtivos
+          .filter(
+            (row: any) =>
+              row.preco_base !== null &&
+              row.preco_base !== undefined &&
+              Number(row.preco_base) > 0
+          )
+          .map((row: any) => row.servico_id)
+          .filter(Boolean)
+      );
+
+      const servicosComPrecoDistintos = servsAtivos.filter(
+        (s: any) => Boolean(s.sob_consulta) || idsComPrecoPositivo.has(s.id)
+      ).length;
 
       const mergedFlags = mergeOnboardingFlags(flagsTenant, flagsLocais);
       const temLogo = Boolean(
@@ -200,7 +229,8 @@ export const WidgetProgressoOnboarding: React.FC = () => {
 
       setStatusInput({
         plano: tenant.plano || 'free',
-        servicosCount: Number(resServs.count ?? 0),
+        servicosCount: servsAtivos.length,
+        servicosComPrecoCount: servicosComPrecoDistintos,
         servicosConfirmadosCount: servicosConfirmadosDistintos,
         orcamentosCount: Number(resOrcs.count ?? 0),
         termosGarantiaCount: Number(resTermos.count ?? 0),

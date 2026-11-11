@@ -24,6 +24,7 @@ export type OnboardingProgressFlags = {
 export interface StatusOnboardingInput {
   plano?: string;
   servicosCount: number;
+  servicosComPrecoCount?: number;
   servicosConfirmadosCount: number;
   orcamentosCount: number;
   termosGarantiaCount: number;
@@ -293,7 +294,12 @@ export function calcularProgressoOnboarding(
       numero: 4,
       fase: 1,
       titulo: 'Revisar Preços e Serviços da Região',
-      subtitulo: 'Os serviços vieram com médias nacionais — ajuste à sua tabela',
+      subtitulo:
+        input.servicosCount === 0
+          ? 'Cadastre seus serviços e defina os valores na matriz de preços'
+          : input.servicosComPrecoCount === 0
+            ? 'Defina os preços iniciais dos seus serviços ou carregue as médias sugeridas'
+            : 'Os serviços vieram com médias nacionais — ajuste à sua tabela',
       rota: '/servicos',
       auto: servicosAuto,
     },
@@ -365,9 +371,14 @@ export function calcularProgressoOnboarding(
       ? '1 serviço padrão carregado'
       : `${input.servicosCount} serviços padrão carregados`;
 
+  const temPrecosDefinidosNoCatalogo =
+    input.servicosComPrecoCount === undefined ? true : input.servicosComPrecoCount > 0;
+
   const etapa1Texto =
     input.servicosCount > 0
-      ? `Conta criada e ${servicosLabel} (com valores médios sugeridos)`
+      ? temPrecosDefinidosNoCatalogo
+        ? `Conta criada e ${servicosLabel} (com valores médios sugeridos)`
+        : `Conta criada e ${servicosLabel} (defina os preços na Matriz)`
       : 'Conta criada e estrutura base pré-configurada';
 
   return {

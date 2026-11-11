@@ -16,7 +16,84 @@ export type PrecoItem =
   | string
   | null
   | undefined
-  | { preco_base?: number | string | null; preco?: number | string | null; valor?: number | string | null };
+  | {
+      preco_base?: number | string | null;
+      preco?: number | string | null;
+      valor?: number | string | null;
+      duracao_confirmada?: boolean | null;
+      ativo?: boolean | null;
+    };
+
+/**
+ * Extrai um número de preço válido e estritamente positivo (> 0) de um item de preço.
+ */
+export const extrairPrecoPositivo = (item: PrecoItem): number | null => {
+  if (item === null || item === undefined) return null;
+
+  let valorBruto: any = item;
+  if (typeof item === 'object') {
+    if (item.ativo === false) return null;
+    valorBruto = item.preco_base ?? item.preco ?? item.valor;
+  }
+
+  if (valorBruto === null || valorBruto === undefined || valorBruto === '') return null;
+
+  const num =
+    typeof valorBruto === 'number'
+      ? valorBruto
+      : Number(String(valorBruto).trim().replace(',', '.'));
+
+  if (!isNaN(num) && isFinite(num) && num > 0) {
+    return num;
+  }
+
+  return null;
+};
+
+/**
+ * Retorna true quando o item/célula possui um preço definido positivo (> 0).
+ */
+export const isPrecoDefinido = (item: PrecoItem): boolean => {
+  return extrairPrecoPositivo(item) !== null;
+};
+
+/**
+ * Retorna true quando um serviço (não "sob consulta") possui pelo menos um
+ * preço sugerido positivo (> 0) ainda com confirmação de duração/tabela pendente.
+ */
+export const servicoTemPrecoSugeridoPendente = (
+  precos: PrecoItem[] | null | undefined,
+  sobConsulta: boolean = false
+): boolean => {
+  if (sobConsulta || !precos || !Array.isArray(precos)) {
+    return false;
+  }
+
+  return precos.some((item) => {
+    if (!item || typeof item !== 'object') return false;
+    if (item.ativo === false) return false;
+    if (item.duracao_confirmada) return false;
+    return isPrecoDefinido(item);
+  });
+};
+
+/**
+ * Retorna true quando um serviço (não "sob consulta") não possui nenhum preço
+ * válido (> 0) definido em suas categorias ativas.
+ */
+export const servicoSemPrecosDefinidos = (
+  precos: PrecoItem[] | null | undefined,
+  sobConsulta: boolean = false
+): boolean => {
+  if (sobConsulta) {
+    return false;
+  }
+  if (!precos || !Array.isArray(precos) || precos.length === 0) {
+    return true;
+  }
+
+  return !precos.some((item) => isPrecoDefinido(item));
+};
 
 /**
  * Retorna a faixa de preço descritiva para exibição no catálogo ou lista.
@@ -41,20 +118,8 @@ export const formatFaixaPreco = (
   const validPrices: number[] = [];
 
   for (const item of precos) {
-    if (item === null || item === undefined) continue;
-
-    let valorBruto: any = item;
-    if (typeof item === 'object') {
-      valorBruto = item.preco_base ?? item.preco ?? item.valor;
-    }
-
-    if (valorBruto === null || valorBruto === undefined || valorBruto === '') continue;
-
-    const num = typeof valorBruto === 'number'
-      ? valorBruto
-      : Number(String(valorBruto).replace(',', '.'));
-
-    if (!isNaN(num) && isFinite(num) && num > 0) {
+    const num = extrairPrecoPositivo(item);
+    if (num !== null) {
       validPrices.push(num);
     }
   }

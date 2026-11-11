@@ -16,8 +16,13 @@ import {
   DollarSign,
   Pencil,
   CheckCircle2,
+  AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
-import { marcarPassoOnboarding } from '../../utils/onboarding';
+import {
+  marcarPassoOnboarding,
+  ONBOARDING_EVENT_PROGRESSO,
+} from '../../utils/onboarding';
 import {
   parsePrecoMatrizInput,
   normalizarDuracaoMinutosMatriz,
@@ -58,6 +63,7 @@ export const MatrizPrecos: React.FC = () => {
   // Rastreia quais células foram modificadas
   const [modified, setModified] = useState<Record<string, Record<string, boolean>>>({});
   const [saving, setSaving] = useState(false);
+  const [preenchendoSugeridos, setPreenchendoSugeridos] = useState(false);
   const [errorMsg, setErrorMsg] = useState<ErroTraduzido | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -304,9 +310,58 @@ export const MatrizPrecos: React.FC = () => {
     }
   };
 
-  const temValoresSugeridos = services.some((s) =>
-    categories.some((c) => !matriz[s.id]?.[c.id]?.duracao_confirmada)
+  const temValoresSugeridos = services.some(
+    (s) =>
+      !s.sob_consulta &&
+      categories.some((c) => {
+        const cell = matriz[s.id]?.[c.id];
+        const precoNum = parsePrecoMatrizInput(cell?.preco_base, false);
+        return Boolean(cell && !cell.duracao_confirmada && precoNum !== null && precoNum > 0);
+      })
   );
+
+  const servicosSemPrecoCount = services.filter(
+    (s) =>
+      !s.sob_consulta &&
+      categories.length > 0 &&
+      !categories.some((c) => {
+        const precoNum = parsePrecoMatrizInput(matriz[s.id]?.[c.id]?.preco_base, false);
+        return precoNum !== null && precoNum > 0;
+      })
+  ).length;
+
+  const servicosComPrecoDefinivelCount = services.filter((s) => !s.sob_consulta).length;
+
+  const handleCarregarPrecosSugeridos = async () => {
+    if (!tenant?.id) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setPreenchendoSugeridos(true);
+    try {
+      const { error } = await supabase.rpc('preencher_precos_sugeridos_tenant', {
+        p_tenant_id: tenant.id,
+      });
+      if (error) throw error;
+
+      await fetchData({ preserveMessages: true });
+      setSuccessMsg(
+        'Preços médios sugeridos de mercado carregados! Ajuste os valores da sua região e clique em Salvar Alterações quando quiser.'
+      );
+      try {
+        await refetchTenantData();
+        window.dispatchEvent(new Event(ONBOARDING_EVENT_PROGRESSO));
+      } catch {
+        // Não bloqueia se apenas o refresh de contexto oscilar
+      }
+    } catch (err: any) {
+      console.error('[MatrizPrecos Preencher Sugeridos Error]:', err);
+      const traduzido = traduzirErro(err, 'Matriz de Preços');
+      setErrorMsg(traduzido);
+      reportarErroAutomatico(traduzido, '/servicos/precos');
+    } finally {
+      setPreenchendoSugeridos(false);
+    }
+  };
 
   const handleConfirmarTabelaAtual = async () => {
     if (!tenant?.id) return;
@@ -412,7 +467,7 @@ export const MatrizPrecos: React.FC = () => {
           <Button
             type="button"
             variant="primary"
-            disabled={saving}
+            disabled={saving || preenchendoSugeridos}
             onClick={handleSaveAll}
             className="w-full sm:w-auto font-semibold min-h-[48px] px-8 flex items-center gap-2"
           >
@@ -423,7 +478,7 @@ export const MatrizPrecos: React.FC = () => {
           <Button
             type="button"
             variant="secondary"
-            disabled={saving}
+            disabled={saving || preenchendoSugeridos}
             onClick={handleConfirmarTabelaAtual}
             className="w-full sm:w-auto font-semibold min-h-[44px] px-5 flex items-center gap-2 text-emerald-300 border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20"
           >
@@ -432,6 +487,35 @@ export const MatrizPrecos: React.FC = () => {
           </Button>
         ) : null}
       </div>
+
+      {servicosSemPrecoCount > 0 && (
+        <Card className="p-3.5 sm:p-4 bg-amber-500/10 border-amber-500/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <span className="font-sans text-[13px] font-bold text-vapor-100">
+                {servicosSemPrecoCount === servicosComPrecoDefinivelCount
+                  ? 'Seus serviços ainda estão sem preços definidos nesta matriz'
+                  : `${servicosSemPrecoCount} serviço(s) ainda estão sem nenhum preço definido`}
+              </span>
+              <span className="font-sans text-[12px] text-vapor-300 leading-relaxed">
+                Você pode preencher os preços médios sugeridos de mercado em 1 clique (mantendo intactos os preços já preenchidos) ou digitar seus valores manualmente abaixo.
+              </span>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="primary"
+            disabled={preenchendoSugeridos || saving}
+            onClick={handleCarregarPrecosSugeridos}
+            className="text-xs px-4 py-2 min-h-[38px] font-semibold flex items-center gap-1.5 shrink-0"
+          >
+            <Sparkles size={14} />
+            <span>{preenchendoSugeridos ? 'Carregando...' : 'Carregar Preços Médios Sugeridos'}</span>
+          </Button>
+        </Card>
+      )}
 
       {temValoresSugeridos && (
         <div className="p-3.5 bg-amber-500/5 border border-amber-500/25 rounded-lg flex items-start gap-2.5 text-[12px] text-vapor-300">

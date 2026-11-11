@@ -875,7 +875,7 @@ export const DetalheOrcamento: React.FC = () => {
   }, [servicosPorGrupo, termoBuscaNorm]);
 
   const possuiPrecosSugeridosNoCatalogo = useMemo(
-    () => servicosCatalogo.some((s) => s.temPrecoCadastrado && !s.duracaoConfirmada),
+    () => servicosCatalogo.some((s) => !s.sob_consulta && s.temPrecoCadastrado && !s.duracaoConfirmada),
     [servicosCatalogo]
   );
 

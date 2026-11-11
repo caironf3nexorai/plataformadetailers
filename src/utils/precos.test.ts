@@ -4,6 +4,9 @@ import {
   formatDuracao,
   parsePrecoMatrizInput,
   normalizarDuracaoMinutosMatriz,
+  isPrecoDefinido,
+  servicoTemPrecoSugeridoPendente,
+  servicoSemPrecosDefinidos,
 } from './precos';
 
 describe('formatFaixaPreco', () => {
@@ -121,5 +124,55 @@ describe('normalizarDuracaoMinutosMatriz', () => {
     expect(normalizarDuracaoMinutosMatriz(-15)).toBe(60);
     expect(normalizarDuracaoMinutosMatriz(NaN)).toBe(60);
     expect(normalizarDuracaoMinutosMatriz(45)).toBe(45);
+  });
+});
+
+describe('detecção de preços sugeridos e serviços sem preço definido', () => {
+  it('identifica apenas valores positivos em linhas ativas como preço definido', () => {
+    expect(isPrecoDefinido(100)).toBe(true);
+    expect(isPrecoDefinido({ preco_base: '85,5' })).toBe(true);
+    expect(isPrecoDefinido({ preco_base: 0 })).toBe(false);
+    expect(isPrecoDefinido({ preco_base: null })).toBe(false);
+    expect(isPrecoDefinido({ preco_base: 100, ativo: false })).toBe(false);
+  });
+
+  it('não acusa preços sugeridos quando preco_base é nulo, zero ou serviço é sob consulta', () => {
+    expect(
+      servicoTemPrecoSugeridoPendente(
+        [
+          { preco_base: null, duracao_confirmada: false },
+          { preco_base: 0, duracao_confirmada: false },
+        ],
+        false
+      )
+    ).toBe(false);
+
+    expect(
+      servicoTemPrecoSugeridoPendente(
+        [{ preco_base: 150, duracao_confirmada: false }],
+        true
+      )
+    ).toBe(false);
+
+    expect(
+      servicoTemPrecoSugeridoPendente(
+        [{ preco_base: 150, duracao_confirmada: false }],
+        false
+      )
+    ).toBe(true);
+
+    expect(
+      servicoTemPrecoSugeridoPendente(
+        [{ preco_base: 150, duracao_confirmada: true }],
+        false
+      )
+    ).toBe(false);
+  });
+
+  it('detecta corretamente quando um serviço regular não possui preços definidos', () => {
+    expect(servicoSemPrecosDefinidos([], false)).toBe(true);
+    expect(servicoSemPrecosDefinidos([{ preco_base: null }, { preco_base: 0 }], false)).toBe(true);
+    expect(servicoSemPrecosDefinidos([{ preco_base: 90 }], false)).toBe(false);
+    expect(servicoSemPrecosDefinidos([], true)).toBe(false);
   });
 });

@@ -3,7 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { Servico, ServicoPreco, ServicoModelo } from '../types/servicos';
-import { formatFaixaPreco } from '../utils/precos';
+import {
+  formatFaixaPreco,
+  servicoSemPrecosDefinidos,
+  servicoTemPrecoSugeridoPendente,
+} from '../utils/precos';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -30,6 +34,7 @@ import {
   lerProgressLocal,
   marcarPassoOnboarding,
   mergeOnboardingFlags,
+  ONBOARDING_EVENT_PROGRESSO,
 } from '../utils/onboarding';
 import { GerenciadorCombos } from '../components/servicos/GerenciadorCombos';
 import {
@@ -81,7 +86,9 @@ export const Servicos: React.FC = () => {
   // Se o usuário clicar em "Prefiro cadastrar do zero", ocultamos temporariamente o onboarding
   const [forceHideOnboarding, setForceHideOnboarding] = useState(false);
   const [confirmandoTabelaMedia, setConfirmandoTabelaMedia] = useState(false);
+  const [preenchendoSugeridos, setPreenchendoSugeridos] = useState(false);
   const [avisoPrecoMediaDispensado, setAvisoPrecoMediaDispensado] = useState(false);
+  const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
 
   const fetchServicesAndModels = async () => {
     if (!tenant) return;
@@ -331,8 +338,14 @@ export const Servicos: React.FC = () => {
 
       if (rpcRes.error) throw rpcRes.error;
 
-      // Recarrega serviços cadastrados
+      // Recarrega serviços cadastrados e notifica contexto/onboarding
       await fetchServicesAndModels();
+      try {
+        await refetchTenantData();
+        window.dispatchEvent(new Event(ONBOARDING_EVENT_PROGRESSO));
+      } catch {
+        // Não bloqueia caso refetch de contexto oscile
+      }
     } catch (err: any) {
       console.error('[Semear Error]:', err);
       setErrorMsg(err.message || 'Erro ao importar serviços selecionados.');
@@ -369,7 +382,10 @@ export const Servicos: React.FC = () => {
 
   const gruposAtivos = agruparPorGrupo(activeServices);
   const possuiPrecosSugeridos = activeServices.some((s) =>
-    (s.servico_precos || []).some((p) => !p.duracao_confirmada)
+    servicoTemPrecoSugeridoPendente(s.servico_precos, s.sob_consulta)
+  );
+  const servicosSemPreco = activeServices.filter((s) =>
+    servicoSemPrecosDefinidos(s.servico_precos, s.sob_consulta)
   );
   const onboardingFlags = mergeOnboardingFlags(
     tenant?.onboarding_progress,
@@ -391,6 +407,35 @@ export const Servicos: React.FC = () => {
       setAvisoPrecoMediaDispensado(true);
     } finally {
       setConfirmandoTabelaMedia(false);
+    }
+  };
+
+  const handleCarregarPrecosSugeridos = async () => {
+    if (!tenant?.id) return;
+    setPreenchendoSugeridos(true);
+    setErrorMsg(null);
+    setFeedbackBanner(null);
+    try {
+      const { error } = await supabase.rpc('preencher_precos_sugeridos_tenant', {
+        p_tenant_id: tenant.id,
+      });
+      if (error) throw error;
+
+      await fetchServicesAndModels();
+      try {
+        await refetchTenantData();
+        window.dispatchEvent(new Event(ONBOARDING_EVENT_PROGRESSO));
+      } catch {
+        // Não bloqueia caso refetch de contexto oscile
+      }
+      setFeedbackBanner(
+        'Preços médios sugeridos de mercado carregados! Ajuste para a realidade da sua região na Matriz de Preços.'
+      );
+    } catch (err: any) {
+      console.error('[Preencher Preços Sugeridos Error]:', err);
+      setErrorMsg(err?.message || 'Erro ao carregar preços médios sugeridos.');
+    } finally {
+      setPreenchendoSugeridos(false);
     }
   };
 
@@ -593,6 +638,53 @@ export const Servicos: React.FC = () => {
         </div>
       )}
 
+      {feedbackBanner && (
+        <div className="p-3.5 bg-mint-400/10 border border-mint-400/30 rounded flex items-center gap-2 text-mint-400 text-[13px]">
+          <CheckCircle2 size={18} className="shrink-0" />
+          <span>{feedbackBanner}</span>
+        </div>
+      )}
+
+      {/* Alerta honesto quando existem serviços ativos sem preço base definido */}
+      {activeTab === 'servicos' && canManage && servicosSemPreco.length > 0 && (
+        <Card className="p-3.5 sm:p-4 bg-amber-500/10 border-amber-500/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex flex-col gap-0.5">
+              <span className="font-sans text-[13px] font-bold text-vapor-100">
+                {servicosSemPreco.length === activeServices.length
+                  ? 'Seus serviços ainda estão sem preços definidos'
+                  : `${servicosSemPreco.length} serviço(s) ainda estão sem preço definido na tabela`}
+              </span>
+              <span className="font-sans text-[12px] text-vapor-300 leading-relaxed">
+                Carregue os valores médios sugeridos de mercado em 1 clique (sem alterar os preços que você já definiu) ou preencha na Matriz de Preços.
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="primary"
+              disabled={preenchendoSugeridos}
+              onClick={handleCarregarPrecosSugeridos}
+              className="text-xs px-3.5 py-1.5 min-h-[36px] font-semibold flex items-center gap-1.5"
+            >
+              <Sparkles size={14} />
+              <span>{preenchendoSugeridos ? 'Carregando...' : 'Carregar Preços Médios Sugeridos'}</span>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate('/servicos/precos')}
+              className="text-xs px-3 py-1.5 min-h-[36px] border-amber-500/35 text-amber-300 hover:bg-amber-500/15"
+            >
+              Abrir Matriz de Preços
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Lembrete calmo sobre preços médios de mercado carregados no cadastro */}
       {activeTab === 'servicos' && mostrarLembretePrecosMedios && (
         <Card className="p-3.5 sm:p-4 bg-amber-500/5 border-amber-500/25 flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -714,9 +806,9 @@ export const Servicos: React.FC = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {lista.map((serv) => {
-                    const precosArray = serv.servico_precos.map((p) => p.preco_base);
-                    const faixaTexto = formatFaixaPreco(precosArray, serv.sob_consulta);
-                    const possuiEstimado = serv.servico_precos.some((p) => !p.duracao_confirmada);
+                    const precosAtivos = (serv.servico_precos || []).filter((p) => p.ativo !== false);
+                    const faixaTexto = formatFaixaPreco(precosAtivos, serv.sob_consulta);
+                    const possuiEstimado = servicoTemPrecoSugeridoPendente(precosAtivos, serv.sob_consulta);
                     const fotoResolvedUrl = fotoDoServico(serv, grupoFotos, tenant?.capa_path);
                     const isSelected = selectedIds.includes(serv.id);
 
@@ -788,10 +880,23 @@ export const Servicos: React.FC = () => {
                         </div>
 
                         <div className="flex items-center justify-between gap-2 border-t border-graphite-700 pt-3 mt-1">
-                          <span className="font-sans text-[13px] sm:text-[14px] text-vapor-100 font-semibold flex items-center gap-1 flex-wrap">
-                            <span className="text-[11px] sm:text-[12px] text-vapor-400 font-normal">A partir de</span>
-                            <span className="font-mono text-amber-500 font-bold">{faixaTexto.replace('A partir de', '')}</span>
-                          </span>
+                          {faixaTexto.startsWith('A partir de ') ? (
+                            <span className="font-sans text-[13px] sm:text-[14px] text-vapor-100 font-semibold flex items-center gap-1 flex-wrap">
+                              <span className="text-[11px] sm:text-[12px] text-vapor-400 font-normal">A partir de</span>
+                              <span className="font-mono text-amber-500 font-bold">
+                                {faixaTexto.slice('A partir de '.length)}
+                              </span>
+                            </span>
+                          ) : faixaTexto === 'Sob avaliação' ? (
+                            <span className="font-sans text-[12px] sm:text-[13px] text-vapor-300 italic">
+                              Sob avaliação
+                            </span>
+                          ) : (
+                            <span className="font-sans text-[12px] sm:text-[13px] text-amber-400 font-medium flex items-center gap-1.5">
+                              <AlertTriangle size={13} className="shrink-0" />
+                              <span>Preço não definido</span>
+                            </span>
+                          )}
                           
                           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                             {possuiEstimado && (
