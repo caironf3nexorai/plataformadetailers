@@ -26,6 +26,7 @@ import {
   Clock,
   Lock,
   Scale,
+  UserX,
 } from 'lucide-react';
 import { ModalBibliotecaTermos } from '../components/termos/ModalBibliotecaTermos';
 import { usePlano } from '../hooks/usePlano';
@@ -36,8 +37,11 @@ import {
   getBadgeToneFromStatusOrcamento,
   obterNomeClienteOrcamento,
   isAgendamentoOrcamentoAtivo,
+  isAgendamentoOrcamentoNaoCompareceu,
+  obterBadgeAgendamentoOrcamento,
+  resolverAgendamentoVinculadoOrcamento,
 } from '../utils/orcamento';
-import { formatarData } from '../utils/datas';
+import { formatarData, formatarDataHora } from '../utils/datas';
 import { formatarCodigoProposta, formatarMoeda } from '../utils/formatters';
 import { formatarDuracao } from '../utils/duracao';
 import { ONBOARDING_EVENT_PROGRESSO } from '../utils/onboarding';
@@ -372,10 +376,18 @@ export const Orcamentos: React.FC = () => {
     (o) => o.status === 'aprovado' && !isAgendamentoOrcamentoAtivo(o)
   );
 
+  const aprovadosNaoCompareceu = orcamentos.filter(
+    (o) => o.status === 'aprovado' && isAgendamentoOrcamentoNaoCompareceu(o)
+  );
+
   // Filtragem da Lista
   const orcamentosFiltrados = orcamentos.filter((o) => {
     // Filtro Status
-    if (statusFiltro !== 'todos' && o.status !== statusFiltro) {
+    if (statusFiltro === 'nao_compareceu') {
+      if (o.status !== 'aprovado' || !isAgendamentoOrcamentoNaoCompareceu(o)) {
+        return false;
+      }
+    } else if (statusFiltro !== 'todos' && o.status !== statusFiltro) {
       return false;
     }
 
@@ -514,6 +526,43 @@ export const Orcamentos: React.FC = () => {
         </Card>
       )}
 
+      {/* BANNER: CLIENTE NÃO COMPARECEU NA OS GERADA */}
+      {aprovadosNaoCompareceu.length > 0 && (
+        <Card className="p-4 bg-flare-500/10 border-flare-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-flare-500/20 rounded-lg text-flare-400 shrink-0">
+              <UserX size={24} />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-sans font-bold text-[15px] text-vapor-100">
+                {aprovadosNaoCompareceu.length}{' '}
+                {aprovadosNaoCompareceu.length === 1
+                  ? 'orçamento com OS marcada como Não Compareceu'
+                  : 'orçamentos com OS marcada como Não Compareceu'}
+              </span>
+              <span className="font-sans text-[13px] text-vapor-300">
+                O cliente faltou ao horário agendado (vaga liberada na agenda). Entre em contato ou reagende a OS.
+              </span>
+            </div>
+          </div>
+
+          <Button
+            tone="amber"
+            size="sm"
+            onClick={() => {
+              if (aprovadosNaoCompareceu.length === 1) {
+                navigate(`/orcamentos/${aprovadosNaoCompareceu[0].id}`);
+              } else {
+                setStatusFiltro('nao_compareceu');
+              }
+            }}
+            className="shrink-0"
+          >
+            {aprovadosNaoCompareceu.length === 1 ? 'Ver / Reagendar OS' : 'Filtrar Faltosos'}
+          </Button>
+        </Card>
+      )}
+
       {/* BARRA DE FILTROS E BUSCA */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-graphite-900 p-4 rounded-xl border border-graphite-800">
         {/* Chips de Status Roláveis com Indicador de Scroll */}
@@ -525,6 +574,12 @@ export const Orcamentos: React.FC = () => {
               { id: 'enviado', label: 'Enviado' },
               { id: 'visualizado', label: 'Visualizado' },
               { id: 'aprovado', label: 'Aprovado' },
+              {
+                id: 'nao_compareceu',
+                label: aprovadosNaoCompareceu.length > 0
+                  ? `Não Compareceu (${aprovadosNaoCompareceu.length})`
+                  : 'Não Compareceu',
+              },
               { id: 'recusado', label: 'Recusado' },
               { id: 'expirado', label: 'Expirado' },
             ]}
@@ -613,6 +668,10 @@ export const Orcamentos: React.FC = () => {
               }
             }
 
+            const agendamentoVinculado = resolverAgendamentoVinculadoOrcamento(orc);
+            const badgeAgendamento = obterBadgeAgendamentoOrcamento(orc);
+            const isNaoCompareceu = agendamentoVinculado?.status === 'nao_compareceu';
+
             return (
               <Card
                 key={orc.id}
@@ -663,6 +722,16 @@ export const Orcamentos: React.FC = () => {
                         <Calendar size={13} />
                         {formatarData(orc.created_at)}
                       </span>
+
+                      {isNaoCompareceu && agendamentoVinculado?.inicio && (
+                        <>
+                          <span className="text-graphite-600">•</span>
+                          <span className="flex items-center gap-1 text-flare-400 font-medium">
+                            <UserX size={13} />
+                            Faltou em {formatarDataHora(agendamentoVinculado.inicio)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -675,11 +744,7 @@ export const Orcamentos: React.FC = () => {
                         {getLabelFromStatusOrcamento(orc.status)}
                       </Badge>
                       {orc.status === 'aprovado' && (
-                        isAgendamentoOrcamentoAtivo(orc) ? (
-                          <Badge tone="cyan">OS Agendada</Badge>
-                        ) : (
-                          <Badge tone="amber">Aguardando agenda</Badge>
-                        )
+                        <Badge tone={badgeAgendamento.tone}>{badgeAgendamento.label}</Badge>
                       )}
                     </div>
 

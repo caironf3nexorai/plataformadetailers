@@ -23,6 +23,7 @@ import {
   Copy,
   Camera,
   User,
+  UserX,
   Car
 } from 'lucide-react';
 import type { OrcamentoPublicoData, TipoNivelOrcamento } from '../types/orcamento';
@@ -695,6 +696,11 @@ export const OrcamentoPublico: React.FC = () => {
   const isAprovado = data.status === 'aprovado' || escolhaSucesso !== null;
   const isRecusado = data.status === 'recusado' && !isAprovado;
   const isAgendado = !!data.agendamento && data.agendamento.status !== 'cancelado';
+  const agendamentoStatus = data.agendamento?.status;
+  const isAgendamentoNaoCompareceu = isAgendado && agendamentoStatus === 'nao_compareceu';
+  const isAgendamentoConcluido = isAgendado && agendamentoStatus === 'concluido';
+  const isAgendamentoEmAndamento = isAgendado && agendamentoStatus === 'em_andamento';
+  const isAgendamentoAguardandoSinal = isAgendado && agendamentoStatus === 'aguardando_confirmacao';
 
   const nomePreferencialPublico = obterNomePreferencialPublico(data);
   const primeiroNomeSaudacao =
@@ -821,7 +827,17 @@ export const OrcamentoPublico: React.FC = () => {
             )}
 
             {isAgendado && (
-              <Badge tone="emerald">Agendamento Confirmado</Badge>
+              isAgendamentoNaoCompareceu ? (
+                <Badge tone="flare">Agendamento: Não Compareceu</Badge>
+              ) : isAgendamentoConcluido ? (
+                <Badge tone="emerald">Serviço Concluído</Badge>
+              ) : isAgendamentoEmAndamento ? (
+                <Badge tone="amber">Atendimento em Andamento</Badge>
+              ) : isAgendamentoAguardandoSinal ? (
+                <Badge tone="amber">Agendamento Solicitado (Aguardando Sinal)</Badge>
+              ) : (
+                <Badge tone="emerald">Agendamento Confirmado</Badge>
+              )
             )}
           </div>
         </div>
@@ -905,101 +921,147 @@ export const OrcamentoPublico: React.FC = () => {
           </Card>
         )}
 
-        {/* MENSAGEM DE AGENDAMENTO CONCLUÍDO E SINAL PIX */}
+        {/* MENSAGEM DE AGENDAMENTO CONCLUÍDO / NÃO COMPARECEU E SINAL PIX */}
         {isAprovado && isAgendado && data.agendamento && (
-          <Card className="p-6 bg-graphite-900 border-2 border-emerald-500/50 rounded-2xl flex flex-col items-center text-center gap-4 shadow-2xl">
-            <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center text-emerald-400">
-              <CheckCircle2 size={36} />
-            </div>
-
-            <div className="space-y-1">
-              <h3 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
-                {data.agendamento.sinal?.ativo && (data.agendamento.sinal.valor || 0) > 0 && data.agendamento.status === 'aguardando_confirmacao'
-                  ? 'Agendamento Solicitado - Aguardando Sinal'
-                  : 'Agendamento Confirmado!'}
-              </h3>
-              <p className="font-sans text-[14px] text-vapor-300">
-                OS <strong className="text-amber-400 font-mono">#{data.agendamento.numero_os}</strong> · {data.oficina.nome}
-              </p>
-            </div>
-
-            <div className="w-full bg-graphite-950 p-4 rounded-xl border border-graphite-800 text-left space-y-2 font-sans text-[13px] text-vapor-300">
-              <div className="flex justify-between">
-                <span className="text-vapor-400">Data & Horário:</span>
-                <span className="text-amber-400 font-bold font-mono">{formatarDataHora(data.agendamento.inicio)}</span>
+          isAgendamentoNaoCompareceu ? (
+            <Card className="p-6 bg-graphite-900 border-2 border-flare-500/50 rounded-2xl flex flex-col items-center text-center gap-4 shadow-2xl">
+              <div className="w-16 h-16 bg-flare-500/10 border border-flare-500/30 rounded-full flex items-center justify-center text-flare-400">
+                <UserX size={36} />
               </div>
-              {data.agendamento.previsao_entrega && (
-                <div className="flex justify-between">
-                  <span className="text-vapor-400">Previsão de Término/Entrega:</span>
-                  <span className="text-emerald-400 font-bold font-mono">{formatarDataHora(data.agendamento.previsao_entrega)}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-vapor-400">Tempo de Execução:</span>
-                <span className="text-vapor-200 font-bold font-mono">{formatarDuracao(data.agendamento.duracao_total || 0)}</span>
-              </div>
-              {data.agendamento.preco_estimado_total ? (
-                <div className="flex justify-between border-t border-graphite-800/80 pt-2 font-bold text-vapor-100">
-                  <span>Valor Total da Proposta:</span>
-                  <span className="text-amber-400">{formatarMoeda(data.agendamento.preco_estimado_total)}</span>
-                </div>
-              ) : null}
-            </div>
 
-            {/* BLOCO DE COBRANÇA DE SINAL PIX */}
-            {data.agendamento.sinal?.ativo && (data.agendamento.sinal.valor || 0) > 0 ? (
-              <div className="w-full bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl text-left space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-amber-400 text-[14px]">Sinal Solicitado para Confirmar a Vaga:</span>
-                  <span className="font-mono text-[18px] font-extrabold text-amber-400">
-                    {formatarMoeda(data.agendamento.sinal.valor)}
-                  </span>
-                </div>
-
-                {data.agendamento.sinal.pix_payload ? (
-                  <div className="bg-graphite-950 p-4 rounded-xl border border-graphite-800 text-center space-y-3">
-                    <p className="text-[13px] text-vapor-200 font-medium">Escaneie o QR Code abaixo ou copie a chave Pix Copia e Cola:</p>
-                    
-                    <img 
-                      src={gerarQrCodeUrl(data.agendamento.sinal.pix_payload)} 
-                      alt="QR Code Pix Sinal" 
-                      className="w-44 h-44 mx-auto rounded-lg bg-white p-2 border border-graphite-700 shadow-md" 
-                    />
-
-                    <Button
-                      tone="amber"
-                      size="md"
-                      onClick={() => handleCopiarPix(data.agendamento?.sinal?.pix_payload || undefined)}
-                      className="w-full flex items-center justify-center gap-2 font-bold min-h-[44px]"
-                    >
-                      {copiadoPix ? <Check size={16} /> : <Copy size={16} />}
-                      <span>{copiadoPix ? 'Código Pix Copiado!' : 'Copiar Código Pix (Copia e Cola)'}</span>
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="p-3 bg-graphite-950 rounded-xl border border-amber-500/20 text-center text-[13px] text-amber-300">
-                    Solicite a chave Pix da oficina ou envie o comprovante diretamente pelo WhatsApp abaixo para garantir sua vaga.
-                  </div>
-                )}
-
-                <p className="text-[12px] text-vapor-400 leading-relaxed">
-                  <strong>Importante:</strong> Após efetuar o pagamento, envie o comprovante no botão abaixo para que nossa equipe valide a sua reserva.
+              <div className="space-y-1">
+                <h3 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
+                  Comparecimento Não Registrado
+                </h3>
+                <p className="font-sans text-[14px] text-vapor-300">
+                  OS <strong className="text-amber-400 font-mono">#{data.agendamento.numero_os}</strong> · {data.oficina.nome}
                 </p>
               </div>
-            ) : null}
 
-            {/* BOTÃO WHATSAPP DE CONTATO / ENVIO DE COMPROVANTE */}
-            <a
-              href={`https://wa.me/${formatarTelefoneWhatsapp(data.oficina.telefone) || data.oficina.telefone?.replace(/\D/g, '')}?text=${encodeURIComponent(
-                `Olá! Efetuei o agendamento da proposta (OS #${data.agendamento.numero_os}) para ${formatarDataHora(data.agendamento.inicio)}.`
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold rounded-xl flex items-center justify-center gap-2 transition shadow-lg text-[15px] min-h-[48px]"
-            >
-              <Phone size={18} /> Enviar Comprovante no WhatsApp
-            </a>
-          </Card>
+              <div className="w-full bg-graphite-950 p-4 rounded-xl border border-graphite-800 text-left space-y-2 font-sans text-[13px] text-vapor-300">
+                <div className="flex justify-between gap-3">
+                  <span className="text-vapor-400">Horário Previsto:</span>
+                  <span className="text-flare-400 font-bold font-mono">{formatarDataHora(data.agendamento.inicio)}</span>
+                </div>
+                <p className="text-[12.5px] text-vapor-400 leading-relaxed border-t border-graphite-800/80 pt-2">
+                  Não identificamos sua chegada no horário marcado e a vaga anterior foi liberada na agenda. Entre em contato com a oficina abaixo se desejar reagendar seu atendimento.
+                </p>
+              </div>
+
+              {data.oficina.telefone && (
+                <a
+                  href={`https://wa.me/${formatarTelefoneWhatsapp(data.oficina.telefone) || data.oficina.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                    `Olá! Não consegui comparecer ao agendamento da proposta (OS #${data.agendamento.numero_os}) em ${formatarDataHora(data.agendamento.inicio)} e gostaria de reagendar um novo horário.`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-graphite-950 font-bold rounded-xl flex items-center justify-center gap-2 transition shadow-lg text-[15px] min-h-[48px]"
+                >
+                  <Phone size={18} /> Solicitar Novo Horário no WhatsApp
+                </a>
+              )}
+            </Card>
+          ) : (
+            <Card className="p-6 bg-graphite-900 border-2 border-emerald-500/50 rounded-2xl flex flex-col items-center text-center gap-4 shadow-2xl">
+              <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center text-emerald-400">
+                <CheckCircle2 size={36} />
+              </div>
+
+              <div className="space-y-1">
+                <h3 className="font-display text-[22px] text-vapor-100 uppercase tracking-wide">
+                  {isAgendamentoConcluido
+                    ? 'Serviço Concluído!'
+                    : isAgendamentoEmAndamento
+                      ? 'Atendimento em Andamento'
+                      : data.agendamento.sinal?.ativo && (data.agendamento.sinal.valor || 0) > 0 && isAgendamentoAguardandoSinal
+                        ? 'Agendamento Solicitado - Aguardando Sinal'
+                        : 'Agendamento Confirmado!'}
+                </h3>
+                <p className="font-sans text-[14px] text-vapor-300">
+                  OS <strong className="text-amber-400 font-mono">#{data.agendamento.numero_os}</strong> · {data.oficina.nome}
+                </p>
+              </div>
+
+              <div className="w-full bg-graphite-950 p-4 rounded-xl border border-graphite-800 text-left space-y-2 font-sans text-[13px] text-vapor-300">
+                <div className="flex justify-between">
+                  <span className="text-vapor-400">Data & Horário:</span>
+                  <span className="text-amber-400 font-bold font-mono">{formatarDataHora(data.agendamento.inicio)}</span>
+                </div>
+                {data.agendamento.previsao_entrega && (
+                  <div className="flex justify-between">
+                    <span className="text-vapor-400">Previsão de Término/Entrega:</span>
+                    <span className="text-emerald-400 font-bold font-mono">{formatarDataHora(data.agendamento.previsao_entrega)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-vapor-400">Tempo de Execução:</span>
+                  <span className="text-vapor-200 font-bold font-mono">{formatarDuracao(data.agendamento.duracao_total || 0)}</span>
+                </div>
+                {data.agendamento.preco_estimado_total ? (
+                  <div className="flex justify-between border-t border-graphite-800/80 pt-2 font-bold text-vapor-100">
+                    <span>Valor Total da Proposta:</span>
+                    <span className="text-amber-400">{formatarMoeda(data.agendamento.preco_estimado_total)}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* BLOCO DE COBRANÇA DE SINAL PIX */}
+              {data.agendamento.sinal?.ativo && (data.agendamento.sinal.valor || 0) > 0 ? (
+                <div className="w-full bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl text-left space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-400 text-[14px]">Sinal Solicitado para Confirmar a Vaga:</span>
+                    <span className="font-mono text-[18px] font-extrabold text-amber-400">
+                      {formatarMoeda(data.agendamento.sinal.valor)}
+                    </span>
+                  </div>
+
+                  {data.agendamento.sinal.pix_payload ? (
+                    <div className="bg-graphite-950 p-4 rounded-xl border border-graphite-800 text-center space-y-3">
+                      <p className="text-[13px] text-vapor-200 font-medium">Escaneie o QR Code abaixo ou copie a chave Pix Copia e Cola:</p>
+                      
+                      <img 
+                        src={gerarQrCodeUrl(data.agendamento.sinal.pix_payload)} 
+                        alt="QR Code Pix Sinal" 
+                        className="w-44 h-44 mx-auto rounded-lg bg-white p-2 border border-graphite-700 shadow-md" 
+                      />
+
+                      <Button
+                        tone="amber"
+                        size="md"
+                        onClick={() => handleCopiarPix(data.agendamento?.sinal?.pix_payload || undefined)}
+                        className="w-full flex items-center justify-center gap-2 font-bold min-h-[44px]"
+                      >
+                        {copiadoPix ? <Check size={16} /> : <Copy size={16} />}
+                        <span>{copiadoPix ? 'Código Pix Copiado!' : 'Copiar Código Pix (Copia e Cola)'}</span>
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-graphite-950 rounded-xl border border-amber-500/20 text-center text-[13px] text-amber-300">
+                      Solicite a chave Pix da oficina ou envie o comprovante diretamente pelo WhatsApp abaixo para garantir sua vaga.
+                    </div>
+                  )}
+
+                  <p className="text-[12px] text-vapor-400 leading-relaxed">
+                    <strong>Importante:</strong> Após efetuar o pagamento, envie o comprovante no botão abaixo para que nossa equipe valide a sua reserva.
+                  </p>
+                </div>
+              ) : null}
+
+              {/* BOTÃO WHATSAPP DE CONTATO / ENVIO DE COMPROVANTE */}
+              {data.oficina.telefone && (
+                <a
+                  href={`https://wa.me/${formatarTelefoneWhatsapp(data.oficina.telefone) || data.oficina.telefone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                    `Olá! Efetuei o agendamento da proposta (OS #${data.agendamento.numero_os}) para ${formatarDataHora(data.agendamento.inicio)}.`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-graphite-950 font-bold rounded-xl flex items-center justify-center gap-2 transition shadow-lg text-[15px] min-h-[48px]"
+                >
+                  <Phone size={18} /> Enviar Comprovante no WhatsApp
+                </a>
+              )}
+            </Card>
+          )
         )}
 
         {/* MENSAGEM DE EXPIRAÇÃO */}

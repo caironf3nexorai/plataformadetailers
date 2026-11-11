@@ -178,3 +178,35 @@ export function isAgendamentoOrcamentoAtivo(
 ): boolean {
   return Boolean(resolverAgendamentoVinculadoOrcamento(orcamento));
 }
+
+export function isAgendamentoOrcamentoNaoCompareceu(
+  orcamento?: Pick<Orcamento, 'agendamento_id' | 'agendamento'> | null
+): boolean {
+  const agendamento = resolverAgendamentoVinculadoOrcamento(orcamento);
+  return agendamento?.status === 'nao_compareceu';
+}
+
+export function obterBadgeAgendamentoOrcamento(
+  orcamento?: Pick<Orcamento, 'agendamento_id' | 'agendamento'> | null
+): { label: string; tone: BadgeTone } {
+  const agendamento = resolverAgendamentoVinculadoOrcamento(orcamento);
+  if (!agendamento) {
+    return { label: 'Aguardando agenda', tone: 'amber' };
+  }
+
+  switch (agendamento.status) {
+    case 'nao_compareceu':
+      return { label: 'OS Não Compareceu', tone: 'flare' };
+    case 'concluido':
+      return { label: 'OS Concluída', tone: 'mint' };
+    case 'em_andamento':
+      return { label: 'OS em Andamento', tone: 'amber' };
+    case 'aguardando_confirmacao':
+      return { label: 'OS Aguardando Sinal', tone: 'amber' };
+    case 'confirmado':
+      return { label: 'OS Confirmada', tone: 'cyan' };
+    case 'agendado':
+    default:
+      return { label: 'OS Agendada', tone: 'cyan' };
+  }
+}

@@ -48,6 +48,7 @@ import {
   X,
   Eye,
   Info,
+  UserX,
 } from 'lucide-react';
 import { usePlano } from '../../hooks/usePlano';
 import { ModalEditarVeiculo } from '../../components/clientes/ModalEditarVeiculo';
@@ -74,13 +75,15 @@ import {
   obterNomeClienteOrcamento,
   obterPrimeiroNomeClienteOrcamento,
   resolverAgendamentoVinculadoOrcamento,
+  isAgendamentoOrcamentoNaoCompareceu,
+  obterBadgeAgendamentoOrcamento,
 } from '../../utils/orcamento';
 import { formatarCodigoProposta, formatarMoeda } from '../../utils/formatters';
 import { formatarDuracao, getLabelFromStatus, obterLinkAgendaAgendamento } from '../../utils/agenda';
 import { gerarPDFOrcamento, type PDFOrcamentoNivelData } from '../../utils/pdfOrcamento';
 import { getFotoPublicUrl } from '../../utils/imagens';
 import { uploadOrcamentoFoto, getEvidenciaSignedUrl, baixarFoto } from '../../utils/evidencias';
-import { formatarDataHora } from '../../utils/datas';
+import { formatarDataHora, formatarDataIsoSP, montarTimestampLocal } from '../../utils/datas';
 import { obterLinkAtendimento } from '../../utils/navegacaoAtendimento';
 import { CanvasAssinatura } from '../../components/checkin/CanvasAssinatura';
 import { ModalServicoRapido } from '../../components/orcamentos/ModalServicoRapido';
@@ -1420,12 +1423,29 @@ export const DetalheOrcamento: React.FC = () => {
     }
   };
 
-  // CONVERTER EM AGENDAMENTO
+  // CONVERTER EM AGENDAMENTO OU REAGENDAR OS MARCADA COMO NÃO COMPARECEU
+  const abrirModalAgendamento = () => {
+    if (!orcamento) return;
+    if (!orcamento.cliente_id) {
+      setAbrirAgendaAposCliente(true);
+      showToast('Preencha e vincule o cliente antes de agendar a OS.', 'warning');
+      setModoModalTrocarCliente('cadastrar');
+      setShowModalTrocarCliente(true);
+      return;
+    }
+    setDataAgendamento(formatarDataIsoSP(new Date()));
+    setHoraAgendamento('09:00');
+    setShowAgendarModal(true);
+  };
+
   const handleConverterAgendamento = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orcamento || !dataAgendamento || !horaAgendamento) return;
 
-    if (resolverAgendamentoVinculadoOrcamento(orcamento)) {
+    const agAtual = resolverAgendamentoVinculadoOrcamento(orcamento);
+    const isReagendamentoNoShow = agAtual?.status === 'nao_compareceu';
+
+    if (agAtual && !isReagendamentoNoShow) {
       setShowAgendarModal(false);
       showToast('Este orçamento já possui um agendamento/OS ativo.', 'info');
       return;
@@ -1442,16 +1462,25 @@ export const DetalheOrcamento: React.FC = () => {
 
     setConverting(true);
     try {
-      const dataHoraIso = `${dataAgendamento}T${horaAgendamento}:00`;
+      const dataHoraIso = montarTimestampLocal(dataAgendamento, horaAgendamento);
 
-      const { data: novoAgendamentoId, error } = await supabase.rpc('converter_orcamento_em_agendamento', {
-        p_orcamento: orcamento.id,
-        p_inicio: dataHoraIso,
-      });
+      const rpcName = isReagendamentoNoShow
+        ? 'reagendar_os_orcamento'
+        : 'converter_orcamento_em_agendamento';
+      const rpcParams = isReagendamentoNoShow
+        ? { p_orcamento: orcamento.id, p_novo_inicio: dataHoraIso }
+        : { p_orcamento: orcamento.id, p_inicio: dataHoraIso };
+
+      const { data: novoAgendamentoId, error } = await supabase.rpc(rpcName, rpcParams);
 
       if (error) throw error;
 
-      const agendamentoIdCriado = typeof novoAgendamentoId === 'string' && novoAgendamentoId ? novoAgendamentoId : null;
+      const agendamentoIdCriado =
+        (typeof novoAgendamentoId === 'string' && novoAgendamentoId ? novoAgendamentoId : null) ||
+        agAtual?.id ||
+        orcamento.agendamento_id ||
+        null;
+
       if (agendamentoIdCriado) {
         setOrcamento((prev) =>
           prev
@@ -1462,7 +1491,7 @@ export const DetalheOrcamento: React.FC = () => {
                   id: agendamentoIdCriado,
                   inicio: dataHoraIso,
                   status: 'agendado',
-                  numero_os: prev.numero_os ?? null,
+                  numero_os: prev.agendamento?.numero_os ?? prev.numero_os ?? null,
                 },
               }
             : null
@@ -1470,7 +1499,11 @@ export const DetalheOrcamento: React.FC = () => {
       }
 
       setShowAgendarModal(false);
-      showSuccess('Orçamento convertido em agendamento com sucesso!');
+      showSuccess(
+        isReagendamentoNoShow
+          ? 'OS reagendada com sucesso!'
+          : 'Orçamento convertido em agendamento com sucesso!'
+      );
       navigate(obterLinkAgendaAgendamento(agendamentoIdCriado, dataHoraIso));
     } catch (err: any) {
       showError('Não foi possível agendar o atendimento. Tente novamente.', err);
@@ -2249,6 +2282,11 @@ export const DetalheOrcamento: React.FC = () => {
   const isAprovado = orcamento.status === 'aprovado';
   const agendamentoAtivo = resolverAgendamentoVinculadoOrcamento(orcamento);
   const temAgendamentoAtivo = Boolean(agendamentoAtivo);
+  const isAgendamentoNaoCompareceu = isAgendamentoOrcamentoNaoCompareceu(orcamento);
+  const badgeAgendamento = obterBadgeAgendamentoOrcamento(orcamento);
+  const numeroOsLabel = (agendamentoAtivo?.numero_os || orcamento.numero_os)
+    ? `OS #${String(agendamentoAtivo?.numero_os || orcamento.numero_os).padStart(4, '0')}`
+    : '';
 
   return (
     <div className="flex flex-col gap-6 pb-52 xl:pb-40 relative max-w-full overflow-x-hidden">
@@ -2273,6 +2311,9 @@ export const DetalheOrcamento: React.FC = () => {
               <Badge tone={getBadgeToneFromStatusOrcamento(orcamento.status)}>
                 {getLabelFromStatusOrcamento(orcamento.status)}
               </Badge>
+              {isAprovado && temAgendamentoAtivo && (
+                <Badge tone={badgeAgendamento.tone}>{badgeAgendamento.label}</Badge>
+              )}
 
               {/* INDICADOR DISCRETO DE AUTOSAVE NO TOPO */}
               <div className="ml-2">
@@ -2484,18 +2525,7 @@ export const DetalheOrcamento: React.FC = () => {
             <Button
               tone="cyan"
               size="sm"
-              onClick={() => {
-                if (!orcamento.cliente_id) {
-                  setAbrirAgendaAposCliente(true);
-                  showToast('Preencha e vincule o cliente antes de converter em agendamento/OS.', 'warning');
-                  setModoModalTrocarCliente('cadastrar');
-                  setShowModalTrocarCliente(true);
-                  return;
-                }
-                const hoje = new Date().toISOString().split('T')[0];
-                setDataAgendamento(hoje);
-                setShowAgendarModal(true);
-              }}
+              onClick={abrirModalAgendamento}
               className="flex items-center gap-1.5 min-h-[44px]"
             >
               <Calendar size={16} />
@@ -2503,9 +2533,21 @@ export const DetalheOrcamento: React.FC = () => {
             </Button>
           )}
 
+          {isAprovado && temAgendamentoAtivo && isAgendamentoNaoCompareceu && (
+            <Button
+              tone="amber"
+              size="sm"
+              onClick={abrirModalAgendamento}
+              className="flex items-center gap-1.5 min-h-[44px]"
+            >
+              <RotateCcw size={16} />
+              <span>Reagendar OS</span>
+            </Button>
+          )}
+
           {isAprovado && temAgendamentoAtivo && (
             <Button
-              tone="emerald"
+              tone={isAgendamentoNaoCompareceu ? 'graphite' : 'emerald'}
               size="sm"
               onClick={() => {
                 const link = obterLinkAtendimento(null, agendamentoAtivo?.id || orcamento.agendamento_id);
@@ -2513,7 +2555,7 @@ export const DetalheOrcamento: React.FC = () => {
               }}
               className="flex items-center gap-1.5 min-h-[44px]"
             >
-              <CheckCircle2 size={16} />
+              {isAgendamentoNaoCompareceu ? <Eye size={16} /> : <CheckCircle2 size={16} />}
               <span>Ver OS / Atendimento</span>
             </Button>
           )}
@@ -2563,92 +2605,122 @@ export const DetalheOrcamento: React.FC = () => {
         </Card>
       )}
 
-      {/* AVISO DE ORÇAMENTO APROVADO */}
-      {isAprovado && (
-        <Card className="p-4 bg-emerald-500/10 border-emerald-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Check size={24} className="text-emerald-400 shrink-0" />
-            <div className="flex flex-col gap-0.5">
-              {temAgendamentoAtivo ? (
-                <>
-                  <span className="font-sans font-bold text-[14px] text-emerald-400">
-                    Orçamento Aprovado e Já Agendado
-                    {(agendamentoAtivo?.numero_os || orcamento.numero_os)
-                      ? ` — OS #${String(agendamentoAtivo?.numero_os || orcamento.numero_os).padStart(4, '0')}`
-                      : ''}
-                  </span>
-                  <span className="font-sans text-[12px] text-vapor-300">
-                    {agendamentoAtivo?.inicio
-                      ? `Atendimento marcado para ${formatarDataHora(agendamentoAtivo.inicio)}`
-                      : 'Este orçamento já foi convertido em Ordem de Serviço / Agendamento'}
-                    {agendamentoAtivo?.status
-                      ? ` • Status: ${getLabelFromStatus(agendamentoAtivo.status as any)}`
-                      : ''}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="font-sans font-bold text-[14px] text-emerald-400">
-                    Orçamento Aprovado pelo Cliente (Nível {orcamento.nivel_aprovado?.toUpperCase()})
-                  </span>
-                  <span className="font-sans text-[12px] text-vapor-300">
-                    O cliente escolheu esta proposta! Clique no botão ao lado para agendar a execução.
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
+      {/* AVISO DE ORÇAMENTO APROVADO / STATUS DA OS */}
+      {isAprovado && (() => {
+        const statusAg = agendamentoAtivo?.status;
+        const cardStyle = !temAgendamentoAtivo
+          ? 'bg-emerald-500/10 border-emerald-500/40'
+          : isAgendamentoNaoCompareceu
+            ? 'bg-flare-500/10 border-flare-500/40'
+            : statusAg === 'em_andamento' || statusAg === 'aguardando_confirmacao'
+              ? 'bg-amber-500/10 border-amber-500/40'
+              : 'bg-emerald-500/10 border-emerald-500/40';
 
-          {temAgendamentoAtivo ? (
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+        const tituloCard = isAgendamentoNaoCompareceu
+          ? `Cliente Não Compareceu ao Agendamento${numeroOsLabel ? ` — ${numeroOsLabel}` : ''}`
+          : statusAg === 'concluido'
+            ? `Orçamento Aprovado e Serviço Concluído${numeroOsLabel ? ` — ${numeroOsLabel}` : ''}`
+            : statusAg === 'em_andamento'
+              ? `Atendimento em Execução${numeroOsLabel ? ` — ${numeroOsLabel}` : ''}`
+              : statusAg === 'aguardando_confirmacao'
+                ? `Agendamento Aguardando Sinal / Confirmação${numeroOsLabel ? ` — ${numeroOsLabel}` : ''}`
+                : `Orçamento Aprovado e Já Agendado${numeroOsLabel ? ` — ${numeroOsLabel}` : ''}`;
+
+        return (
+          <Card className={`p-4 ${cardStyle} flex flex-col sm:flex-row sm:items-center justify-between gap-4`}>
+            <div className="flex items-center gap-3">
+              {isAgendamentoNaoCompareceu ? (
+                <UserX size={24} className="text-flare-400 shrink-0" />
+              ) : (
+                <Check size={24} className="text-emerald-400 shrink-0" />
+              )}
+              <div className="flex flex-col gap-0.5">
+                {temAgendamentoAtivo ? (
+                  <>
+                    <span className={`font-sans font-bold text-[14px] ${isAgendamentoNaoCompareceu ? 'text-flare-400' : statusAg === 'em_andamento' || statusAg === 'aguardando_confirmacao' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {tituloCard}
+                    </span>
+                    <span className="font-sans text-[12px] text-vapor-300">
+                      {isAgendamentoNaoCompareceu
+                        ? (agendamentoAtivo?.inicio
+                            ? `Atendimento estava marcado para ${formatarDataHora(agendamentoAtivo.inicio)} e foi marcado como Não Compareceu (o horário foi liberado na agenda).`
+                            : 'O cliente faltou ao atendimento marcado e o horário foi liberado na agenda.')
+                        : (
+                          <>
+                            {agendamentoAtivo?.inicio
+                              ? `Atendimento marcado para ${formatarDataHora(agendamentoAtivo.inicio)}`
+                              : 'Este orçamento já foi convertido em Ordem de Serviço / Agendamento'}
+                            {agendamentoAtivo?.status
+                              ? ` • Status: ${getLabelFromStatus(agendamentoAtivo.status as any)}`
+                              : ''}
+                          </>
+                        )}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-sans font-bold text-[14px] text-emerald-400">
+                      Orçamento Aprovado pelo Cliente (Nível {orcamento.nivel_aprovado?.toUpperCase()})
+                    </span>
+                    <span className="font-sans text-[12px] text-vapor-300">
+                      O cliente escolheu esta proposta! Clique no botão ao lado para agendar a execução.
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {temAgendamentoAtivo ? (
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {isAgendamentoNaoCompareceu && (
+                  <Button
+                    tone="amber"
+                    size="sm"
+                    onClick={abrirModalAgendamento}
+                    className="flex items-center gap-1.5"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Reagendar Horário</span>
+                  </Button>
+                )}
+                <Button
+                  tone={isAgendamentoNaoCompareceu ? 'graphite' : 'emerald'}
+                  size="sm"
+                  onClick={() => {
+                    const link = obterLinkAtendimento(null, agendamentoAtivo?.id || orcamento.agendamento_id);
+                    navigate(link || '/agenda');
+                  }}
+                >
+                  Ver Atendimento / OS
+                </Button>
+                <Button
+                  tone="graphite"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      obterLinkAgendaAgendamento(
+                        agendamentoAtivo?.id || orcamento.agendamento_id,
+                        agendamentoAtivo?.inicio
+                      )
+                    )
+                  }
+                >
+                  Ver na Agenda
+                </Button>
+              </div>
+            ) : (
               <Button
                 tone="emerald"
                 size="sm"
-                onClick={() => {
-                  const link = obterLinkAtendimento(null, agendamentoAtivo?.id || orcamento.agendamento_id);
-                  navigate(link || '/agenda');
-                }}
+                onClick={abrirModalAgendamento}
+                className="shrink-0"
               >
-                Ver Atendimento / OS
+                Agendar Agora
               </Button>
-              <Button
-                tone="graphite"
-                size="sm"
-                onClick={() =>
-                  navigate(
-                    obterLinkAgendaAgendamento(
-                      agendamentoAtivo?.id || orcamento.agendamento_id,
-                      agendamentoAtivo?.inicio
-                    )
-                  )
-                }
-              >
-                Ver na Agenda
-              </Button>
-            </div>
-          ) : (
-            <Button
-              tone="emerald"
-              size="sm"
-              onClick={() => {
-                if (!orcamento.cliente_id) {
-                  setAbrirAgendaAposCliente(true);
-                  showToast('Preencha e vincule o cliente antes de agendar a OS.', 'warning');
-                  setModoModalTrocarCliente('cadastrar');
-                  setShowModalTrocarCliente(true);
-                  return;
-                }
-                const hoje = new Date().toISOString().split('T')[0];
-                setDataAgendamento(hoje);
-                setShowAgendarModal(true);
-              }}
-              className="shrink-0"
-            >
-              Agendar Agora
-            </Button>
-          )}
-        </Card>
-      )}
+            )}
+          </Card>
+        );
+      })()}
 
       {/* CARD: AVALIAÇÃO DO VEÍCULO, FOTOS COM TIMESTAMP IMUTÁVEL E TERMOS DE GARANTIA */}
       <Card className="p-4 bg-graphite-900 border-graphite-800 flex flex-col gap-3">
@@ -4134,15 +4206,25 @@ export const DetalheOrcamento: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL CONVERTER EM AGENDAMENTO */}
+      {/* MODAL CONVERTER EM AGENDAMENTO / REAGENDAR OS */}
       <Modal
         isOpen={showAgendarModal}
         onClose={() => setShowAgendarModal(false)}
-        title="Converter Orçamento em Agendamento"
+        title={
+          isAgendamentoNaoCompareceu
+            ? `Reagendar ${numeroOsLabel || 'OS'} (Não Compareceu)`
+            : 'Converter Orçamento em Agendamento'
+        }
       >
         <form onSubmit={handleConverterAgendamento} className="flex flex-col gap-4">
           <p className="font-sans text-[14px] text-vapor-300">
-            Escolha o dia e horário para agendar o serviço aprovado pelo cliente (Nível <strong>{orcamento.nivel_aprovado?.toUpperCase()}</strong>).
+            {isAgendamentoNaoCompareceu
+              ? `Escolha o novo dia e horário para remarcar a ${numeroOsLabel || 'OS'} (o cliente não compareceu ao horário anterior).`
+              : (
+                <>
+                  Escolha o dia e horário para agendar o serviço aprovado pelo cliente (Nível <strong>{orcamento.nivel_aprovado?.toUpperCase()}</strong>).
+                </>
+              )}
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -4184,11 +4266,11 @@ export const DetalheOrcamento: React.FC = () => {
             </Button>
             <Button
               type="submit"
-              tone="emerald"
+              tone={isAgendamentoNaoCompareceu ? 'amber' : 'emerald'}
               loading={converting}
               className="min-h-[48px]"
             >
-              Confirmar Agendamento
+              {isAgendamentoNaoCompareceu ? 'Confirmar Reagendamento' : 'Confirmar Agendamento'}
             </Button>
           </div>
         </form>
@@ -4756,7 +4838,7 @@ export const DetalheOrcamento: React.FC = () => {
           if (abrirAgendaAposCliente) {
             setAbrirAgendaAposCliente(false);
             if (quoteAtualizado?.cliente_id && !resolverAgendamentoVinculadoOrcamento(quoteAtualizado)) {
-              const hoje = new Date().toISOString().split('T')[0];
+              const hoje = formatarDataIsoSP(new Date());
               setDataAgendamento(hoje);
               setShowAgendarModal(true);
             }

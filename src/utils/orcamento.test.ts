@@ -6,6 +6,8 @@ import {
   obterNomePreferencialPublico,
   resolverAgendamentoVinculadoOrcamento,
   isAgendamentoOrcamentoAtivo,
+  isAgendamentoOrcamentoNaoCompareceu,
+  obterBadgeAgendamentoOrcamento,
 } from './orcamento';
 
 describe('utils/orcamento - captura de nome e vínculo de agendamento', () => {
@@ -126,6 +128,62 @@ describe('utils/orcamento - captura de nome e vínculo de agendamento', () => {
       };
       expect(isAgendamentoOrcamentoAtivo(orc)).toBe(true);
       expect(resolverAgendamentoVinculadoOrcamento(orc)?.id).toBe('ag-2');
+    });
+
+    it('identifica corretamente quando a OS vinculada foi marcada como nao_compareceu', () => {
+      const orcNoShow = {
+        agendamento_id: 'ag-3',
+        agendamento: { id: 'ag-3', status: 'nao_compareceu', inicio: '2026-11-10T10:00:00Z', numero_os: 88 },
+      };
+      expect(isAgendamentoOrcamentoAtivo(orcNoShow)).toBe(true);
+      expect(isAgendamentoOrcamentoNaoCompareceu(orcNoShow)).toBe(true);
+      expect(obterBadgeAgendamentoOrcamento(orcNoShow)).toEqual({
+        label: 'OS Não Compareceu',
+        tone: 'flare',
+      });
+    });
+
+    it('retorna badges distintos por status real da OS vinculada', () => {
+      expect(obterBadgeAgendamentoOrcamento({ agendamento_id: null, agendamento: null })).toEqual({
+        label: 'Aguardando agenda',
+        tone: 'amber',
+      });
+      expect(
+        obterBadgeAgendamentoOrcamento({
+          agendamento_id: 'a1',
+          agendamento: { id: 'a1', status: 'agendado' },
+        })
+      ).toEqual({ label: 'OS Agendada', tone: 'cyan' });
+      expect(
+        obterBadgeAgendamentoOrcamento({
+          agendamento_id: 'a2',
+          agendamento: { id: 'a2', status: 'confirmado' },
+        })
+      ).toEqual({ label: 'OS Confirmada', tone: 'cyan' });
+      expect(
+        obterBadgeAgendamentoOrcamento({
+          agendamento_id: 'a3',
+          agendamento: { id: 'a3', status: 'aguardando_confirmacao' },
+        })
+      ).toEqual({ label: 'OS Aguardando Sinal', tone: 'amber' });
+      expect(
+        obterBadgeAgendamentoOrcamento({
+          agendamento_id: 'a4',
+          agendamento: { id: 'a4', status: 'em_andamento' },
+        })
+      ).toEqual({ label: 'OS em Andamento', tone: 'amber' });
+      expect(
+        obterBadgeAgendamentoOrcamento({
+          agendamento_id: 'a5',
+          agendamento: { id: 'a5', status: 'concluido' },
+        })
+      ).toEqual({ label: 'OS Concluída', tone: 'mint' });
+      expect(
+        obterBadgeAgendamentoOrcamento({
+          agendamento_id: 'a6',
+          agendamento: { id: 'a6', status: 'cancelado' },
+        })
+      ).toEqual({ label: 'Aguardando agenda', tone: 'amber' });
     });
   });
 });

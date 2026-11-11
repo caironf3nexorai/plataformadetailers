@@ -558,10 +558,14 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
 
   // Busca horários para Reagendar
   const handleOpenReagendar = () => {
+    const hojeIso = formatarDataIsoSP(new Date());
+    const dataAtualAgend = dataIso ? formatarDataIsoSP(dataIso) : hojeIso;
+    const dataInicial = !dataAtualAgend || dataAtualAgend < hojeIso ? hojeIso : dataAtualAgend;
     setShowReagendar(true);
-    setReagendarData(dataIso ? formatarDataIsoSP(dataIso) : '');
+    setReagendarData(dataInicial);
     setSelectedHorario(null);
     setErrorMessage(null);
+    void handleBuscarHorariosReagendamento(dataInicial);
   };
 
   const handleBuscarHorariosReagendamento = async (dataStr: string) => {
@@ -676,6 +680,19 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
     >
       <div className="flex flex-col gap-5 pb-6 sm:pb-4">
         <div className="flex flex-col gap-4 font-sans text-[13px]">
+          {agendamento.status === 'nao_compareceu' && (
+            <div className="p-3.5 bg-flare-500/10 border border-flare-500/40 rounded-lg flex items-start gap-2.5 text-flare-300">
+              <UserX size={18} className="text-flare-400 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5 text-[12px]">
+                <span className="font-bold text-flare-300 uppercase tracking-wide">
+                  Cliente Não Compareceu
+                </span>
+                <span className="text-vapor-300 leading-snug">
+                  Este agendamento foi marcado como ausente e o horário original já foi liberado na agenda. Clique em <strong className="text-amber-300">Reagendar Horário</strong> abaixo para remarcar esta mesma OS.
+                </span>
+              </div>
+            </div>
+          )}
           
           {/* LISTA DE SERVIÇOS DO AGENDAMENTO */}
           <div className="bg-graphite-800 p-4 rounded-lg border border-graphite-700 flex flex-col gap-3">
@@ -1298,28 +1315,30 @@ export const PainelAgendamento: React.FC<PainelAgendamentoProps> = ({
         })()}
 
         {/* Ações Administrativas - Ocultar estritamente para agendamentos concluídos/cancelados */}
-        {podeGerirServicos() && !showReagendar && !showCancelar && (agendamento.status === 'agendado' || agendamento.status === 'confirmado') && (
+        {podeGerirServicos() && !showReagendar && !showCancelar && ['agendado', 'aguardando_confirmacao', 'confirmado', 'nao_compareceu'].includes(agendamento.status) && (
           <div className="pt-4 border-t border-graphite-800 flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"
-              variant="secondary"
+              variant={agendamento.status === 'nao_compareceu' ? 'primary' : 'secondary'}
               onClick={handleOpenReagendar}
               className="flex items-center gap-1 text-[12px]"
             >
               <RotateCcw size={14} />
-              <span>Reagendar</span>
+              <span>{agendamento.status === 'nao_compareceu' ? 'Reagendar Horário' : 'Reagendar'}</span>
             </Button>
 
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={savingNaoCompareceu}
-              onClick={() => setShowConfirmNaoCompareceu(true)}
-              className="flex items-center gap-1 text-[12px] text-amber-400 hover:text-amber-300"
-            >
-              <UserX size={14} />
-              <span>Não Compareceu</span>
-            </Button>
+            {agendamento.status !== 'nao_compareceu' && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={savingNaoCompareceu}
+                onClick={() => setShowConfirmNaoCompareceu(true)}
+                className="flex items-center gap-1 text-[12px] text-amber-400 hover:text-amber-300"
+              >
+                <UserX size={14} />
+                <span>Não Compareceu</span>
+              </Button>
+            )}
 
             <Button
               type="button"

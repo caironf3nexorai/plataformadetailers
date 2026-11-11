@@ -27,9 +27,12 @@ import {
   Receipt,
   MessageCircle,
   Ban,
+  UserX,
+  Calendar,
 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { formatarMoeda, formatarOS } from '../utils/formatters';
+import { obterLinkAgendaAgendamento } from '../utils/agenda';
 import { formatarDataHora } from '../utils/datas';
 import { formatarSegundosHHMMSS } from '../hooks/useTempoExecucao';
 import { gerarPDFOS } from '../utils/pdfOS';
@@ -639,6 +642,12 @@ export const VisualizarAtendimento: React.FC = () => {
             AGENDADO · A CONFIRMAR
           </span>
         );
+      case 'aguardando_confirmacao':
+        return (
+          <span className="px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider font-sans bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">
+            AGUARDANDO SINAL
+          </span>
+        );
       case 'confirmado':
         return (
           <span className="px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider font-sans bg-sky-500/20 text-sky-400 rounded-full border border-sky-500/30">
@@ -651,6 +660,12 @@ export const VisualizarAtendimento: React.FC = () => {
             EM EXECUÇÃO
           </span>
         );
+      case 'nao_compareceu':
+        return (
+          <span className="px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider font-sans bg-flare-500/20 text-flare-400 rounded-full border border-flare-500/30">
+            NÃO COMPARECEU
+          </span>
+        );
       case 'cancelado':
         return (
           <span className="px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider font-sans bg-flare-500/20 text-flare-400 rounded-full border border-flare-500/30">
@@ -658,10 +673,15 @@ export const VisualizarAtendimento: React.FC = () => {
           </span>
         );
       case 'concluido':
-      default:
         return (
           <span className="px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider font-sans bg-mint-500/20 text-mint-400 rounded-full border border-mint-500/30">
             CONCLUÍDO
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider font-sans bg-graphite-700 text-vapor-300 rounded-full border border-graphite-600">
+            {String(statusAtual || 'DESCONHECIDO').replace(/_/g, ' ').toUpperCase()}
           </span>
         );
     }
@@ -1046,6 +1066,35 @@ export const VisualizarAtendimento: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* BANNER DE AVISO QUANDO CLIENTE NÃO COMPARECEU */}
+      {statusAtual === 'nao_compareceu' && (
+        <div className="p-4 bg-flare-500/10 border border-flare-500/40 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-flare-300 shadow-md">
+          <div className="flex items-start gap-3">
+            <UserX className="shrink-0 text-flare-400 mt-0.5" size={20} />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-sans text-flare-300 font-bold uppercase tracking-wide">
+                Cliente Não Compareceu ao Atendimento
+              </span>
+              <span className="text-[12px] font-sans text-vapor-300 leading-relaxed">
+                Este atendimento foi marcado como Não Compareceu
+                {agendamento?.inicio ? ` (previsto para ${formatarDataHora(agendamento.inicio)})` : ''} e o horário foi liberado na agenda. Para reagendar este veículo, abra na Agenda ou no Orçamento de origem.
+              </span>
+            </div>
+          </div>
+          {agendamento?.id && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate(obterLinkAgendaAgendamento(agendamento.id, agendamento.inicio))}
+              className="flex items-center gap-1.5 text-[12px] bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 shrink-0 font-bold"
+            >
+              <Calendar size={15} />
+              <span>Abrir na Agenda</span>
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* BANNER DE AVISO DE VISTORIA NÃO REALIZADA */}
       {avisoNavegacao && (
