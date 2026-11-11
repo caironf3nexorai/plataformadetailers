@@ -5,6 +5,15 @@ const ASAAS_WEBHOOK_SECRET = Deno.env.get('ASAAS_WEBHOOK_SECRET') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
+function getHojeSaoPauloIso(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 function safeCompare(a: string, b: string): boolean {
   if (!a || !b) return false;
   const enc = new TextEncoder();
@@ -65,7 +74,7 @@ serve(async (req) => {
     }
 
     // 3. Processamento dos Eventos do Asaas
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = getHojeSaoPauloIso();
     const paymentUrl = payment?.bankInvoiceUrl || payment?.invoiceUrl || subscription?.bankInvoiceUrl || '';
 
     if (['PAYMENT_CONFIRMED', 'PAYMENT_RECEIVED'].includes(event)) {
@@ -73,18 +82,39 @@ serve(async (req) => {
         // Buscar plano cadastrado na assinatura
         const { data: ass } = await supabase
           .from('assinaturas')
-          .select('plano')
+          .select('plano, plano_pendente, ciclo, valor_centavos, asaas_subscription_id')
           .eq('tenant_id', tenantId)
           .single();
 
-        const planoContratado = ass?.plano || 'pro';
+        const planoContratado =
+          (ass?.plano_pendente && ass.plano_pendente !== 'free' ? ass.plano_pendente : null) ||
+          (ass?.plano && ass.plano !== 'free' ? ass.plano : null) ||
+          'pro';
+        let valorPagoCentavos = payment?.value ? Math.round(Number(payment.value) * 100) : 0;
+        if (!valorPagoCentavos) {
+          const { data: pRow } = await supabase
+            .from('plans')
+            .select('preco_centavos, preco_anual_centavos')
+            .eq('codigo', planoContratado)
+            .maybeSingle();
+          valorPagoCentavos = ass?.ciclo === 'anual'
+            ? (pRow?.preco_anual_centavos ?? ((pRow?.preco_centavos || 0) * 10))
+            : (pRow?.preco_centavos || ass?.valor_centavos || 0);
+        }
 
-        // Atualizar assinatura para ativa
+        // Atualizar assinatura para ativa e limpar eventuais flags de trial/cortesia/atraso/pendente
         await supabase
           .from('assinaturas')
           .update({
+            plano: planoContratado,
+            plano_pendente: null,
             status: 'ativa',
+            is_cortesia: false,
+            cortesia_ate: null,
+            trial_fim: null,
             atraso_desde: null,
+            cancelada_em: null,
+            valor_centavos: valorPagoCentavos || ass?.valor_centavos || 0,
             url_pagamento_asaas: paymentUrl || undefined,
             proximo_vencimento: payment?.dueDate || undefined,
             updated_at: new Date().toISOString(),
@@ -106,11 +136,6 @@ serve(async (req) => {
         });
 
         // AUTOMAÇÃO DO PARCEIRO: Se esta oficina veio de um parceiro comercial, gera e aprova a comissão automaticamente
-        let valorPagoCentavos = payment?.value ? Math.round(payment.value * 100) : 0;
-        if (!valorPagoCentavos) {
-          const { data: pRow } = await supabase.from('plans').select('preco_centavos').eq('codigo', planoContratado).maybeSingle();
-          valorPagoCentavos = pRow?.preco_centavos || 0;
-        }
         await supabase.rpc('processar_pagamento_asaas_parceiro', {
           p_tenant_id: tenantId,
           p_valor_centavos: valorPagoCentavos,
@@ -244,12 +269,16 @@ serve(async (req) => {
           })
           .eq('id', tenantId);
 
-        // 2. Marca a assinatura como cancelada
+        // 2. Marca a assinatura como cancelada e zera cortesia/valor/pendente
         await supabase
           .from('assinaturas')
           .update({
             status: 'cancelada',
             plano: 'free',
+            plano_pendente: null,
+            is_cortesia: false,
+            cortesia_ate: null,
+            valor_centavos: 0,
             cancelada_em: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -280,25 +309,42 @@ serve(async (req) => {
         // Obter assinatura para verificar se ainda está dentro do período pago
         const { data: ass } = await supabase
           .from('assinaturas')
-          .select('proximo_vencimento')
+          .select('proximo_vencimento, is_cortesia')
           .eq('tenant_id', tenantId)
           .maybeSingle();
 
         const vencimento = ass?.proximo_vencimento;
         const aindaDentroDoCicloPago = vencimento && vencimento >= hoje;
+        const manterPorCortesia = Boolean(ass?.is_cortesia);
 
-        // Atualizar status da assinatura para cancelada (não renovará)
+        // Atualizar assinatura (se não estiver em ciclo pago nem cortesia, rebaixa ambos)
         await supabase
           .from('assinaturas')
-          .update({
-            status: 'cancelada',
-            cancelada_em: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .update(
+            aindaDentroDoCicloPago || manterPorCortesia
+              ? {
+                  asaas_subscription_id: null,
+                  plano_pendente: null,
+                  status: manterPorCortesia ? 'cortesia' : 'cancelada',
+                  cancelada_em: manterPorCortesia ? null : new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+              : {
+                  asaas_subscription_id: null,
+                  plano_pendente: null,
+                  status: 'cancelada',
+                  plano: 'free',
+                  valor_centavos: 0,
+                  is_cortesia: false,
+                  cortesia_ate: null,
+                  cancelada_em: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }
+          )
           .eq('tenant_id', tenantId);
 
-        // Se NÃO estiver dentro de um ciclo já pago, rebaixa para free imediatamente
-        if (!aindaDentroDoCicloPago) {
+        // Se NÃO estiver dentro de um ciclo já pago nem cortesia, rebaixa tenant para free imediatamente
+        if (!aindaDentroDoCicloPago && !manterPorCortesia) {
           await supabase
             .from('tenants')
             .update({

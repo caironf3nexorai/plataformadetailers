@@ -8,10 +8,12 @@ import {
   Sparkles, 
   ArrowRight,
   Check,
-  QrCode
+  QrCode,
+  Gift
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatarDataSegura } from '../../utils/assinatura';
 
 interface ModalAvisoAssinaturaProps {
   assinatura: {
@@ -20,6 +22,10 @@ interface ModalAvisoAssinaturaProps {
     url_pagamento_asaas?: string | null;
     dias_trial_restantes?: number;
     forma_pagamento?: string | null;
+    is_cortesia?: boolean;
+    cortesia_ate?: string | null;
+    dias_cortesia_restantes?: number | null;
+    asaas_subscription_id?: string | null;
   } | null;
 }
 
@@ -29,12 +35,22 @@ export const ModalAvisoAssinatura: React.FC<ModalAvisoAssinaturaProps> = ({ assi
   const [aberto, setAberto] = useState(false);
 
   const isTenantFree = !tenant?.plano || tenant.plano === 'free';
+  const temPixPendente =
+    isTenantFree &&
+    Boolean(assinatura?.url_pagamento_asaas) &&
+    (assinatura?.forma_pagamento === 'pix' || assinatura?.status === 'atrasada');
+  const isAtrasadaPaga = !isTenantFree && assinatura?.status === 'atrasada';
+  const isCortesiaExpirando =
+    !isTenantFree &&
+    (assinatura?.status === 'cortesia' || Boolean(assinatura?.is_cortesia)) &&
+    typeof assinatura?.dias_cortesia_restantes === 'number' &&
+    assinatura.dias_cortesia_restantes <= 3;
 
   useEffect(() => {
     if (!assinatura) return;
 
-    // Caso 1: Usuário é Free e tem pagamento de PIX/assinatura pendente
-    if (isTenantFree && (assinatura.status === 'atrasada' || assinatura.url_pagamento_asaas || assinatura.forma_pagamento === 'pix')) {
+    // Caso 1: Usuário Free com fatura/PIX de upgrade pendente no Asaas
+    if (temPixPendente) {
       const dispensadoSessao = sessionStorage.getItem('aviso_pix_pendente_dispensado');
       if (!dispensadoSessao) {
         const timer = setTimeout(() => setAberto(true), 600);
@@ -44,7 +60,7 @@ export const ModalAvisoAssinatura: React.FC<ModalAvisoAssinaturaProps> = ({ assi
     }
 
     // Caso 2: Usuário já é Pro/Studio e a mensalidade de renovação está atrasada
-    if (!isTenantFree && assinatura.status === 'atrasada') {
+    if (isAtrasadaPaga) {
       const dispensadoSessao = sessionStorage.getItem('aviso_atraso_dispensado');
       if (!dispensadoSessao) {
         const timer = setTimeout(() => setAberto(true), 600);
@@ -53,7 +69,17 @@ export const ModalAvisoAssinatura: React.FC<ModalAvisoAssinaturaProps> = ({ assi
       return;
     }
 
-    // Caso 3: Trial legítimo nos últimos 3 dias
+    // Caso 3: Cortesia temporária expirando em <= 3 dias
+    if (isCortesiaExpirando) {
+      const dispensadoSessao = sessionStorage.getItem('aviso_cortesia_dispensado');
+      if (!dispensadoSessao) {
+        const timer = setTimeout(() => setAberto(true), 600);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
+
+    // Caso 4: Trial legítimo nos últimos 3 dias
     if (!isTenantFree && assinatura.status === 'trial' && (assinatura.dias_trial_restantes ?? 14) <= 3) {
       const dispensadoSessao = sessionStorage.getItem('aviso_trial_dispensado');
       if (!dispensadoSessao) {
@@ -61,20 +87,22 @@ export const ModalAvisoAssinatura: React.FC<ModalAvisoAssinaturaProps> = ({ assi
         return () => clearTimeout(timer);
       }
     }
-  }, [assinatura, isTenantFree]);
+  }, [assinatura, isTenantFree, temPixPendente, isAtrasadaPaga, isCortesiaExpirando]);
 
   if (!aberto || !assinatura) return null;
 
-  const isAtrasadaPaga = !isTenantFree && assinatura.status === 'atrasada';
-  const isPixConversao = isTenantFree;
+  const isPixConversao = temPixPendente;
   const diasAtraso = assinatura.dias_para_rebaixamento ?? 5;
   const diasTrial = assinatura.dias_trial_restantes ?? 3;
+  const diasCortesia = assinatura.dias_cortesia_restantes ?? 3;
 
   const fecharModal = () => {
     if (isPixConversao) {
       sessionStorage.setItem('aviso_pix_pendente_dispensado', 'true');
     } else if (isAtrasadaPaga) {
       sessionStorage.setItem('aviso_atraso_dispensado', 'true');
+    } else if (isCortesiaExpirando) {
+      sessionStorage.setItem('aviso_cortesia_dispensado', 'true');
     } else {
       sessionStorage.setItem('aviso_trial_dispensado', 'true');
     }
@@ -121,26 +149,32 @@ export const ModalAvisoAssinatura: React.FC<ModalAvisoAssinaturaProps> = ({ assi
               <AlertTriangle className="w-6 h-6 animate-pulse" />
             ) : isPixConversao ? (
               <QrCode className="w-6 h-6 text-amber-400 animate-pulse" />
+            ) : isCortesiaExpirando ? (
+              <Gift className="w-6 h-6 text-cyan-400" />
             ) : (
               <Sparkles className="w-6 h-6" />
             )}
           </div>
           <div>
             <span className={`text-[10px] font-black uppercase tracking-widest block ${
-              isAtrasadaPaga ? 'text-rose-400' : 'text-amber-400'
+              isAtrasadaPaga ? 'text-rose-400' : isCortesiaExpirando ? 'text-cyan-400' : 'text-amber-400'
             }`}>
               {isAtrasadaPaga 
                 ? '⚠️ PENDÊNCIA DE RENOVAÇÃO' 
                 : isPixConversao 
                   ? '⚡ PIX PENDENTE • ATIVAÇÃO IMEDIATA' 
-                  : '✨ TESTE GRÁTIS PRO'}
+                  : isCortesiaExpirando
+                    ? '⏳ CORTESIA PERTO DO FIM'
+                    : '✨ TESTE GRÁTIS PRO'}
             </span>
             <h3 className="text-lg font-black text-white leading-tight">
               {isAtrasadaPaga 
                 ? 'Regularize sua Assinatura' 
                 : isPixConversao 
                   ? 'Sua Oficina a 1 Passo do Plano Pro!' 
-                  : 'Degustação Quase no Fim'}
+                  : isCortesiaExpirando
+                    ? 'Sua Cortesia Está Encerrando'
+                    : 'Degustação Quase no Fim'}
             </h3>
           </div>
         </div>
@@ -196,6 +230,22 @@ export const ModalAvisoAssinatura: React.FC<ModalAvisoAssinaturaProps> = ({ assi
               <div className="flex items-center space-x-2 text-[11px] text-slate-400">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Seus clientes, veículos e dados financeiros permanecem 100% seguros e intactos.</span>
+              </div>
+            </>
+          ) : isCortesiaExpirando ? (
+            /* CORTESIA TEMPORÁRIA PERTO DO FIM */
+            <>
+              <p>
+                Sua cortesia administrativa do plano <strong>{(tenant?.plano || 'pro').toUpperCase()}</strong> encerra em{' '}
+                <strong>{formatarDataSegura(assinatura.cortesia_ate)}</strong>.
+              </p>
+              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-100">
+                <span className="font-bold block text-cyan-200 mb-1">
+                  Restam {diasCortesia} dia(s) de cortesia
+                </span>
+                <span>
+                  Não haverá nenhuma cobrança automática. Após o prazo, a conta retorna automaticamente para o plano Free caso você não ative uma assinatura paga.
+                </span>
               </div>
             </>
           ) : (

@@ -2,13 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
-import { ShieldCheck, Calendar, CreditCard, AlertTriangle, ExternalLink, RefreshCw, XCircle, CheckCircle2, Sparkles } from 'lucide-react';
+import { ShieldCheck, Calendar, CreditCard, AlertTriangle, ExternalLink, RefreshCw, XCircle, CheckCircle2, Sparkles, Gift } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { useNavigate } from 'react-router-dom';
+import {
+  calcularDiasRestantesISO,
+  formatarDataSegura,
+  obterResumoStatusAssinatura,
+  podeCancelarAssinaturaNoAsaas,
+} from '../../utils/assinatura';
 
 export const AbaAssinatura: React.FC = () => {
   const { showSuccess, showError } = useToast();
@@ -137,7 +143,7 @@ export const AbaAssinatura: React.FC = () => {
 
   useEffect(() => {
     carregarAssinatura();
-  }, []);
+  }, [tenant?.id]);
 
   const handleCancelarAssinatura = () => {
     setShowConfirmCancelar(true);
@@ -156,6 +162,7 @@ export const AbaAssinatura: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
+        body: JSON.stringify({ tenant_id: tenant?.id }),
       });
 
       const result = await res.json();
@@ -163,6 +170,7 @@ export const AbaAssinatura: React.FC = () => {
 
       showSuccess('Assinatura cancelada com sucesso. Seu acesso continuará ativo até o término do ciclo atual.');
       await carregarAssinatura();
+      await refetchTenantData();
     } catch (err: any) {
       showError(err.message || 'Falha ao cancelar assinatura.');
     } finally {
@@ -172,6 +180,7 @@ export const AbaAssinatura: React.FC = () => {
 
   const statusToneMap: Record<string, 'mint' | 'amber' | 'flare' | 'glass'> = {
     ativa: 'mint',
+    cortesia: 'mint',
     trial: 'amber',
     atrasada: 'flare',
     cancelada: 'glass',
@@ -179,6 +188,7 @@ export const AbaAssinatura: React.FC = () => {
 
   const statusLabelMap: Record<string, string> = {
     ativa: 'ATIVA (REGULAR)',
+    cortesia: 'CORTESIA ADMIN',
     trial: 'EM DEGUSTAÇÃO (TRIAL)',
     atrasada: 'PAGAMENTO EM ATRASO',
     cancelada: 'CANCELADA',
@@ -192,12 +202,19 @@ export const AbaAssinatura: React.FC = () => {
     );
   }
 
-  const planoSigla = (assinatura?.plano || 'free').toUpperCase();
+  const planoAtivo = (assinatura?.plano || tenant?.plano || 'free').toLowerCase();
+  const planoSigla = planoAtivo.toUpperCase();
   const cicloAssinatura = assinatura?.ciclo || 'mensal';
 
-  const isEmTrial = assinatura?.status === 'trial' || tenant?.status === 'trial' || (!assinatura?.status && tenant?.plano === 'pro');
-  const statusAssin = isEmTrial ? 'trial' : (assinatura?.status || 'trial');
-  const jaCancelada = !!assinatura?.cancelada_em;
+  const resumoStatus = obterResumoStatusAssinatura(assinatura?.status, {
+    isCortesia: assinatura?.is_cortesia,
+    plano: planoAtivo,
+  });
+  const isEmCortesia = resumoStatus.statusEfetivo === 'cortesia';
+  const isEmTrial = resumoStatus.statusEfetivo === 'trial';
+  const statusAssin = resumoStatus.statusEfetivo;
+  const jaCancelada = !!assinatura?.cancelada_em && !isEmCortesia;
+  const diasCortesiaRestantes = assinatura?.dias_cortesia_restantes ?? calcularDiasRestantesISO(assinatura?.cortesia_ate);
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
@@ -218,7 +235,7 @@ export const AbaAssinatura: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {jaCancelada && (
+            {jaCancelada && planoSigla !== 'FREE' && (
               <Badge tone="flare">NÃO RENOVA</Badge>
             )}
             <Badge tone={statusToneMap[statusAssin] || 'amber'}>
@@ -231,10 +248,15 @@ export const AbaAssinatura: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-graphite-900/60 border border-graphite-700 flex flex-col gap-1">
             <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">
-              {isEmTrial ? 'Plano em Degustação' : 'Plano Contratado'}
+              {isEmCortesia ? 'Plano em Cortesia' : isEmTrial ? 'Plano em Degustação' : 'Plano Contratado'}
             </span>
             <span className="text-xl font-bold font-display text-vapor-100 flex items-center gap-2">
               {planoSigla}
+              {isEmCortesia && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
+                  CORTESIA
+                </span>
+              )}
               {isEmTrial && (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold">
                   TRIAL
@@ -242,8 +264,8 @@ export const AbaAssinatura: React.FC = () => {
               )}
             </span>
             <span className="text-xs text-vapor-400">
-              {planoSigla === 'FREE'
-                ? 'R$ 0,00 / mês'
+              {planoSigla === 'FREE' || isEmCortesia
+                ? 'R$ 0,00 / mês (Sem cobrança)'
                 : cicloAssinatura === 'anual'
                 ? `${formatarPrecoMensal(precosAnuaisCentavos[planoSigla.toLowerCase()] ?? (precosCentavos[planoSigla.toLowerCase()] ? precosCentavos[planoSigla.toLowerCase()] * 10 : assinatura?.valor_centavos))} / ano`
                 : `${formatarPrecoMensal(precosCentavos[planoSigla.toLowerCase()] ?? assinatura?.valor_centavos)} / mês`}
@@ -251,9 +273,16 @@ export const AbaAssinatura: React.FC = () => {
           </div>
 
           <div className="p-4 rounded-xl bg-graphite-900/60 border border-graphite-700 flex flex-col gap-1">
-            <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">Ciclo de Cobrança</span>
+            <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">
+              {isEmCortesia ? 'Vigência da Cortesia' : 'Ciclo de Cobrança'}
+            </span>
             <span className="text-base font-bold text-vapor-100 flex items-center gap-2">
-              {cicloAssinatura === 'anual' ? (
+              {isEmCortesia ? (
+                <>
+                  <Gift size={16} className="text-cyan-400" />
+                  <span>{assinatura?.cortesia_ate ? `Até ${formatarDataSegura(assinatura.cortesia_ate)}` : 'Sem prazo (Vitalícia)'}</span>
+                </>
+              ) : cicloAssinatura === 'anual' ? (
                 <>
                   <Sparkles size={16} className="text-amber-400" />
                   <span>Anual (12 Meses)</span>
@@ -266,7 +295,13 @@ export const AbaAssinatura: React.FC = () => {
               )}
             </span>
             <span className="text-xs text-vapor-400">
-              {cicloAssinatura === 'anual' ? 'Desconto de até 15% aplicado' : 'Sem fidelidade contratual'}
+              {isEmCortesia
+                ? diasCortesiaRestantes !== null
+                  ? `${diasCortesiaRestantes} dia(s) restante(s) antes de retornar ao Free`
+                  : 'Concedido pela administração sem cobrança'
+                : cicloAssinatura === 'anual'
+                  ? 'Desconto de até 15% aplicado'
+                  : 'Sem fidelidade contratual'}
             </span>
           </div>
 
@@ -274,31 +309,78 @@ export const AbaAssinatura: React.FC = () => {
             <span className="text-xs text-vapor-400 font-mono uppercase tracking-wider">Forma de Pagamento</span>
             <span className="text-base font-bold text-vapor-100 flex items-center gap-2">
               <CreditCard size={16} className="text-amber-500" />
-              {assinatura?.forma_pagamento === 'cartao' ? 'Cartão de Crédito' : assinatura?.forma_pagamento === 'pix' ? 'PIX' : 'Gratuito / Não cadastrado'}
+              {isEmCortesia
+                ? 'Cortesia Administrativa'
+                : assinatura?.forma_pagamento === 'cartao'
+                  ? 'Cartão de Crédito'
+                  : assinatura?.forma_pagamento === 'pix'
+                    ? 'PIX'
+                    : 'Gratuito / Não cadastrado'}
             </span>
-            {assinatura?.proximo_vencimento && (
+            {!isEmCortesia && assinatura?.proximo_vencimento && (
               <span className="text-xs text-vapor-400 flex items-center gap-1 mt-1">
-                <Calendar size={12} /> {jaCancelada ? 'Acesso válido até:' : 'Renovação em:'} {new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')}
+                <Calendar size={12} /> {jaCancelada ? 'Acesso válido até:' : 'Renovação em:'} {formatarDataSegura(assinatura.proximo_vencimento)}
               </span>
             )}
           </div>
         </div>
 
+        {/* Cartão informativo de Cortesia Administrativa */}
+        {isEmCortesia && (
+          <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-500/15 via-cyan-500/5 to-graphite-900 border border-cyan-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <Gift size={20} className="text-cyan-400 shrink-0 mt-0.5" />
+              <div className="text-xs text-cyan-100 space-y-1">
+                <p className="font-bold uppercase tracking-wide text-cyan-300">
+                  Plano {planoSigla} em Cortesia Administrativa
+                </p>
+                <p className="text-vapor-300 leading-relaxed">
+                  {assinatura?.cortesia_ate
+                    ? `Você está utilizando os recursos do plano ${planoSigla} por cortesia até ${formatarDataSegura(assinatura.cortesia_ate)} (${diasCortesiaRestantes ?? 0} dia(s) restante(s)), sem nenhuma cobrança automática no Asaas. Ao término do prazo, a conta retorna automaticamente para o plano Free.`
+                    : `Você está utilizando os recursos do plano ${planoSigla} em cortesia vitalícia, sem qualquer cobrança automática no Asaas.`}
+                </p>
+              </div>
+            </div>
+
+            {assinatura?.cortesia_ate && (
+              <Button
+                onClick={() => {
+                  const targetCod = planoAtivo === 'studio' ? 'studio' : 'pro';
+                  const centavosM = precosCentavos[targetCod] ?? assinatura?.valor_centavos;
+                  const centavosA = precosAnuaisCentavos[targetCod] ?? (centavosM ? centavosM * 10 : undefined);
+                  setSelectedPlano({
+                    codigo: targetCod,
+                    nome: targetCod === 'studio' ? 'Studio' : 'Pro',
+                    preco: formatarPrecoMensal(centavosM),
+                    precoAnual: centavosA ? `${formatarPrecoMensal(centavosA)} / ano` : undefined,
+                    cicloInicial: 'anual',
+                  });
+                  setCheckoutModalOpen(true);
+                }}
+                variant="primary"
+                className="text-xs font-bold shrink-0 w-full sm:w-auto"
+              >
+                Assinar em Definitivo
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Aviso de Assinatura com Renovação Cancelada mantendo vigência */}
-        {jaCancelada && assinatura?.proximo_vencimento && (
+        {jaCancelada && planoSigla !== 'FREE' && assinatura?.proximo_vencimento && (
           <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
             <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
             <div className="text-xs text-amber-200">
               <p className="font-bold uppercase tracking-wide">Renovação Automática Desativada</p>
               <p className="text-vapor-300 mt-1">
-                Sua assinatura não será renovada automaticamente. Conforme as diretrizes contratadas, todo o seu acesso e benefícios permanecem <strong>100% liberados até {new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')}</strong> sem qualquer corte ou cobrança adicional.
+                Sua assinatura não será renovada automaticamente. Conforme as diretrizes contratadas, todo o seu acesso e benefícios permanecem <strong>100% liberados até {formatarDataSegura(assinatura.proximo_vencimento)}</strong> sem qualquer corte ou cobrança adicional.
               </p>
             </div>
           </div>
         )}
 
-        {/* Banner / Card de Upgrade para Plano Anual (quando está no Mensal ou Free) */}
-        {!jaCancelada && (planoSigla === 'FREE' || cicloAssinatura === 'mensal') && (
+        {/* Banner / Card de Upgrade para Plano Anual (quando está no Free, ou Mensal ativo sem cancelamento, e não em cortesia) */}
+        {!isEmCortesia && (planoSigla === 'FREE' || (!jaCancelada && cicloAssinatura === 'mensal')) && (
           <div className="p-4 sm:p-5 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-graphite-900/60 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
@@ -390,21 +472,21 @@ export const AbaAssinatura: React.FC = () => {
         )}
 
         {/* Alerta de Trial */}
-        {(assinatura?.status === 'trial' || tenant?.status === 'trial') && (
+        {isEmTrial && (
           <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-graphite-900 border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <CheckCircle2 size={22} className="text-amber-400 shrink-0" />
               <div className="flex flex-col">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-amber-200 uppercase tracking-wide">
-                    Período de Degustação do Plano Pro (14 Dias)
+                    Período de Degustação do Plano {planoSigla}
                   </span>
                   {assinatura?.dias_trial_restantes !== undefined && (
                     <Badge tone="amber">{assinatura.dias_trial_restantes} dia(s) restantes</Badge>
                   )}
                 </div>
                 <span className="text-xs text-amber-300/90 mt-1 leading-relaxed">
-                  Não precisa esperar os 14 dias terminarem! Ative sua assinatura definitiva agora para garantir seu plano e validar as comissões de parceiro.
+                  Não precisa esperar o período de teste terminar! Ative sua assinatura definitiva agora para garantir seu plano sem interrupções.
                 </span>
               </div>
             </div>
@@ -486,8 +568,8 @@ export const AbaAssinatura: React.FC = () => {
             )}
           </div>
 
-          {/* Botão de Cancelamento que aciona a Edge Function */}
-          {assinatura?.status !== 'cancelada' && !jaCancelada && (
+          {/* Botão de Cancelamento que aciona a Edge Function (apenas quando há assinatura recorrente real no Asaas) */}
+          {podeCancelarAssinaturaNoAsaas(assinatura) && (
             <button
               type="button"
               onClick={handleCancelarAssinatura}
@@ -526,12 +608,12 @@ export const AbaAssinatura: React.FC = () => {
           cicloAssinatura === 'anual'
             ? `Tem certeza que deseja cancelar sua assinatura anual? A renovação automática dos próximos anos será desativada. Conforme nossa política de assinatura anual (com até 15% de desconto promocional), seu plano e todos os seus recursos permanecerão 100% liberados até o término dos 12 meses já pagos (${
                 assinatura?.proximo_vencimento
-                  ? new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')
+                  ? formatarDataSegura(assinatura.proximo_vencimento)
                   : 'período contratado'
               }). Não haverá novas cobranças.`
             : `Tem certeza que deseja cancelar sua assinatura mensal? A renovação automática será cancelada e seu acesso permanecerá ativo até o fim do período já pago (${
                 assinatura?.proximo_vencimento
-                  ? new Date(assinatura.proximo_vencimento).toLocaleDateString('pt-BR')
+                  ? formatarDataSegura(assinatura.proximo_vencimento)
                   : 'término do ciclo'
               }).`
         }

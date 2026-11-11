@@ -262,6 +262,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
+          tenant_id: tenant?.id,
           plano: planoCodigo,
           ciclo,
           forma_pagamento: formaPagamento,

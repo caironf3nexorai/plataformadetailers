@@ -22,8 +22,15 @@ import {
   UserX,
   Save,
   MessageCircle,
+  Gift,
 } from 'lucide-react';
 import { formatTelefone, cleanTelefone } from '../../utils/formatters';
+import {
+  CORTESIA_DURACAO_OPCOES,
+  calcularDataFimCortesiaISO,
+  formatarDataSegura,
+  obterResumoStatusAssinatura,
+} from '../../utils/assinatura';
 
 interface TenantItem {
   id: string;
@@ -42,6 +49,12 @@ interface TenantItem {
   total_execucoes: number;
   ultimo_acesso: string | null;
   agendamento_online_ativo: boolean;
+  assinatura_status?: string | null;
+  is_cortesia?: boolean;
+  cortesia_ate?: string | null;
+  trial_fim?: string | null;
+  proximo_vencimento?: string | null;
+  asaas_subscription_id?: string | null;
 }
 
 interface TenantDetail {
@@ -93,8 +106,16 @@ export const AdminOficinas: React.FC = () => {
 
   // Estado para Modal de Alteração Manual de Plano
   const [modalPlanoOpen, setModalPlanoOpen] = useState(false);
-  const [targetTenant, setTargetTenant] = useState<{ id: string; nome: string; planoAtual: string } | null>(null);
+  const [targetTenant, setTargetTenant] = useState<{
+    id: string;
+    nome: string;
+    planoAtual: string;
+    asaasSubId?: string | null;
+  } | null>(null);
   const [novoPlano, setNovoPlano] = useState<'free' | 'pro' | 'studio'>('pro');
+  const [isCortesiaAdmin, setIsCortesiaAdmin] = useState(true);
+  const [duracaoCortesiaOpcao, setDuracaoCortesiaOpcao] = useState<string>('30d');
+  const [diasCustomCortesia, setDiasCustomCortesia] = useState<string>('30');
   const [motivoAudit, setMotivoAudit] = useState('');
   const [salvandoPlano, setSalvandoPlano] = useState(false);
   const [planosCadastrados, setPlanosCadastrados] = useState<{ codigo: string; nome: string; preco_centavos: number }[]>([]);
@@ -592,11 +613,30 @@ export const AdminOficinas: React.FC = () => {
     }
   };
 
-  const handleAbrirModalPlano = (tenantId: string, tenantNome: string, planoAtual: string) => {
-    setTargetTenant({ id: tenantId, nome: tenantNome, planoAtual });
+  const handleAbrirModalPlano = (
+    tenantId: string,
+    tenantNome: string,
+    planoAtual: string,
+    asaasSubId?: string | null
+  ) => {
+    setTargetTenant({ id: tenantId, nome: tenantNome, planoAtual, asaasSubId });
     setNovoPlano((planoAtual as any) || 'pro');
+    setIsCortesiaAdmin(true);
+    setDuracaoCortesiaOpcao('30d');
+    setDiasCustomCortesia('30');
     setMotivoAudit('');
     setModalPlanoOpen(true);
+  };
+
+  const resolverDiasCortesia = (): number | null => {
+    if (novoPlano === 'free') return null;
+    if (duracaoCortesiaOpcao === 'vitalicia') return null;
+    if (duracaoCortesiaOpcao === 'custom') {
+      const n = parseInt(diasCustomCortesia, 10);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    }
+    const found = CORTESIA_DURACAO_OPCOES.find((o) => o.id === duracaoCortesiaOpcao);
+    return found ? found.dias : 30;
   };
 
   const handleSalvarAlteracaoPlano = async (e: React.FormEvent) => {
@@ -608,17 +648,35 @@ export const AdminOficinas: React.FC = () => {
       return;
     }
 
+    const diasFinal = resolverDiasCortesia();
+    if (novoPlano !== 'free' && duracaoCortesiaOpcao === 'custom' && (!diasFinal || diasFinal <= 0)) {
+      showError('Informe uma quantidade de dias válida (maior que zero).');
+      return;
+    }
+
     setSalvandoPlano(true);
     try {
       const { error } = await supabase.rpc('admin_alterar_plano_manual', {
         p_tenant_id: targetTenant.id,
         p_novo_plano: novoPlano,
         p_motivo: motivoAudit.trim(),
+        p_dias_cortesia: novoPlano === 'free' ? null : diasFinal,
+        p_cortesia_ate: null,
+        p_is_cortesia: novoPlano === 'free' ? false : isCortesiaAdmin,
       });
 
       if (error) throw error;
 
-      showSuccess(`Plano da oficina "${targetTenant.nome}" alterado para ${novoPlano.toUpperCase()} com sucesso!`);
+      const resumoPrazo =
+        novoPlano === 'free'
+          ? 'rebaixado para Free'
+          : isCortesiaAdmin
+            ? diasFinal
+              ? `como cortesia de ${diasFinal} dia(s)`
+              : 'como cortesia vitalícia'
+            : 'como assinatura comercial ativa';
+
+      showSuccess(`Plano da oficina "${targetTenant.nome}" alterado para ${novoPlano.toUpperCase()} (${resumoPrazo}) com sucesso!`);
       setModalPlanoOpen(false);
       setTargetTenant(null);
 
@@ -770,13 +828,40 @@ export const AdminOficinas: React.FC = () => {
                         <div className="text-xs text-slate-500 font-mono">/{t.slug}</div>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
-                          t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
-                          t.plano === 'pro' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' :
-                          'bg-slate-800 text-slate-400 border border-slate-700'
-                        }`}>
-                          {t.plano}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
+                            t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
+                            t.plano === 'pro' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' :
+                            'bg-slate-800 text-slate-400 border border-slate-700'
+                          }`}>
+                            {t.plano}
+                          </span>
+                          {t.plano !== 'free' && (() => {
+                            const resumo = obterResumoStatusAssinatura(t.assinatura_status, {
+                              isCortesia: t.is_cortesia,
+                              plano: t.plano,
+                            });
+                            if (resumo.isCortesia) {
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">
+                                  <Gift className="w-2.5 h-2.5" />
+                                  {t.cortesia_ate ? `Cortesia até ${formatarDataSegura(t.cortesia_ate)}` : 'Cortesia vitalícia'}
+                                </span>
+                              );
+                            }
+                            if (resumo.statusEfetivo === 'trial') {
+                              return (
+                                <span className="text-[10px] font-mono text-amber-300">
+                                  {t.trial_fim ? `Trial até ${formatarDataSegura(t.trial_fim)}` : 'Em trial'}
+                                </span>
+                              );
+                            }
+                            if (resumo.statusEfetivo === 'atrasada') {
+                              return <span className="text-[10px] font-mono text-rose-400">Pagamento atrasado</span>;
+                            }
+                            return null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 text-slate-300">
                         <div>{t.cidade ? `${t.cidade} - ${t.uf || ''}` : <span className="text-slate-600">Não informado</span>}</div>
@@ -808,7 +893,7 @@ export const AdminOficinas: React.FC = () => {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center space-x-2">
                           <span className="font-mono text-xs text-slate-400">
-                            {t.ultimo_acesso ? new Date(t.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
+                            {t.ultimo_acesso ? formatarDataSegura(t.ultimo_acesso) : 'Nunca'}
                           </span>
                           {churn && (
                             <span className="flex items-center space-x-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono" title="Sem acesso há mais de 30 dias (Risco de Churn)">
@@ -840,7 +925,7 @@ export const AdminOficinas: React.FC = () => {
                         </button>
 
                         <button
-                          onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
+                          onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano, t.asaas_subscription_id)}
                           className="inline-flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 transition"
                           title="Alterar plano da oficina"
                         >
@@ -911,13 +996,25 @@ export const AdminOficinas: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
-                      t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
-                      t.plano === 'pro' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' :
-                      'bg-slate-800 text-slate-400 border border-slate-700'
-                    }`}>
-                      {t.plano}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
+                        t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
+                        t.plano === 'pro' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' :
+                        'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        {t.plano}
+                      </span>
+                      {t.plano !== 'free' && (t.is_cortesia || t.assinatura_status === 'cortesia') && (
+                        <span className="text-[10px] font-mono text-cyan-300">
+                          {t.cortesia_ate ? `Cortesia até ${formatarDataSegura(t.cortesia_ate)}` : 'Cortesia vitalícia'}
+                        </span>
+                      )}
+                      {t.plano !== 'free' && t.assinatura_status === 'trial' && t.trial_fim && (
+                        <span className="text-[10px] font-mono text-amber-300">
+                          Trial até {formatarDataSegura(t.trial_fim)}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-800/80 text-center font-mono text-xs">
@@ -941,7 +1038,7 @@ export const AdminOficinas: React.FC = () => {
                       <div className="flex items-center space-x-1.5 text-slate-400">
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
                         <span className="font-mono text-[11px]">
-                          Acesso: {t.ultimo_acesso ? new Date(t.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
+                          Acesso: {t.ultimo_acesso ? formatarDataSegura(t.ultimo_acesso) : 'Nunca'}
                         </span>
                         {churn && (
                           <span className="bg-amber-500/10 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 font-semibold">
@@ -974,7 +1071,7 @@ export const AdminOficinas: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano)}
+                        onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano, t.asaas_subscription_id)}
                         className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 py-2 px-2.5 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center space-x-1.5 transition cursor-pointer"
                       >
                         <span>Plano</span>
@@ -1047,10 +1144,23 @@ export const AdminOficinas: React.FC = () => {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <div className="flex items-center gap-2 pt-0.5">
+                      <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                         <span className="text-xs font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded inline-block">
                           Plano {detailData.tenant.plano}
                         </span>
+                        {detailData.tenant.plano !== 'free' && (detailData.tenant.is_cortesia || detailData.tenant.assinatura_status === 'cortesia') && (
+                          <span className="text-xs font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                            <Gift className="w-3 h-3" />
+                            {detailData.tenant.cortesia_ate
+                              ? `Cortesia até ${formatarDataSegura(detailData.tenant.cortesia_ate)}`
+                              : 'Cortesia vitalícia'}
+                          </span>
+                        )}
+                        {detailData.tenant.plano !== 'free' && detailData.tenant.assinatura_status === 'trial' && detailData.tenant.trial_fim && (
+                          <span className="text-xs font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded inline-block">
+                            Trial até {formatarDataSegura(detailData.tenant.trial_fim)}
+                          </span>
+                        )}
                         <span className="text-xs text-slate-500 font-mono">/{detailData.tenant.slug}</span>
                       </div>
                     </div>
@@ -1077,7 +1187,14 @@ export const AdminOficinas: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => handleAbrirModalPlano(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.plano)}
+                        onClick={() =>
+                          handleAbrirModalPlano(
+                            detailData.tenant.id,
+                            detailData.tenant.nome,
+                            detailData.tenant.plano,
+                            detailData.tenant.asaas_subscription_id
+                          )
+                        }
                         className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -1104,7 +1221,7 @@ export const AdminOficinas: React.FC = () => {
                     </div>
                   )}
                   <p className="text-xs text-slate-400">
-                    Cadastrada em: {new Date(detailData.tenant.created_at).toLocaleDateString('pt-BR')}
+                    Cadastrada em: {formatarDataSegura(detailData.tenant.created_at)}
                   </p>
                 </div>
 
@@ -1197,7 +1314,7 @@ export const AdminOficinas: React.FC = () => {
                                   {m.role} ({m.status})
                                 </span>
                                 <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                                  Acesso: {m.ultimo_acesso ? new Date(m.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}
+                                  Acesso: {m.ultimo_acesso ? formatarDataSegura(m.ultimo_acesso) : 'Nunca'}
                                 </div>
                               </div>
                             </div>
@@ -1283,14 +1400,14 @@ export const AdminOficinas: React.FC = () => {
 
       {/* Modal de Alteração Manual de Plano */}
       {modalPlanoOpen && targetTenant && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150 my-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
                 <Shield className="text-amber-500" size={18} />
                 Alteração Manual de Plano
               </h3>
-              <button onClick={() => setModalPlanoOpen(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setModalPlanoOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
                 <X size={18} />
               </button>
             </div>
@@ -1299,6 +1416,12 @@ export const AdminOficinas: React.FC = () => {
               <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300">
                 Oficina: <strong className="text-white">{targetTenant.nome}</strong> (Atual: <span className="uppercase font-mono text-amber-400">{targetTenant.planoAtual}</span>)
               </div>
+
+              {targetTenant.asaasSubId && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 leading-relaxed">
+                  <strong>Atenção:</strong> Esta oficina possui assinatura Asaas (<span className="font-mono">{targetTenant.asaasSubId}</span>). Alterar o plano manualmente pelo Admin não cancela cobranças já criadas no gateway Asaas.
+                </div>
+              )}
 
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-mono font-bold text-slate-300 uppercase">Novo Plano</label>
@@ -1323,6 +1446,116 @@ export const AdminOficinas: React.FC = () => {
                 </select>
               </div>
 
+              {novoPlano !== 'free' ? (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-mono font-bold text-slate-300 uppercase">Tipo de Concessão</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsCortesiaAdmin(true)}
+                        className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
+                          isCortesiaAdmin
+                            ? 'bg-cyan-500/15 border-cyan-500/50 text-cyan-200'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="text-xs font-bold block">Cortesia Admin</span>
+                        <span className="text-[10px] opacity-80">Sem cobrança / Fora do MRR</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsCortesiaAdmin(false)}
+                        className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
+                          !isCortesiaAdmin
+                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-200'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        <span className="text-xs font-bold block">Ativo Comercial</span>
+                        <span className="text-[10px] opacity-80">Pago manual / Conta no MRR</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-mono font-bold text-slate-300 uppercase">
+                      {isCortesiaAdmin ? 'Duração da Cortesia (Rebaixamento Automático)' : 'Vigência / Próximo Vencimento'}
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {CORTESIA_DURACAO_OPCOES.map((op) => (
+                        <button
+                          key={op.id}
+                          type="button"
+                          onClick={() => setDuracaoCortesiaOpcao(op.id)}
+                          className={`py-2 px-2 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                            duracaoCortesiaOpcao === op.id
+                              ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          {op.label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setDuracaoCortesiaOpcao('custom')}
+                        className={`py-2 px-2 rounded-lg border text-xs font-semibold transition cursor-pointer col-span-3 ${
+                          duracaoCortesiaOpcao === 'custom'
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                        }`}
+                      >
+                        Outro prazo (informar dias)
+                      </button>
+                    </div>
+
+                    {duracaoCortesiaOpcao === 'custom' && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="number"
+                          min={1}
+                          max={3650}
+                          value={diasCustomCortesia}
+                          onChange={(e) => setDiasCustomCortesia(e.target.value)}
+                          placeholder="Dias (ex: 45)"
+                          className="w-32 p-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 outline-none font-mono"
+                        />
+                        <span className="text-xs text-slate-400">dias a partir de hoje</span>
+                      </div>
+                    )}
+
+                    {(() => {
+                      const diasPrev = resolverDiasCortesia();
+                      const dataFimIso = calcularDataFimCortesiaISO(diasPrev);
+                      return (
+                        <div className="mt-1 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+                          {dataFimIso ? (
+                            isCortesiaAdmin ? (
+                              <span>
+                                ⏳ Acesso liberado sem cobrança até <strong className="text-cyan-300">{formatarDataSegura(dataFimIso)}</strong> ({diasPrev} dias). Após essa data, a rotina diária rebaixa automaticamente para <strong className="text-slate-100">FREE</strong>.
+                              </span>
+                            ) : (
+                              <span>
+                                📅 Plano ativo no MRR com próximo vencimento em <strong className="text-emerald-300">{formatarDataSegura(dataFimIso)}</strong>.
+                              </span>
+                            )
+                          ) : (
+                            <span>
+                              ♾️ <strong className="text-amber-300">Sem prazo definido (vitalício):</strong> esta oficina não será rebaixada automaticamente pelo cron. {isCortesiaAdmin ? 'Não gera cobrança no Asaas e não entra no MRR.' : ''}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </>
+              ) : (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-200">
+                  A oficina será rebaixada imediatamente para o plano <strong>FREE</strong> e eventuais cortesias ativas serão encerradas.
+                </div>
+              )}
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-mono font-bold text-slate-300 uppercase">
                   Motivo / Justificativa (Obrigatório para Auditoria)
@@ -1331,7 +1564,7 @@ export const AdminOficinas: React.FC = () => {
                   rows={3}
                   value={motivoAudit}
                   onChange={(e) => setMotivoAudit(e.target.value)}
-                  placeholder="Ex: Cortesia de upgrade aprovada ou alteração comercial."
+                  placeholder="Ex: Concessão de cortesia de 30 dias para parceiro ou teste comercial."
                   className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-amber-500 outline-none resize-none"
                 />
               </div>

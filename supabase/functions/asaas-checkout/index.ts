@@ -11,6 +11,16 @@ const ASAAS_API_KEY = Deno.env.get('ASAAS_API_KEY') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
+function getDataIsoSaoPaulo(offsetDias = 0): string {
+  const agora = new Date(Date.now() + offsetDias * 86400000);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(agora);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -61,12 +71,13 @@ serve(async (req) => {
       const novoPrecoCentavos = body.novo_preco_centavos;
       const novoValorReais = Number((novoPrecoCentavos / 100).toFixed(2));
 
-      // Buscar todas as assinaturas ativas desse plano que possuam asaas_subscription_id
+      // Buscar todas as assinaturas ativas desse plano que possuam asaas_subscription_id (exclui cortesias)
       const { data: assinaturasAtivas } = await supabase
         .from('assinaturas')
         .select('id, tenant_id, asaas_subscription_id')
         .eq('plano', targetPlano)
         .eq('status', 'ativa')
+        .eq('is_cortesia', false)
         .not('asaas_subscription_id', 'is', null);
 
       const resultados: any[] = [];
@@ -117,14 +128,22 @@ serve(async (req) => {
       });
     }
 
-    // Obter tenant_id do dono
-    const { data: member, error: memberError } = await supabase
+    // Obter tenant_id do dono/gerente (suporta multi-oficina via body.tenant_id)
+    let memberQuery = supabase
       .from('tenant_members')
       .select('tenant_id, role')
       .eq('user_id', user.id)
       .eq('status', 'ativo')
-      .in('role', ['dono', 'gerente'])
-      .single();
+      .in('role', ['dono', 'gerente']);
+
+    if (body?.tenant_id) {
+      memberQuery = memberQuery.eq('tenant_id', String(body.tenant_id));
+    }
+
+    const { data: member, error: memberError } = await memberQuery
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
     if (memberError || !member) {
       return new Response(JSON.stringify({ error: 'Apenas Donos ou Gerentes podem realizar assinaturas' }), {
@@ -398,7 +417,7 @@ serve(async (req) => {
             customer: asaasCustomerId,
             billingType,
             value: valorReais,
-            nextDueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+            nextDueDate: getDataIsoSaoPaulo(1),
             cycle: asaasCycle,
             description: planDesc,
             externalReference: tenantId,
@@ -434,7 +453,7 @@ serve(async (req) => {
         customer: asaasCustomerId,
         billingType,
         value: valorReais,
-        nextDueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Amanhã ou hoje
+        nextDueDate: getDataIsoSaoPaulo(1), // Amanhã no fuso de São Paulo
         cycle: asaasCycle,
         description: planDesc,
         externalReference: tenantId,
@@ -520,18 +539,47 @@ serve(async (req) => {
       }
     }
 
-    await supabase.from('assinaturas').upsert({
-      tenant_id: tenantId,
-      asaas_customer_id: asaasCustomerId,
-      asaas_subscription_id: subscriptionData.id,
-      plano,
-      ciclo,
-      forma_pagamento,
-      valor_centavos: valorCentavos,
-      url_pagamento_asaas: paymentUrl,
-      status: (assExistente?.status === 'ativa' && assExistente?.asaas_subscription_id) ? 'ativa' : 'trial',
-      updated_at: new Date().toISOString(),
-    });
+    const estaEmCortesiaAtiva =
+      assExistente?.status === 'cortesia' ||
+      (Boolean(assExistente?.is_cortesia) && !(assExistente?.status === 'ativa' && assExistente?.asaas_subscription_id));
+    const statusCheckoutPendente =
+      assExistente?.status === 'ativa' && assExistente?.asaas_subscription_id
+        ? 'ativa'
+        : estaEmCortesiaAtiva
+          ? 'cortesia'
+          : assExistente?.status === 'trial'
+            ? 'trial'
+            : 'cancelada';
+
+    const valorPendenteCentavos =
+      statusCheckoutPendente === 'ativa'
+        ? (assExistente?.valor_centavos ?? 0)
+        : estaEmCortesiaAtiva || statusCheckoutPendente === 'cancelada'
+          ? 0
+          : valorCentavos;
+
+    const { error: upsertAssErr } = await supabase
+      .from('assinaturas')
+      .upsert(
+        {
+          tenant_id: tenantId,
+          asaas_customer_id: asaasCustomerId,
+          asaas_subscription_id: subscriptionData.id,
+          plano: assExistente?.plano || tenant?.plano || 'free',
+          plano_pendente: plano,
+          ciclo,
+          forma_pagamento,
+          valor_centavos: valorPendenteCentavos,
+          url_pagamento_asaas: paymentUrl,
+          status: statusCheckoutPendente,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'tenant_id' }
+      );
+
+    if (upsertAssErr) {
+      throw new Error(`Falha ao salvar registro da assinatura no banco: ${upsertAssErr.message}`);
+    }
 
     // 5. Registrar uso do cupom na tabela se aplicado com sucesso
     if (cupomAplicado?.id) {

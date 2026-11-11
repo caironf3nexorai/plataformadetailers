@@ -111,16 +111,26 @@ export const usePlano = () => {
     FALLBACK_LIMITS[planoAtual] || FALLBACK_LIMITS.free
   );
   const [statusAssinatura, setStatusAssinatura] = useState<string>('trial');
+  const [isCortesiaState, setIsCortesiaState] = useState<boolean>(false);
+  const [cortesiaAte, setCortesiaAte] = useState<string | null>(null);
   const isTrial = statusAssinatura === 'trial';
+  const isCortesia = isCortesiaState || statusAssinatura === 'cortesia';
 
   const carregarPermissoesDoPlano = useCallback(async () => {
-    if (!tenant?.plano) {
+    if (!tenant?.id || !tenant?.plano) {
+      setFeaturesMap(FALLBACK_FEATURES.free);
+      setLimitsMap(FALLBACK_LIMITS.free);
+      setStatusAssinatura('cancelada');
+      setIsCortesiaState(false);
+      setCortesiaAte(null);
       setCarregandoPermissoes(false);
       return;
     }
 
     try {
       setCarregandoPermissoes(true);
+      setFeaturesMap(FALLBACK_FEATURES[planoAtual] || FALLBACK_FEATURES.free);
+      setLimitsMap(FALLBACK_LIMITS[planoAtual] || FALLBACK_LIMITS.free);
 
       // 1. Buscar status da assinatura da oficina
       try {
@@ -130,6 +140,8 @@ export const usePlano = () => {
         if (assData?.status) {
           setStatusAssinatura(assData.status);
         }
+        setIsCortesiaState(Boolean(assData?.is_cortesia) || assData?.status === 'cortesia');
+        setCortesiaAte(assData?.cortesia_ate || null);
       } catch (errAss) {
         console.warn('[usePlano] Erro ao buscar status da assinatura:', errAss);
       }
@@ -166,7 +178,7 @@ export const usePlano = () => {
     } finally {
       setCarregandoPermissoes(false);
     }
-  }, [tenant?.plano, planoAtual]);
+  }, [tenant?.id, tenant?.plano, planoAtual]);
 
   useEffect(() => {
     carregarPermissoesDoPlano();
@@ -249,6 +261,8 @@ export const usePlano = () => {
     nomePlano: PLAN_NAMES[planoAtual] || planoAtual.toUpperCase(),
     statusAssinatura,
     isTrial,
+    isCortesia,
+    cortesiaAte,
     temFeature,
     limiteDe,
     verificarUso,

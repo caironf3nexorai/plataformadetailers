@@ -1,16 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { Check, X, Sparkles, ShieldCheck, Zap, CreditCard, Clock } from 'lucide-react';
+import { Check, X, Sparkles, ShieldCheck, Zap, CreditCard, Clock, Gift } from 'lucide-react';
 import { usePermissao } from '../../hooks/usePermissao';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePlano } from '../../hooks/usePlano';
 import { CheckoutModal } from '../../components/assinatura/CheckoutModal';
 import { supabase } from '../../lib/supabase';
+import { calcularDiasRestantesISO, formatarDataSegura } from '../../utils/assinatura';
 
 export const PaginaPlanos: React.FC = () => {
   const { isOperador } = usePermissao();
   const { tenant, refetchTenantData } = useAuth();
-  const { planoAtual: planoHook, statusAssinatura, isTrial } = usePlano();
+  const { planoAtual: planoHook, statusAssinatura, isTrial, isCortesia, cortesiaAte } = usePlano();
 
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [ciclo, setCiclo] = useState<'mensal' | 'anual'>('anual');
@@ -122,7 +123,9 @@ export const PaginaPlanos: React.FC = () => {
   }
 
   const planoAtual = tenant?.plano || planoHook || 'free';
-  const emTrial = isTrial || statusAssinatura === 'trial' || tenant?.status === 'trial' || (planoAtual === 'pro' && statusAssinatura !== 'ativa');
+  const emCortesia = (isCortesia || statusAssinatura === 'cortesia') && planoAtual !== 'free';
+  const emTrial = !emCortesia && (isTrial || statusAssinatura === 'trial') && planoAtual !== 'free';
+  const diasCortesiaRestantes = calcularDiasRestantesISO(cortesiaAte);
 
   const planos = [
     {
@@ -247,6 +250,45 @@ export const PaginaPlanos: React.FC = () => {
         </p>
       </div>
 
+      {/* Banner de Cortesia Administrativa Ativa */}
+      {emCortesia && (
+        <div className="max-w-4xl mx-auto p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-cyan-500/15 via-cyan-500/10 to-graphite-900 border border-cyan-500/40 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 text-left">
+            <div className="w-12 h-12 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300 shrink-0">
+              <Gift className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold text-vapor-100 uppercase tracking-wide">
+                  Plano {planoAtual.toUpperCase()} em Cortesia Administrativa
+                </span>
+                <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  {cortesiaAte
+                    ? `Válida até ${formatarDataSegura(cortesiaAte)}${diasCortesiaRestantes !== null ? ` (${diasCortesiaRestantes}d)` : ''}`
+                    : 'Sem prazo'}
+                </span>
+              </div>
+              <p className="text-xs text-vapor-300 mt-1 leading-relaxed">
+                {cortesiaAte
+                  ? `Sua oficina está aproveitando o plano ${planoAtual.toUpperCase()} em cortesia até ${formatarDataSegura(cortesiaAte)}, sem cobrança no Asaas. Ao final do prazo, retorna automaticamente para Free caso não seja ativada uma assinatura paga.`
+                  : `Sua oficina possui cortesia ativa no plano ${planoAtual.toUpperCase()}, sem cobrança automática no Asaas.`}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const planoAlvo = planos.find((x) => x.id === (planoAtual === 'studio' ? 'studio' : 'pro')) || planos[1];
+              handleAbrirCheckout(planoAlvo);
+            }}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-cyan-400 to-emerald-400 text-graphite-950 hover:opacity-90 shadow-lg flex items-center justify-center gap-2 shrink-0 transition-all cursor-pointer"
+          >
+            <CreditCard className="w-4 h-4" />
+            Ativar Assinatura Definitiva
+          </button>
+        </div>
+      )}
+
       {/* Banner de Degustação / Trial Ativo */}
       {emTrial && (
         <div className="max-w-4xl mx-auto p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-graphite-900 border border-amber-500/40 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -260,11 +302,11 @@ export const PaginaPlanos: React.FC = () => {
                   Período de Degustação Gratuito (Trial) Ativo
                 </span>
                 <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
-                  14 Dias Grátis
+                  Degustação Ativa
                 </span>
               </div>
               <p className="text-xs text-vapor-300 mt-1 leading-relaxed">
-                Você <strong>não precisa esperar os 14 dias terminarem</strong> para assinar! Você pode efetivar sua assinatura definitiva agora mesmo via PIX ou Cartão (com desconto anual de até 15%) para garantir sua conta sem interrupções e validar todas as comissões e integrações em tempo real.
+                Você <strong>não precisa esperar o período de teste terminar</strong> para assinar! Você pode efetivar sua assinatura definitiva agora mesmo via PIX ou Cartão (com desconto anual de até 15%) para garantir sua conta sem interrupções.
               </p>
             </div>
           </div>
@@ -323,7 +365,8 @@ export const PaginaPlanos: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch pt-2">
         {planos.map((p) => {
           const isCurrent = planoAtual === p.id;
-          const isCurrentPaid = isCurrent && !emTrial && statusAssinatura === 'ativa';
+          const isCurrentPaid = isCurrent && !emTrial && !emCortesia && statusAssinatura === 'ativa';
+          const isCurrentCortesia = isCurrent && emCortesia;
           const isCurrentTrial = isCurrent && emTrial;
 
           return (
@@ -335,7 +378,7 @@ export const PaginaPlanos: React.FC = () => {
                   : 'bg-graphite-800/40 border-graphite-600 hover:border-graphite-500'
               }`}
             >
-              {p.destaque && !isCurrentTrial && !isCurrentPaid && (
+              {p.destaque && !isCurrentTrial && !isCurrentPaid && !isCurrentCortesia && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-amber-500 text-graphite-950 px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 shadow">
                   <Sparkles className="w-3 h-3" /> Mais Recomendado
                 </div>
@@ -344,6 +387,12 @@ export const PaginaPlanos: React.FC = () => {
               {isCurrentPaid && (
                 <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" /> Seu Plano Ativo
+                </div>
+              )}
+
+              {isCurrentCortesia && (
+                <div className="absolute top-4 right-4 bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                  <Gift className="w-3 h-3" /> Cortesia Ativa
                 </div>
               )}
 
@@ -435,6 +484,15 @@ export const PaginaPlanos: React.FC = () => {
                     className="w-full py-2.5 rounded-lg bg-graphite-700 text-vapor-400 font-semibold text-sm cursor-default border border-graphite-600"
                   >
                     Plano Ativo
+                  </button>
+                ) : isCurrentCortesia ? (
+                  <button
+                    type="button"
+                    onClick={() => handleAbrirCheckout(p)}
+                    className="w-full py-2.5 rounded-lg font-bold text-sm flex items-center justify-center gap-2 bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 border border-cyan-500/40 transition-all cursor-pointer"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Assinar {p.nome} em Definitivo
                   </button>
                 ) : isCurrentTrial ? (
                   <button

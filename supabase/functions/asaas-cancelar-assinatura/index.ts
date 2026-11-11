@@ -11,6 +11,15 @@ const ASAAS_API_KEY = Deno.env.get('ASAAS_API_KEY') || '';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
+function getHojeSaoPauloIso(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -37,14 +46,34 @@ serve(async (req) => {
       });
     }
 
+    // Obter tenant_id opcional no corpo (para usuários com múltiplas oficinas)
+    let tenantIdBody: string | null = null;
+    try {
+      const bodyText = await req.text();
+      if (bodyText) {
+        const parsed = JSON.parse(bodyText);
+        if (parsed?.tenant_id) tenantIdBody = String(parsed.tenant_id);
+      }
+    } catch {
+      // corpo vazio opcional
+    }
+
     // Obter tenant_id do membro
-    const { data: member } = await supabase
+    let memberQuery = supabase
       .from('tenant_members')
       .select('tenant_id, role')
       .eq('user_id', user.id)
       .eq('status', 'ativo')
-      .in('role', ['dono', 'gerente'])
-      .single();
+      .in('role', ['dono', 'gerente']);
+
+    if (tenantIdBody) {
+      memberQuery = memberQuery.eq('tenant_id', tenantIdBody);
+    }
+
+    const { data: member } = await memberQuery
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
     if (!member) {
       return new Response(JSON.stringify({ error: 'Apenas Donos ou Gerentes podem cancelar assinaturas' }), {
@@ -62,44 +91,77 @@ serve(async (req) => {
       .eq('tenant_id', tenantId)
       .single();
 
-    if (!ass) {
-      return new Response(JSON.stringify({ error: 'Nenhuma assinatura encontrada para cancelar' }), {
-        status: 404,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!ass || !ass.asaas_subscription_id) {
+      return new Response(
+        JSON.stringify({
+          error:
+            ass?.status === 'cortesia' || ass?.is_cortesia
+              ? 'Esta oficina utiliza uma cortesia administrativa sem cobrança recorrente no Asaas.'
+              : ass?.status === 'trial'
+                ? 'Esta oficina está em período de degustação gratuita e não possui cobrança ativa para cancelar.'
+                : 'Nenhuma assinatura recorrente ativa no Asaas foi encontrada para cancelar.',
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
 
     // AJUSTE 1: Cancelar no Asaas PRIMEIRO antes de marcar localmente
-    if (ass.asaas_subscription_id) {
-      const resAsaas = await fetch(`${ASAAS_API_URL}/subscriptions/${ass.asaas_subscription_id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'access_token': ASAAS_API_KEY,
-        },
-      });
+    const resAsaas = await fetch(`${ASAAS_API_URL}/subscriptions/${ass.asaas_subscription_id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'access_token': ASAAS_API_KEY,
+      },
+    });
 
-      const dataAsaas = await resAsaas.json();
-      if (!resAsaas.ok && resAsaas.status !== 404) {
-        throw new Error(`Erro ao cancelar assinatura no Asaas: ${JSON.stringify(dataAsaas)}`);
-      }
+    const dataAsaas = await resAsaas.json();
+    if (!resAsaas.ok && resAsaas.status !== 404) {
+      throw new Error(`Erro ao cancelar assinatura no Asaas: ${JSON.stringify(dataAsaas)}`);
     }
 
     // Atualizar registro local
     const isAnual = ass.ciclo === 'anual';
-    const hoje = new Date().toISOString().split('T')[0];
-    const temVigenciaFutura = ass.proximo_vencimento && ass.proximo_vencimento > hoje;
+    const hoje = getHojeSaoPauloIso();
+    const temVigenciaFutura = Boolean(ass.proximo_vencimento && ass.proximo_vencimento >= hoje);
     const novoStatus = (isAnual && temVigenciaFutura) ? 'ativa' : 'cancelada';
 
     await supabase
       .from('assinaturas')
-      .update({
-        status: novoStatus,
-        asaas_subscription_id: null,
-        cancelada_em: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
+      .update(
+        temVigenciaFutura
+          ? {
+              status: novoStatus,
+              plano_pendente: null,
+              asaas_subscription_id: null,
+              cancelada_em: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+          : {
+              status: 'cancelada',
+              plano: 'free',
+              plano_pendente: null,
+              valor_centavos: 0,
+              is_cortesia: false,
+              cortesia_ate: null,
+              asaas_subscription_id: null,
+              cancelada_em: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }
+      )
       .eq('tenant_id', tenantId);
+
+    if (!temVigenciaFutura) {
+      await supabase
+        .from('tenants')
+        .update({
+          plano: 'free',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', tenantId);
+    }
 
     // Auditar cancelamento
     await supabase.from('admin_auditoria').insert({
