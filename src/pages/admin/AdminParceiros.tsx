@@ -780,161 +780,297 @@ export const AdminParceiros: React.FC = () => {
             {buscaParceiro ? `Nenhum parceiro encontrado para "${buscaParceiro}".` : 'Nenhum parceiro cadastrado.'}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left font-sans text-sm">
-              <thead>
-                <tr className="border-b border-graphite-700 text-vapor-400 text-xs font-semibold uppercase">
-                  <th className="py-3 px-4">Nome / E-mail</th>
-                  <th className="py-3 px-4">Código / Cupom</th>
-                  <th className="py-3 px-4">Comissão</th>
-                  <th className="py-3 px-4">Desconto p/ Oficina</th>
-                  <th className="py-3 px-4">Oficinas Vinculadas</th>
-                  <th className="py-3 px-4">Chave PIX</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-graphite-700/50">
-                {parceirosFiltrados.map((p) => {
-                  const oficinasDoParceiro = oficinas.filter((o) => o.parceiro_id === p.id);
+          <>
+            {/* Tabela Desktop Compacta (sem cortar a coluna Ações) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left font-sans text-xs xl:text-sm">
+                <thead>
+                  <tr className="border-b border-graphite-700 text-vapor-400 text-[11px] font-semibold uppercase">
+                    <th className="py-3 px-3">Nome / E-mail</th>
+                    <th className="py-3 px-3">Código / Cupom</th>
+                    <th className="py-3 px-3">Comissão</th>
+                    <th className="py-3 px-3">Desconto p/ Oficina</th>
+                    <th className="py-3 px-3">Oficinas Vinculadas</th>
+                    <th className="py-3 px-3">Chave PIX</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-graphite-700/50">
+                  {parceirosFiltrados.map((p) => {
+                    const oficinasDoParceiro = oficinas.filter((o) => o.parceiro_id === p.id);
 
-                  return (
-                    <tr key={p.id} className="hover:bg-graphite-700/30 transition">
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-vapor-100">{p.nome}</div>
-                        <div className="text-xs text-vapor-400">{p.email}</div>
-                        {p.telefone && <div className="text-[10px] text-vapor-500">{p.telefone}</div>}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                          {p.codigo}
+                    return (
+                      <tr key={p.id} className="hover:bg-graphite-700/30 transition align-top">
+                        <td className="py-3 px-3 max-w-[190px]">
+                          <div className="font-medium text-vapor-100 truncate" title={p.nome}>
+                            {p.nome}
+                          </div>
+                          <div className="text-xs text-vapor-400 truncate" title={p.email}>
+                            {p.email}
+                          </div>
+                          {p.telefone && <div className="text-[10px] text-vapor-500">{p.telefone}</div>}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-xs">
+                            {p.codigo}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-bold text-emerald-400 whitespace-nowrap">
+                          {p.comissao_tipo === 'percentual' ? `${p.comissao_valor}%` : `R$ ${p.comissao_valor.toFixed(2)}`}
+                          <div className="text-[10px] text-vapor-400 font-normal">
+                            {p.recorrente ? 'Recorrente' : 'Apenas 1ª mensalidade'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-xs font-semibold text-blue-400 whitespace-nowrap">
+                          {p.desconto_tipo === 'percentual' && (p.desconto_valor || 0) > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                              <Ticket size={12} /> {p.desconto_valor}% OFF
+                            </span>
+                          ) : p.desconto_tipo === 'valor_fixo' && (p.desconto_valor || 0) > 0 ? (
+                            <span className="inline-flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                              <Ticket size={12} /> R$ {p.desconto_valor?.toFixed(2)} OFF
+                            </span>
+                          ) : (
+                            <span className="text-vapor-500">Sem Desconto</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 min-w-[180px]">
+                          <div className="space-y-1.5">
+                            {oficinasDoParceiro.length === 0 ? (
+                              <span className="text-xs text-vapor-500 italic block">Nenhuma oficina atrelada</span>
+                            ) : (
+                              <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
+                                {oficinasDoParceiro.map((of) => (
+                                  <div
+                                    key={of.id}
+                                    className="flex items-center justify-between gap-1.5 p-1.5 rounded bg-graphite-900/60 border border-graphite-700/60 text-xs"
+                                  >
+                                    <span className="text-vapor-200 font-medium truncate max-w-[115px]" title={of.nome}>
+                                      {of.nome}
+                                    </span>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        type="button"
+                                        disabled={isReadOnly}
+                                        onClick={() => {
+                                          setTenantIdPagamento(of.id);
+                                          handleRegistrarPagamentoOficina(of.id);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition disabled:opacity-40 cursor-pointer"
+                                        title="Confirmar pagamento de competência para esta oficina"
+                                      >
+                                        <Zap size={10} />
+                                        <span>Pgto</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isReadOnly}
+                                        onClick={() => handleDesvincularOficina(of)}
+                                        className="inline-flex items-center justify-center p-1 rounded bg-rose-500/15 hover:bg-rose-500/30 text-rose-400 border border-rose-500/30 text-[10px] transition disabled:opacity-40 cursor-pointer"
+                                        title={`Desvincular ${of.nome} deste parceiro`}
+                                      >
+                                        <X size={11} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              disabled={isReadOnly}
+                              onClick={() => {
+                                setParceiroVinculoTarget(p);
+                                setTenantIdVinculo('');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-semibold transition disabled:opacity-40 cursor-pointer"
+                            >
+                              <Plus size={12} />
+                              <span>Atribuir Oficina</span>
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-xs text-vapor-300 max-w-[130px] truncate" title={p.pix_chave || ''}>
+                          {p.pix_chave || '—'}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            {p.ativo ? (
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium w-fit">Ativo</span>
+                            ) : (
+                              <span className="text-[11px] px-2 py-0.5 rounded bg-flare-400/10 text-flare-400 border border-flare-400/20 font-medium w-fit">Inativo</span>
+                            )}
+                            {p.user_id ? (
+                              <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono font-medium">
+                                <CheckCircle2 size={11} /> Login Ativo
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-vapor-500 flex items-center gap-1 font-mono" title="O parceiro será vinculado automaticamente quando cadastrar ou logar com este e-mail">
+                                ⚪ Aguardando Login
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-right whitespace-nowrap">
+                          <div className="flex flex-col items-end gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isReadOnly}
+                              onClick={() => handleAbrirEdicao(p)}
+                              className="inline-flex items-center justify-center gap-1.5 w-[88px] px-2.5 py-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg transition disabled:opacity-40 cursor-pointer"
+                            >
+                              <Pencil size={13} />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isReadOnly}
+                              onClick={() => handleAbrirExclusaoParceiro(p)}
+                              className="inline-flex items-center justify-center gap-1.5 w-[88px] px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-600/30 border border-rose-500/40 rounded-lg transition disabled:opacity-40 cursor-pointer"
+                              title="Excluir parceiro comercial"
+                            >
+                              <Trash2 size={13} />
+                              <span>Excluir</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cards Responsivos Mobile / Tablet */}
+            <div className="lg:hidden space-y-3">
+              {parceirosFiltrados.map((p) => {
+                const oficinasDoParceiro = oficinas.filter((o) => o.parceiro_id === p.id);
+
+                return (
+                  <div
+                    key={p.id}
+                    className="bg-graphite-900/80 border border-graphite-700 rounded-xl p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-vapor-100 truncate">{p.nome}</div>
+                        <div className="text-xs text-vapor-400 break-all">{p.email}</div>
+                        {p.telefone && <div className="text-[11px] text-vapor-500 mt-0.5">{p.telefone}</div>}
+                      </div>
+                      <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 text-xs shrink-0">
+                        {p.codigo}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-graphite-700/70">
+                      <div>
+                        <span className="text-[10px] text-vapor-500 block">Comissão</span>
+                        <span className="font-bold text-emerald-400">
+                          {p.comissao_tipo === 'percentual' ? `${p.comissao_valor}%` : `R$ ${p.comissao_valor.toFixed(2)}`}
+                        </span>{' '}
+                        <span className="text-[10px] text-vapor-400">
+                          ({p.recorrente ? 'Recorrente' : '1ª mensalidade'})
                         </span>
-                      </td>
-                      <td className="py-3 px-4 font-bold text-emerald-400">
-                        {p.comissao_tipo === 'percentual' ? `${p.comissao_valor}%` : `R$ ${p.comissao_valor.toFixed(2)}`}
-                        <div className="text-[10px] text-vapor-400 font-normal">
-                          {p.recorrente ? 'Recorrente' : 'Apenas 1ª mensalidade'}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-xs font-semibold text-blue-400">
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-vapor-500 block">Desconto Cupom</span>
                         {p.desconto_tipo === 'percentual' && (p.desconto_valor || 0) > 0 ? (
-                          <span className="inline-flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                            <Ticket size={12} /> {p.desconto_valor}% OFF
-                          </span>
+                          <span className="text-blue-400 font-semibold">{p.desconto_valor}% OFF</span>
                         ) : p.desconto_tipo === 'valor_fixo' && (p.desconto_valor || 0) > 0 ? (
-                          <span className="inline-flex items-center gap-1 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
-                            <Ticket size={12} /> R$ {p.desconto_valor?.toFixed(2)} OFF
-                          </span>
+                          <span className="text-blue-400 font-semibold">R$ {p.desconto_valor?.toFixed(2)} OFF</span>
                         ) : (
                           <span className="text-vapor-500">Sem Desconto</span>
                         )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="space-y-1.5">
-                          {oficinasDoParceiro.length === 0 ? (
-                            <span className="text-xs text-vapor-500 italic block">Nenhuma oficina atrelada</span>
-                          ) : (
-                            <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
-                              {oficinasDoParceiro.map((of) => (
-                                <div
-                                  key={of.id}
-                                  className="flex items-center justify-between gap-2 p-1.5 rounded bg-graphite-900/60 border border-graphite-700/60 text-xs"
-                                >
-                                  <span className="text-vapor-200 font-medium truncate max-w-[130px]">
-                                    {of.nome}
-                                  </span>
-                                  <div className="flex items-center gap-1 shrink-0">
-                                    <button
-                                      type="button"
-                                      disabled={isReadOnly}
-                                      onClick={() => {
-                                        setTenantIdPagamento(of.id);
-                                        handleRegistrarPagamentoOficina(of.id);
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold transition disabled:opacity-40"
-                                      title="Confirmar pagamento de competência para esta oficina"
-                                    >
-                                      <Zap size={10} />
-                                      <span>Pgto</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={isReadOnly}
-                                      onClick={() => handleDesvincularOficina(of)}
-                                      className="inline-flex items-center justify-center p-1 rounded bg-rose-500/10 hover:bg-rose-500/25 text-rose-400 border border-rose-500/20 text-[10px] transition disabled:opacity-40"
-                                      title={`Desvincular ${of.nome} deste parceiro`}
-                                    >
-                                      <X size={11} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            disabled={isReadOnly}
-                            onClick={() => {
-                              setParceiroVinculoTarget(p);
-                              setTenantIdVinculo('');
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-semibold transition disabled:opacity-40"
-                          >
-                            <Plus size={12} />
-                            <span>Atribuir Oficina</span>
-                          </button>
+                      </div>
+                      <div className="col-span-2 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono text-vapor-300 truncate">
+                          PIX: {p.pix_chave || '—'}
+                        </span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${
+                          p.ativo
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : 'bg-flare-400/10 text-flare-400 border border-flare-400/20'
+                        }`}>
+                          {p.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pt-2 border-t border-graphite-700/70">
+                      <span className="text-[11px] text-vapor-400 font-semibold block">
+                        Oficinas Vinculadas ({oficinasDoParceiro.length})
+                      </span>
+                      {oficinasDoParceiro.map((of) => (
+                        <div
+                          key={of.id}
+                          className="flex items-center justify-between gap-2 p-2 rounded bg-graphite-950/70 border border-graphite-700/60 text-xs"
+                        >
+                          <span className="text-vapor-200 font-medium truncate">{of.nome}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              disabled={isReadOnly}
+                              onClick={() => {
+                                setTenantIdPagamento(of.id);
+                                handleRegistrarPagamentoOficina(of.id);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold disabled:opacity-40"
+                            >
+                              <Zap size={10} />
+                              <span>Pgto</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isReadOnly}
+                              onClick={() => handleDesvincularOficina(of)}
+                              className="inline-flex items-center justify-center p-1 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 text-[10px] disabled:opacity-40"
+                              title={`Desvincular ${of.nome}`}
+                            >
+                              <X size={11} />
+                            </button>
+                          </div>
                         </div>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-xs text-vapor-300">{p.pix_chave || '—'}</td>
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col gap-1">
-                          {p.ativo ? (
-                            <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium w-fit">Ativo</span>
-                          ) : (
-                            <span className="text-[11px] px-2 py-0.5 rounded bg-flare-400/10 text-flare-400 border border-flare-400/20 font-medium w-fit">Inativo</span>
-                          )}
-                          {p.user_id ? (
-                            <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono font-medium">
-                              <CheckCircle2 size={11} /> Login Ativo
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-vapor-500 flex items-center gap-1 font-mono" title="O parceiro será vinculado automaticamente quando cadastrar ou logar com este e-mail">
-                              ⚪ Aguardando Login
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            disabled={isReadOnly}
-                            onClick={() => handleAbrirEdicao(p)}
-                            className="px-2.5 py-1 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-1 disabled:opacity-40"
-                          >
-                            <Pencil size={13} />
-                            <span>Editar</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            disabled={isReadOnly}
-                            onClick={() => handleAbrirExclusaoParceiro(p)}
-                            className="px-2.5 py-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/25 rounded-lg flex items-center gap-1 disabled:opacity-40"
-                            title="Excluir parceiro comercial"
-                          >
-                            <Trash2 size={13} />
-                            <span>Excluir</span>
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => {
+                          setParceiroVinculoTarget(p);
+                          setTenantIdVinculo('');
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/30 text-xs font-semibold disabled:opacity-40"
+                      >
+                        <Plus size={12} />
+                        <span>Atribuir Oficina</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-graphite-700">
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleAbrirEdicao(p)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg disabled:opacity-40"
+                      >
+                        <Pencil size={13} />
+                        <span>Editar</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => handleAbrirExclusaoParceiro(p)}
+                        className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-rose-300 bg-rose-500/15 hover:bg-rose-600/30 border border-rose-500/40 rounded-lg disabled:opacity-40"
+                      >
+                        <Trash2 size={13} />
+                        <span>Excluir Parceiro</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </Card>
 
@@ -1485,22 +1621,38 @@ export const AdminParceiros: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3">
-                <Button
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-graphite-700/70">
+                <button
                   type="button"
-                  variant="ghost"
-                  onClick={() => setParceiroEditando(null)}
-                  disabled={salvandoEdicao}
+                  disabled={salvandoEdicao || isReadOnly}
+                  onClick={() => {
+                    const alvo = parceiroEditando;
+                    setParceiroEditando(null);
+                    if (alvo) handleAbrirExclusaoParceiro(alvo);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-600/30 border border-rose-500/40 transition disabled:opacity-40 cursor-pointer"
                 >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  disabled={salvandoEdicao}
-                >
-                  {salvandoEdicao ? 'Salvando...' : 'Salvar Alterações'}
-                </Button>
+                  <Trash2 size={13} />
+                  <span>Excluir Parceiro</span>
+                </button>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setParceiroEditando(null)}
+                    disabled={salvandoEdicao}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={salvandoEdicao}
+                  >
+                    {salvandoEdicao ? 'Salvando...' : 'Salvar Alterações'}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
@@ -1605,9 +1757,9 @@ export const AdminParceiros: React.FC = () => {
                     </Button>
                     <Button
                       type="submit"
-                      variant="primary"
+                      tone="rose"
                       disabled={excluindoParceiro}
-                      className="bg-rose-600 hover:bg-rose-500 text-white border-none flex items-center gap-1.5"
+                      className="flex items-center gap-1.5"
                     >
                       <Trash2 size={14} />
                       <span>{excluindoParceiro ? 'Excluindo...' : 'Confirmar Exclusão'}</span>
