@@ -65,3 +65,4 @@ export function calcularSimulacaoCustos(input: SimulacaoCustosInput): SimulacaoC
     estaAbaixoIdeal,
   };
 }
+

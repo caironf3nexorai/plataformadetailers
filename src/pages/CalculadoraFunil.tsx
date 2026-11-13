@@ -8,6 +8,7 @@ import {
   Clock,
   Droplets,
   FileSpreadsheet,
+  Laptop,
   Layers,
   Lock,
   Play,
@@ -513,6 +514,19 @@ export const CalculadoraFunil: React.FC<CalculadoraFunilProps> = ({
                     </Link>
                     .
                   </p>
+
+                  {/* Recomendação de abertura no Computador / Desktop */}
+                  <div className="mt-1 p-3 rounded-[6px] bg-graphite-900 border border-graphite-700/80 text-vapor-300 text-xs flex items-start gap-2.5">
+                    <Laptop size={17} className="text-glass-400 shrink-0 mt-0.5" />
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-semibold text-vapor-100">
+                        💻 Dica técnica para utilizar a planilha:
+                      </span>
+                      <span className="text-vapor-400 leading-relaxed text-[11px] sm:text-xs">
+                        Para melhor visualização dos gráficos, fórmulas e das 5 abas integradas, <strong>recomendamos abrir a planilha no computador (Desktop ou Notebook)</strong>. Em aparelhos celulares, os aplicativos espremem as tabelas para caber na tela.
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </form>
             </section>
@@ -544,16 +558,34 @@ export const CalculadoraFunil: React.FC<CalculadoraFunilProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleManualDownload}
-                  disabled={downloading}
-                  className="w-full sm:w-auto shrink-0 min-h-[46px] px-4 py-2.5 rounded-[6px] bg-graphite-700 hover:bg-graphite-600 border border-graphite-600 text-vapor-100 font-sans font-semibold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
-                >
-                  <span>
-                    {downloading ? 'Baixando...' : '📥 Baixar Planilha em Excel (.xlsx)'}
+                <div className="flex flex-col sm:items-end gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleManualDownload}
+                    disabled={downloading}
+                    className="w-full sm:w-auto shrink-0 min-h-[46px] px-4 py-2.5 rounded-[6px] bg-graphite-700 hover:bg-graphite-600 border border-graphite-600 text-vapor-100 font-sans font-semibold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    <span>
+                      {downloading ? 'Baixando...' : '📥 Baixar Planilha em Excel (.xlsx)'}
+                    </span>
+                  </button>
+                  <span className="text-[10px] text-vapor-400 text-center sm:text-right">
+                    Tamanho: ~70 KB • Versão Oficial v5
                   </span>
-                </button>
+                </div>
+              </div>
+
+              {/* Alerta de Recomendação Desktop no Estado de Obrigado */}
+              <div className="p-3 rounded-[6px] bg-graphite-900 border border-amber-500/40 text-xs flex items-start gap-2.5">
+                <Laptop size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-display font-bold text-amber-400 uppercase tracking-wider text-[11px]">
+                    Recomendação de Uso: Abra a Planilha no seu Computador (Desktop/Notebook)
+                  </span>
+                  <p className="text-vapor-300 leading-relaxed text-[11px] sm:text-xs">
+                    Esta planilha possui 5 abas integradas, fórmulas de diluição em 2 etapas e painéis de DRE projetados para tela de computador. Em celulares, a visualização fica reduzida porque a tela espreme as colunas. Para ter a melhor experiência de cálculo, <strong>envie o arquivo para o seu WhatsApp/E-mail ou abra no seu PC</strong>!
+                  </p>
+                </div>
               </div>
 
               {downloadAviso && (

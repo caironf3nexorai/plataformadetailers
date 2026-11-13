@@ -55,3 +55,4 @@ describe('calculadoraSimulacao', () => {
     expect(res.lucroRealAtual).toBeCloseTo(86.0416, 2);
   });
 });
+
