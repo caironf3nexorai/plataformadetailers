@@ -200,27 +200,51 @@ export function trackPageView(path?: string): void {
     if (typeof window.ttq?.page === 'function') {
       window.ttq.page();
     }
-  } catch (e) {
+  } catch {
     // Silencia qualquer interferência de AdBlock
   }
 }
 
 /**
- * Dispara evento de Lead (Interesse / Visita na tela de cadastro)
+ * Dispara evento de Lead (Interesse / Visita na tela de cadastro / Formulário Calculadora)
  */
 export function trackLead(params?: Record<string, any>): void {
   try {
+    const payload = {
+      content_name: 'Simulador Oficial NuvemWash v5',
+      ...params,
+    };
+    const testCode = import.meta.env.VITE_META_TEST_EVENT_CODE;
+    const fbOptions = testCode ? { test_event_code: testCode } : undefined;
+
     if (typeof window.fbq === 'function') {
-      window.fbq('track', 'Lead', params || {});
+      if (fbOptions) {
+        window.fbq('track', 'Lead', payload, fbOptions);
+      } else {
+        window.fbq('track', 'Lead', payload);
+      }
+      console.log(
+        '[Marketing/Pixel] 🎯 Evento Lead disparado com sucesso via Meta Pixel:',
+        payload,
+        fbOptions ? `(Código Teste: ${testCode})` : ''
+      );
+    } else {
+      console.warn(
+        '[Marketing/Pixel] ⚠️ Meta Pixel (window.fbq) não detectado ou bloqueado. Se estiver em localhost, desative seu AdBlocker / Brave Shields para a página.'
+      );
     }
+
     if (typeof window.gtag === 'function') {
-      window.gtag('event', 'generate_lead', params || {});
+      window.gtag('event', 'generate_lead', payload);
+      console.log('[Marketing/Pixel] 🎯 Evento Lead disparado via Google Tags:', payload);
     }
+
     if (typeof window.ttq?.track === 'function') {
-      window.ttq.track('SubmitForm', params || {});
+      window.ttq.track('SubmitForm', payload);
+      console.log('[Marketing/Pixel] 🎯 Evento Lead disparado via TikTok Pixel:', payload);
     }
   } catch (e) {
-    // Silencia
+    console.warn('[Marketing/Pixel] Falha ao registrar trackLead:', e);
   }
 }
 
@@ -248,7 +272,7 @@ export function trackCompleteRegistration(params?: Record<string, any>): void {
       window.ttq.track('CompleteRegistration', payload);
     }
     console.log('[Marketing] Evento CompleteRegistration disparado com sucesso!', payload);
-  } catch (e) {
+  } catch {
     // Silencia
   }
 }
@@ -272,7 +296,7 @@ export function trackInitiateCheckout(params?: Record<string, any>): void {
       window.ttq.track('InitiateCheckout', payload);
     }
     console.log('[Marketing] Evento InitiateCheckout disparado!', payload);
-  } catch (e) {
+  } catch {
     // Silencia
   }
 }
@@ -299,7 +323,7 @@ export function trackPurchase(params?: Record<string, any>): void {
       window.ttq.track('CompletePayment', payload);
     }
     console.log('[Marketing] Evento Purchase disparado com sucesso!', payload);
-  } catch (e) {
+  } catch {
     // Silencia
   }
 }

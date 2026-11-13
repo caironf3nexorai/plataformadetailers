@@ -11,13 +11,14 @@ import {
 
 export const AnalyticsTracker: React.FC = () => {
   const location = useLocation();
-  // 1. Inicializa imediatamente pelo cache local se já existir (para não esperar a RPC)
+  // 1. Inicializa imediatamente pelo cache local ou variável de ambiente (para não esperar a RPC)
   useEffect(() => {
     try {
-      const cachedMeta = localStorage.getItem('app_meta_pixel_id') || '1148159047650275';
-      const cachedGoogle = localStorage.getItem('app_google_ads_id');
-      const cachedGA4 = localStorage.getItem('app_google_analytics_id');
-      const cachedTikTok = localStorage.getItem('app_tiktok_pixel_id');
+      const envMeta = import.meta.env.VITE_META_PIXEL_ID;
+      const cachedMeta = envMeta || localStorage.getItem('app_meta_pixel_id') || '1148159047650275';
+      const cachedGoogle = import.meta.env.VITE_GOOGLE_ADS_ID || localStorage.getItem('app_google_ads_id');
+      const cachedGA4 = import.meta.env.VITE_GA4_ID || localStorage.getItem('app_google_analytics_id');
+      const cachedTikTok = import.meta.env.VITE_TIKTOK_PIXEL_ID || localStorage.getItem('app_tiktok_pixel_id');
       if (cachedMeta) initMetaPixel(cachedMeta);
       if (cachedGoogle || cachedGA4) initGoogleTags(cachedGoogle, cachedGA4);
       if (cachedTikTok) initTikTokPixel(cachedTikTok);
@@ -54,9 +55,10 @@ export const AnalyticsTracker: React.FC = () => {
     }
 
     function aplicarPixels(cfg: any) {
-      if (cfg.meta_pixel_id) {
-        try { localStorage.setItem('app_meta_pixel_id', cfg.meta_pixel_id); } catch {}
-        initMetaPixel(cfg.meta_pixel_id);
+      const metaId = import.meta.env.VITE_META_PIXEL_ID || cfg?.meta_pixel_id;
+      if (metaId) {
+        try { localStorage.setItem('app_meta_pixel_id', metaId); } catch {}
+        initMetaPixel(metaId);
       }
       if (cfg.google_ads_id || cfg.google_analytics_id) {
         if (cfg.google_ads_id) try { localStorage.setItem('app_google_ads_id', cfg.google_ads_id); } catch {}

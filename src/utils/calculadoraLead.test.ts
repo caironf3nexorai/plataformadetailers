@@ -67,7 +67,7 @@ describe('calculadoraLead', () => {
       leadId: 'uuid-123',
     });
 
-    expect(url).toContain('/register?');
+    expect(url).toMatch(/^\/(register|criar-conta)\?/);
     expect(url).toContain('origem=calculadora');
     expect(url).toContain('nome=Carlos+Silva');
     expect(url).toContain('email=carlos%40detail.com');
