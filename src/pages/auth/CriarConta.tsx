@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { PublicLayout } from '../../components/layout/PublicLayout';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -9,9 +9,15 @@ import { supabase } from '../../lib/supabase';
 import { AlertTriangle, UserPlus, Rocket, Eye, EyeOff } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 import { trackCompleteRegistration } from '../../utils/pixel';
+import { formatTelefone } from '../../utils/formatters';
+import {
+  CALCULADORA_LEAD_STORAGE_KEY,
+  type CalculadoraLeadSessao,
+} from '../../utils/calculadoraLead';
 
 export const CriarConta: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const conviteToken = searchParams.get('convite');
   const { signUp, refetchTenantData } = useAuth();
@@ -122,6 +128,51 @@ export const CriarConta: React.FC = () => {
 
     loadConviteInfo();
   }, [conviteToken]);
+
+  // Pré-preenchimento vindo do Funil da Calculadora (/calculadora) via query params ou router state
+  useEffect(() => {
+    const stateObj = (location.state as {
+      fromCalculadora?: boolean;
+      lead?: CalculadoraLeadSessao;
+    } | null) || null;
+
+    const origemCalculadora =
+      searchParams.get('origem') === 'calculadora' || Boolean(stateObj?.fromCalculadora);
+
+    let sessionLead: CalculadoraLeadSessao | null = null;
+    if (origemCalculadora) {
+      try {
+        const raw = sessionStorage.getItem(CALCULADORA_LEAD_STORAGE_KEY);
+        if (raw) sessionLead = JSON.parse(raw) as CalculadoraLeadSessao;
+      } catch {}
+    }
+
+    const prefillNome = searchParams.get('nome') || stateObj?.lead?.nome || sessionLead?.nome;
+    const prefillEmail = searchParams.get('email') || stateObj?.lead?.email || sessionLead?.email;
+    const prefillWhatsapp =
+      searchParams.get('whatsapp') ||
+      searchParams.get('telefone') ||
+      stateObj?.lead?.whatsapp ||
+      sessionLead?.whatsapp;
+    const prefillLeadId =
+      searchParams.get('lead_id') || stateObj?.lead?.leadId || sessionLead?.leadId;
+
+    if (prefillLeadId) {
+      try {
+        sessionStorage.setItem('calculadora_lead_id', prefillLeadId);
+      } catch {}
+    }
+
+    if (prefillNome) {
+      setNome((prev) => (prev.trim() ? prev : prefillNome.trim()));
+    }
+    if (prefillEmail && !emailLocked && !conviteToken) {
+      setEmail((prev) => (prev.trim() ? prev : prefillEmail.trim().toLowerCase()));
+    }
+    if (prefillWhatsapp) {
+      setTelefone((prev) => (prev.trim() ? prev : formatTelefone(prefillWhatsapp)));
+    }
+  }, [searchParams, location.state, emailLocked, conviteToken]);
 
   const translateAuthError = (err: any): string => {
     console.error('[CriarConta Error Original]:', err);
@@ -256,6 +307,15 @@ export const CriarConta: React.FC = () => {
         localStorage.removeItem('convite_codigo');
         localStorage.removeItem('parceiro_codigo');
         localStorage.removeItem('campanha_codigo');
+        try {
+          const leadId =
+            searchParams.get('lead_id') || sessionStorage.getItem('calculadora_lead_id');
+          await supabase.rpc('marcar_lead_calculadora_convertido', {
+            p_lead_id: leadId && isUUID(leadId) ? leadId : null,
+          });
+          sessionStorage.removeItem('calculadora_lead_id');
+          sessionStorage.removeItem(CALCULADORA_LEAD_STORAGE_KEY);
+        } catch {}
         try {
           sessionStorage.removeItem('pending_meta_complete_registration');
         } catch {}

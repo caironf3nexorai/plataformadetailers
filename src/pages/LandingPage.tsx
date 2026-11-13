@@ -670,7 +670,7 @@ export const LandingPage: React.FC = () => {
             Sem cadastro, sem senha e sem enrolação. Abra agora no seu celular ou envie o link para seus amigos detailers testarem a calibração exata de Snow Foam.
           </p>
 
-          <Link to="/calculadora">
+          <Link to="/calculadora-diluicao">
             <Button
               variant="primary"
               className="min-h-[48px] px-8 text-sm sm:text-base font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20"
@@ -781,7 +781,7 @@ export const LandingPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-6 font-medium">
-            <Link to="/calculadora" className="hover:text-amber-400 transition-colors">
+            <Link to="/calculadora-diluicao" className="hover:text-amber-400 transition-colors">
               Calculadora Gratuita
             </Link>
             <Link to="/entrar" className="hover:text-amber-400 transition-colors">

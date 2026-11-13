@@ -46,6 +46,7 @@ const ROTAS_MAPEADAS: MapeamentoRota[] = [
   { padrao: /^\/academia$/, nome: 'Academia Detailer' },
   { padrao: /^\/arquivos-digitais$/, nome: 'Arquivos Digitais' },
   { padrao: /^\/diluicao$/, nome: 'Calculadora de Diluição' },
+  { padrao: /^\/calculadora(?:-diluicao)?$/, nome: 'Calculadora Oficial' },
   { padrao: /^\/indique$/, nome: 'Indique e Ganhe' },
 
   // Estoque

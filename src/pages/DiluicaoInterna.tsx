@@ -33,7 +33,7 @@ export const DiluicaoInterna: React.FC = () => {
 
   const handleCopiarLink = async () => {
     try {
-      const url = `${window.location.origin}/calculadora`;
+      const url = `${window.location.origin}/calculadora-diluicao`;
       await navigator.clipboard.writeText(url);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2500);
@@ -44,7 +44,7 @@ export const DiluicaoInterna: React.FC = () => {
   };
 
   const handleCompartilharWhatsApp = () => {
-    const url = `${window.location.origin}/calculadora`;
+    const url = `${window.location.origin}/calculadora-diluicao`;
     const mensagem = encodeURIComponent(
       `🧪 Calculadora de Diluição Profissional para Estética Automotiva:\n` +
       `Descubra a proporção exata para Snow Foam manual e de lavadora sem desperdício de produto!\n\n` +
@@ -107,7 +107,7 @@ export const DiluicaoInterna: React.FC = () => {
           </div>
         </div>
         <a
-          href="/calculadora"
+          href="/calculadora-diluicao"
           target="_blank"
           rel="noopener noreferrer"
           className="text-vapor-400 hover:text-amber-400 flex items-center gap-1 text-xs shrink-0 underline"

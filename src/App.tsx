@@ -9,6 +9,7 @@ import { AnalyticsTracker } from './components/analytics/AnalyticsTracker';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // Páginas Públicas (Carregamento Assíncrono sob Demanda)
+const CalculadoraFunil = lazyWithRetry(() => import('./pages/CalculadoraFunil').then(m => ({ default: m.CalculadoraFunil })));
 const CalculadoraPublica = lazyWithRetry(() => import('./pages/CalculadoraPublica').then(m => ({ default: m.CalculadoraPublica })));
 const CatalogoPublico = lazyWithRetry(() => import('./pages/CatalogoPublico').then(m => ({ default: m.CatalogoPublico })));
 const FluxoAgendamentoOnline = lazyWithRetry(() => import('./pages/FluxoAgendamentoOnline').then(m => ({ default: m.FluxoAgendamentoOnline })));
@@ -116,7 +117,9 @@ function App() {
             <Route path="/agendar/:slug/agendamento" element={<FluxoAgendamentoOnline />} />
             <Route path="/agendar/:slug/novo" element={<FluxoAgendamentoOnline />} />
             <Route path="/agendar/:slug" element={<CatalogoPublico />} />
-            <Route path="/calculadora" element={<CalculadoraPublica />} />
+            <Route path="/calculadora" element={<CalculadoraFunil estadoInicial="captura" />} />
+            <Route path="/calculadora/obrigado" element={<CalculadoraFunil estadoInicial="obrigado" />} />
+            <Route path="/calculadora-diluicao" element={<CalculadoraPublica />} />
             <Route path="/entrar" element={<Entrar />} />
             <Route path="/login" element={<Navigate to="/entrar" replace />} />
             <Route path="/criar-conta" element={<CriarConta />} />

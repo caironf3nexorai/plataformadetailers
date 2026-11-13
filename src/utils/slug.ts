@@ -16,6 +16,8 @@ export const SLUGS_RESERVADOS = new Set([
   'garantia',
   'certificado',
   'calculadora',
+  'calculadora-diluicao',
+  'downloads',
   'entrar',
   'login',
   'criar-conta',
