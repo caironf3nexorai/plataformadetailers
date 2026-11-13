@@ -153,7 +153,7 @@ export function construirUrlCadastroComLead(lead?: Partial<CalculadoraLeadSessao
     params.set('lead_id', lead.leadId.trim());
   }
 
-  return `/criar-conta?${params.toString()}`;
+  return `/register?${params.toString()}`;
 }
 
 export async function dispararDownloadSimulador(): Promise<{

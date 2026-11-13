@@ -11,11 +11,11 @@ import {
   Layers,
   Lock,
   Play,
-  ShieldCheck,
   Sparkles,
   Unlock,
 } from 'lucide-react';
 import { LogoNuvemWash } from '../components/ui/LogoNuvemWash';
+import { MiniCalculadoraInterativa } from '../components/calculadora/MiniCalculadoraInterativa';
 import { supabase } from '../lib/supabase';
 import { formatTelefone } from '../utils/formatters';
 import { trackLead } from '../utils/pixel';
@@ -291,235 +291,207 @@ export const CalculadoraFunil: React.FC<CalculadoraFunilProps> = ({
         </div>
       </header>
 
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+      <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         {etapa === 'captura' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-            {/* Coluna Esquerda: Headline & Proposta de Valor */}
-            <section className="lg:col-span-7 flex flex-col gap-5">
-              <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-mono uppercase tracking-wider">
+          <div className="flex flex-col gap-8">
+            {/* Header da Captura: Headline & Choque */}
+            <section className="flex flex-col gap-4 text-center items-center max-w-3xl mx-auto">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-mono uppercase tracking-wider">
                 <AlertTriangle size={14} className="shrink-0 text-amber-500 animate-pulse" />
-                <span>DIAGNÓSTICO DE LUCRO REAL • EXCLUSIVO PARA DETAIL E ESTÉTICA</span>
+                <span>DIAGNÓSTICO DE LUCRO REAL • TESTE NO CELULAR</span>
               </div>
 
-              <h1 className="font-display text-[26px] sm:text-[34px] lg:text-[40px] font-extrabold text-vapor-100 leading-[1.12] tracking-tight">
-                Você Trabalha 12 Horas por Dia e Não Vê a Cor do Dinheiro? Descubra Onde Sua Estética Está Sangrando Lucro.
+              <h1 className="font-display text-[26px] sm:text-[36px] lg:text-[42px] font-extrabold text-vapor-100 leading-[1.12] tracking-tight">
+                Você Trabalha 12 Horas por Dia e Não Vê a Cor do Dinheiro? Descubra em 60 Segundos Onde Sua Estética Está Sangrando Lucro.
               </h1>
 
-              <p className="font-sans text-[15px] sm:text-[17px] text-vapor-400 leading-relaxed">
-                Mais de <strong className="text-vapor-100">78% dos donos de estética pagam para trabalhar</strong> porque cobram no olhômetro ou copiam a tabela do vizinho. Baixe o <strong className="text-amber-500">Simulador Oficial NuvemWash</strong> (Custo do Minuto de Pátio + Diluição em 2 Etapas) e descubra em 60 segundos quanto realmente sobra no seu bolso antes de ligar a lavadora.
+              <p className="font-sans text-[15px] sm:text-[17px] text-vapor-400 leading-relaxed max-w-2xl">
+                Mais de <strong className="text-vapor-100">78% dos donos de estética pagam para trabalhar</strong> porque cobram no olhômetro. Simule abaixo em tempo real com os números da sua oficina antes de baixar o Excel:
               </p>
-
-              {/* Cards curtos com o que vem aberto na planilha */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div className="bg-graphite-800 border border-graphite-600 rounded-[8px] p-4 flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-[6px] bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center shrink-0">
-                    <Clock size={18} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-display text-sm font-bold text-vapor-100">
-                      Custo do Minuto Parado
-                    </span>
-                    <span className="text-xs text-vapor-400 leading-relaxed">
-                      Aluguel, luz, ajudante e compressor rodam contra você. Saiba o custo exato da sua hora antes de dar qualquer desconto.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-graphite-800 border border-graphite-600 rounded-[8px] p-4 flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-[6px] bg-glass-400/15 border border-glass-400/30 text-glass-400 flex items-center justify-center shrink-0">
-                    <Droplets size={18} />
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-display text-sm font-bold text-vapor-100">
-                      Químico é Dinheiro no Ralo
-                    </span>
-                    <span className="text-xs text-vapor-400 leading-relaxed">
-                      Jogar produto "no olho" na Snow Foam desperdiça até R$ 800/mês. Calibre a diluição real em mL e economize até 40%.
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="hidden lg:flex items-center gap-4 pt-2 text-xs text-vapor-400">
-                <span className="inline-flex items-center gap-1.5">
-                  <CheckCircle2 size={15} className="text-mint-400" />
-                  Arquivo .xlsx 100% editável (Excel e Google Planilhas)
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck size={15} className="text-glass-400" />
-                  Sem pegadinhas • Download imediato
-                </span>
-              </div>
             </section>
 
-            {/* Coluna Direita: Formulário de Captura */}
-            <section className="lg:col-span-5 w-full">
-              <div className="bg-graphite-800 border border-graphite-600 rounded-[8px] p-5 sm:p-6 shadow-2xl">
-                <div className="flex flex-col gap-1 pb-4 mb-4 border-b border-graphite-600">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-mint-400">
-                    Acesso Imediato • 100% Gratuito
-                  </span>
-                  <h2 className="font-display text-lg sm:text-xl font-bold text-vapor-100">
-                    Liberar Simulador Oficial de Lucro
-                  </h2>
-                  <p className="text-xs text-vapor-400">
-                    Preencha abaixo para receber o arquivo oficial em menos de 10 segundos:
-                  </p>
+            {/* =============================================================== */}
+            {/* PARTE 1: A MINI-CALCULADORA INTERATIVA                          */}
+            {/* =============================================================== */}
+            <section aria-label="Mini-Calculadora Interativa">
+              <MiniCalculadoraInterativa />
+            </section>
+
+            {/* =============================================================== */}
+            {/* PARTE 2: FORMULÁRIO DE CAPTURA E REDIRECIONAMENTO (SUPABASE)    */}
+            {/* =============================================================== */}
+            <section
+              id="captura-planilha"
+              className="bg-graphite-800 border-2 border-amber-500/70 rounded-[8px] p-5 sm:p-7 shadow-2xl flex flex-col gap-6"
+            >
+              <div className="flex flex-col gap-2 pb-4 border-b border-graphite-600/80">
+                <div className="inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 text-[11px] font-mono uppercase tracking-wider">
+                  <Sparkles size={13} />
+                  <span>Leve o Diagnóstico Completo Para a Sua Oficina</span>
                 </div>
 
-                {submitError && (
-                  <div className="mb-4 p-3 rounded-[6px] bg-flare-400/10 border border-flare-400/40 text-flare-400 text-xs flex items-start gap-2">
-                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                    <span>{submitError}</span>
-                  </div>
-                )}
+                <h2 className="font-display text-xl sm:text-2xl font-bold text-vapor-100 leading-tight">
+                  Quer fazer a análise completa de Snow Foam, Restauração de Faróis e DRE? Baixe a Planilha Oficial NuvemWash gratuitamente.
+                </h2>
+                <p className="text-xs sm:text-sm text-vapor-400">
+                  Preencha abaixo para receber o arquivo oficial em Excel (.xlsx) com as 5 abas integradas:
+                </p>
+              </div>
 
-                <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-                  {/* Campo 1: Nome */}
-                  <div className="flex flex-col gap-1.5">
-                    <label
-                      htmlFor="lead-nome"
-                      className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
-                    >
-                      Nome *
-                    </label>
-                    <input
-                      id="lead-nome"
-                      type="text"
-                      autoComplete="name"
-                      placeholder="Ex: João da Silva"
-                      value={nome}
-                      onChange={(e) => {
-                        setNome(e.target.value);
-                        if (fieldErrors.nome) {
-                          setFieldErrors((prev) => ({ ...prev, nome: undefined }));
-                        }
-                      }}
-                      disabled={submitting}
-                      className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
-                        fieldErrors.nome ? 'border-flare-400' : 'border-graphite-600'
-                      } text-[15px] text-vapor-100 placeholder:text-vapor-600 focus:outline-none focus:border-amber-500 transition-colors`}
-                      required
-                    />
-                    {fieldErrors.nome && (
-                      <span className="text-xs text-flare-400">{fieldErrors.nome}</span>
-                    )}
-                  </div>
+              {submitError && (
+                <div className="p-3 rounded-[6px] bg-flare-400/10 border border-flare-400/40 text-flare-400 text-xs flex items-start gap-2">
+                  <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                  <span>{submitError}</span>
+                </div>
+              )}
 
-                  {/* Campo 2: WhatsApp */}
-                  <div className="flex flex-col gap-1.5">
-                    <label
-                      htmlFor="lead-whatsapp"
-                      className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
-                    >
-                      WhatsApp (com DDD) *
-                    </label>
-                    <input
-                      id="lead-whatsapp"
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      placeholder="(11) 99999-9999"
-                      value={whatsapp}
-                      onChange={(e) => {
-                        setWhatsapp(formatTelefone(e.target.value));
-                        if (fieldErrors.whatsapp) {
-                          setFieldErrors((prev) => ({ ...prev, whatsapp: undefined }));
-                        }
-                      }}
-                      disabled={submitting}
-                      className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
-                        fieldErrors.whatsapp ? 'border-flare-400' : 'border-graphite-600'
-                      } font-mono text-[15px] text-vapor-100 placeholder:text-vapor-600 focus:outline-none focus:border-amber-500 transition-colors`}
-                      required
-                    />
-                    {fieldErrors.whatsapp && (
-                      <span className="text-xs text-flare-400">{fieldErrors.whatsapp}</span>
-                    )}
-                  </div>
+              <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Campo 1: Nome */}
+                <div className="flex flex-col gap-1.5 sm:col-span-1">
+                  <label
+                    htmlFor="lead-nome"
+                    className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
+                  >
+                    Nome *
+                  </label>
+                  <input
+                    id="lead-nome"
+                    type="text"
+                    autoComplete="name"
+                    placeholder="Ex: João da Silva"
+                    value={nome}
+                    onChange={(e) => {
+                      setNome(e.target.value);
+                      if (fieldErrors.nome) {
+                        setFieldErrors((prev) => ({ ...prev, nome: undefined }));
+                      }
+                    }}
+                    disabled={submitting}
+                    className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
+                      fieldErrors.nome ? 'border-flare-400' : 'border-graphite-600'
+                    } text-[15px] text-vapor-100 placeholder:text-vapor-600 focus:outline-none focus:border-amber-500 transition-colors`}
+                    required
+                  />
+                  {fieldErrors.nome && (
+                    <span className="text-xs text-flare-400">{fieldErrors.nome}</span>
+                  )}
+                </div>
 
-                  {/* Campo 3: E-mail */}
-                  <div className="flex flex-col gap-1.5">
-                    <label
-                      htmlFor="lead-email"
-                      className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
-                    >
-                      E-mail *
-                    </label>
-                    <input
-                      id="lead-email"
-                      type="email"
-                      inputMode="email"
-                      autoComplete="email"
-                      placeholder="seu@email.com"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (fieldErrors.email) {
-                          setFieldErrors((prev) => ({ ...prev, email: undefined }));
-                        }
-                      }}
-                      disabled={submitting}
-                      className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
-                        fieldErrors.email ? 'border-flare-400' : 'border-graphite-600'
-                      } text-[15px] text-vapor-100 placeholder:text-vapor-600 focus:outline-none focus:border-amber-500 transition-colors`}
-                      required
-                    />
-                    {fieldErrors.email && (
-                      <span className="text-xs text-flare-400">{fieldErrors.email}</span>
-                    )}
-                  </div>
+                {/* Campo 2: WhatsApp */}
+                <div className="flex flex-col gap-1.5 sm:col-span-1">
+                  <label
+                    htmlFor="lead-whatsapp"
+                    className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
+                  >
+                    WhatsApp (com DDD) *
+                  </label>
+                  <input
+                    id="lead-whatsapp"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    placeholder="(11) 99999-9999"
+                    value={whatsapp}
+                    onChange={(e) => {
+                      setWhatsapp(formatTelefone(e.target.value));
+                      if (fieldErrors.whatsapp) {
+                        setFieldErrors((prev) => ({ ...prev, whatsapp: undefined }));
+                      }
+                    }}
+                    disabled={submitting}
+                    className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
+                      fieldErrors.whatsapp ? 'border-flare-400' : 'border-graphite-600'
+                    } font-mono text-[15px] text-vapor-100 placeholder:text-vapor-600 focus:outline-none focus:border-amber-500 transition-colors`}
+                    required
+                  />
+                  {fieldErrors.whatsapp && (
+                    <span className="text-xs text-flare-400">{fieldErrors.whatsapp}</span>
+                  )}
+                </div>
 
-                  {/* Campo 4: Momento atual da estética */}
-                  <div className="flex flex-col gap-1.5">
-                    <label
-                      htmlFor="lead-momento"
-                      className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
-                    >
-                      Qual o momento atual da sua estética? *
-                    </label>
-                    <select
-                      id="lead-momento"
-                      value={momentoEstetica}
-                      onChange={(e) => {
-                        setMomentoEstetica(e.target.value);
-                        if (fieldErrors.momento_estetica) {
-                          setFieldErrors((prev) => ({
-                            ...prev,
-                            momento_estetica: undefined,
-                          }));
-                        }
-                      }}
-                      disabled={submitting}
-                      className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
-                        fieldErrors.momento_estetica
-                          ? 'border-flare-400'
-                          : 'border-graphite-600'
-                      } text-[14px] ${
-                        momentoEstetica ? 'text-vapor-100' : 'text-vapor-400'
-                      } focus:outline-none focus:border-amber-500 transition-colors`}
-                      required
-                    >
-                      <option value="" disabled>
-                        Selecione o momento atual...
+                {/* Campo 3: E-mail */}
+                <div className="flex flex-col gap-1.5 sm:col-span-1">
+                  <label
+                    htmlFor="lead-email"
+                    className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
+                  >
+                    E-mail *
+                  </label>
+                  <input
+                    id="lead-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) {
+                        setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                      }
+                    }}
+                    disabled={submitting}
+                    className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
+                      fieldErrors.email ? 'border-flare-400' : 'border-graphite-600'
+                    } text-[15px] text-vapor-100 placeholder:text-vapor-600 focus:outline-none focus:border-amber-500 transition-colors`}
+                    required
+                  />
+                  {fieldErrors.email && (
+                    <span className="text-xs text-flare-400">{fieldErrors.email}</span>
+                  )}
+                </div>
+
+                {/* Campo 4: Momento atual da estética */}
+                <div className="flex flex-col gap-1.5 sm:col-span-1">
+                  <label
+                    htmlFor="lead-momento"
+                    className="font-display text-[11px] uppercase tracking-wider text-vapor-400"
+                  >
+                    Momento da sua Estética *
+                  </label>
+                  <select
+                    id="lead-momento"
+                    value={momentoEstetica}
+                    onChange={(e) => {
+                      setMomentoEstetica(e.target.value);
+                      if (fieldErrors.momento_estetica) {
+                        setFieldErrors((prev) => ({
+                          ...prev,
+                          momento_estetica: undefined,
+                        }));
+                      }
+                    }}
+                    disabled={submitting}
+                    className={`w-full min-h-[48px] px-4 rounded-[4px] bg-graphite-900 border ${
+                      fieldErrors.momento_estetica
+                        ? 'border-flare-400'
+                        : 'border-graphite-600'
+                    } text-[14px] ${
+                      momentoEstetica ? 'text-vapor-100' : 'text-vapor-400'
+                    } focus:outline-none focus:border-amber-500 transition-colors`}
+                    required
+                  >
+                    <option value="" disabled>
+                      Selecione o momento da sua estética...
+                    </option>
+                    {MOMENTOS_ESTETICA.map((opcao) => (
+                      <option key={opcao} value={opcao} className="bg-graphite-900 text-vapor-100">
+                        {opcao}
                       </option>
-                      {MOMENTOS_ESTETICA.map((opcao) => (
-                        <option key={opcao} value={opcao} className="bg-graphite-900 text-vapor-100">
-                          {opcao}
-                        </option>
-                      ))}
-                    </select>
-                    {fieldErrors.momento_estetica && (
-                      <span className="text-xs text-flare-400">
-                        {fieldErrors.momento_estetica}
-                      </span>
-                    )}
-                  </div>
+                    ))}
+                  </select>
+                  {fieldErrors.momento_estetica && (
+                    <span className="text-xs text-flare-400">
+                      {fieldErrors.momento_estetica}
+                    </span>
+                  )}
+                </div>
 
+                <div className="sm:col-span-2 flex flex-col gap-2 pt-2">
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="mt-1 w-full min-h-[52px] px-5 py-3.5 rounded-[6px] bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-graphite-950 font-display font-extrabold text-[14px] sm:text-[15px] uppercase tracking-wide flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-full min-h-[54px] px-6 py-4 rounded-[6px] bg-amber-500 hover:bg-amber-600 active:scale-[0.99] text-graphite-950 font-display font-extrabold text-[14px] sm:text-[16px] uppercase tracking-wide flex items-center justify-center gap-2 transition-all shadow-xl shadow-amber-500/20 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                   >
                     {submitting ? (
                       <>
@@ -528,21 +500,21 @@ export const CalculadoraFunil: React.FC<CalculadoraFunilProps> = ({
                       </>
                     ) : (
                       <>
-                        <span>QUERO PARAR DE PERDER DINHEIRO • BAIXAR AGORA</span>
-                        <ArrowRight size={17} className="shrink-0" />
+                        <span>LIBERAR PLANILHA OFICIAL EM EXCEL (.XLSX) AGORA</span>
+                        <ArrowRight size={18} className="shrink-0" />
                       </>
                     )}
                   </button>
 
                   <p className="text-[11px] text-vapor-400 text-center leading-relaxed">
-                    Arquivo oficial pronto em <span className="font-mono text-vapor-100">.xlsx</span>. Seus dados estão 100% seguros conforme a{' '}
+                    Download instantâneo do arquivo oficial <span className="font-mono text-vapor-100">.xlsx</span>. Seus dados estão 100% seguros conforme a{' '}
                     <Link to="/politica-de-privacidade" className="text-glass-400 hover:underline">
                       Política de Privacidade
                     </Link>
                     .
                   </p>
-                </form>
-              </div>
+                </div>
+              </form>
             </section>
           </div>
         ) : (

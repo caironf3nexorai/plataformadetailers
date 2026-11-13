@@ -123,6 +123,9 @@ function App() {
             <Route path="/entrar" element={<Entrar />} />
             <Route path="/login" element={<Navigate to="/entrar" replace />} />
             <Route path="/criar-conta" element={<CriarConta />} />
+            <Route path="/register" element={<CriarConta />} />
+            <Route path="/signup" element={<Navigate to="/criar-conta" replace />} />
+            <Route path="/cadastro" element={<Navigate to="/criar-conta" replace />} />
             <Route path="/convite/:codigo" element={<PaginaConvite />} />
             <Route path="/lancamento/:codigo" element={<PaginaLancamento />} />
             <Route path="/parceiro/login" element={<LoginParceiro />} />
