@@ -23,7 +23,8 @@ import { AbaAssinatura } from './configuracoes/AbaAssinatura';
 import { AbaTermosGarantia } from './configuracoes/AbaTermosGarantia';
 import { AbaFiscal } from '../components/configuracoes/AbaFiscal';
 import { AbaWhatsApp } from '../components/configuracoes/AbaWhatsApp';
-import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X, Mail, Phone, MapPin, PlayCircle } from 'lucide-react';
+import { AbaDespesasFixas } from './configuracoes/AbaDespesasFixas';
+import { Building2, Users, CreditCard, Tag, Upload, Trash, AlertTriangle, ExternalLink, Globe, Check, Save, Clock, CheckSquare, FileText, Target, MessageSquare, ShieldCheck, QrCode, Download, Sparkles, Receipt, MessageCircle, User, Edit2, X, Mail, Phone, MapPin, PlayCircle, TrendingUp, Layers, ArrowUpRight } from 'lucide-react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { validateImageFile, comprimirImagemCatalogo, getFotoPublicUrl } from '../utils/imagens';
 import { ModalPlacaBalcao } from '../components/vitrine/ModalPlacaBalcao';
@@ -38,7 +39,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { tenant, refetchTenantData, profile, user, membership } = useAuth();
-  const { isDono, podeGerirEquipe, podeGerirServicos } = usePermissao();
+  const { isDono, podeGerirEquipe, podeGerirServicos, podeVerFinanceiro } = usePermissao();
   const { planoAtual, nomePlano, limiteDe } = usePlano();
 
   const getTabPadrao = () => {
@@ -59,11 +60,9 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       navigate('/arquivos-digitais', { replace: true });
       return;
     }
-    if (abaParam === 'despesas' || abaParam === 'contas' || abaInicial === 'despesas') {
-      navigate('/financeiro/despesas', { replace: true });
-      return;
-    }
-    if (abaParam === 'plano' || abaParam === 'assinatura') {
+    if (['despesas', 'contas', 'dre', 'custos', 'financeiro'].includes(abaParam)) {
+      setActiveTab('despesas');
+    } else if (abaParam === 'plano' || abaParam === 'assinatura') {
       setActiveTab('plano');
     } else if (abaParam === 'fiscal' || abaParam === 'nfse') {
       setActiveTab('fiscal');
@@ -73,7 +72,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       setActiveTab('termos');
     } else if (['perfil', 'usuario', 'meuperfil', 'dados'].includes(abaParam)) {
       setActiveTab('perfil');
-    } else if (['oficina', 'horarios', 'equipe', 'categorias', 'checklists', 'agendamento', 'pdf', 'meta', 'feedbacks'].includes(abaParam)) {
+    } else if (['oficina', 'horarios', 'equipe', 'categorias', 'checklists', 'despesas', 'agendamento', 'pdf', 'meta', 'feedbacks'].includes(abaParam)) {
       setActiveTab(abaParam as any);
     } else if (abaInicial) {
       setActiveTab(abaInicial);
@@ -739,6 +738,7 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
           ...(podeGerirEquipe() ? [{ id: 'equipe', label: 'Equipe', icon: Users }] : []),
           ...(isDono ? [{ id: 'categorias', label: 'Categorias', icon: Tag }] : []),
           ...((isDono || podeGerirEquipe()) ? [{ id: 'checklists', label: 'Checklists', icon: CheckSquare }] : []),
+          ...(podeVerFinanceiro() ? [{ id: 'despesas', label: 'Contas & DRE', icon: TrendingUp }] : []),
           ...(isDono ? [{ id: 'agendamento', label: 'Agendamento Online & Vitrine', icon: Globe }] : []),
           { id: 'plano', label: 'Plano e Limites', icon: CreditCard },
           ...((isDono || podeGerirServicos()) ? [{ id: 'fiscal', label: 'Dados Fiscais & NFS-e', icon: Receipt }] : []),
@@ -761,6 +761,115 @@ export const Configuracoes: React.FC<ConfiguracoesProps> = ({ abaInicial }) => {
       {activeTab === 'termos' && <AbaTermosGarantia />}
       {activeTab === 'fiscal' && <AbaFiscal />}
       {activeTab === 'whatsapp' && <AbaWhatsApp />}
+
+      {activeTab === 'despesas' && podeVerFinanceiro() && (
+        <div className="flex flex-col gap-6 animate-fade-in">
+          {/* Header e Atalhos Estratégicos para Gestão Financeira & DRE */}
+          <div className="bg-gradient-to-r from-graphite-900 via-graphite-850 to-graphite-900 border border-graphite-700/80 rounded-2xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
+            {/* Efeito sutil de brilho âmbar */}
+            <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-graphite-700/60 pb-5">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold shrink-0 shadow-inner">
+                  <TrendingUp size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h3 className="font-display text-lg sm:text-xl text-vapor-100 uppercase tracking-wide font-bold">
+                      Gestão de Contas, Custos Fixos & DRE
+                    </h3>
+                    <Badge tone="amber" className="text-[11px] font-mono">
+                      Coração Financeiro
+                    </Badge>
+                  </div>
+                  <p className="font-sans text-xs sm:text-sm text-vapor-400 mt-0.5 max-w-2xl">
+                    Configure os custos estruturais da sua oficina para calibrar o valor real do seu minuto de trabalho e alimente automaticamente a cascata do Demonstrativo de Resultado (DRE).
+                  </p>
+                </div>
+              </div>
+
+              <Link
+                to="/financeiro"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-graphite-950 font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0"
+              >
+                <Layers size={16} />
+                <span>Abrir DRE Completo</span>
+                <ArrowUpRight size={15} />
+              </Link>
+            </div>
+
+            {/* 3 Cartões de Navegação Rápida do Módulo Financeiro */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mt-5">
+              {/* Card DRE */}
+              <Link
+                to="/financeiro"
+                className="group p-4 bg-graphite-800/80 hover:bg-graphite-800 border border-graphite-700 hover:border-amber-500/50 rounded-xl transition-all flex flex-col justify-between gap-3 hover:shadow-lg hover:shadow-amber-500/5"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+                    <Layers size={16} />
+                  </div>
+                  <ArrowUpRight size={14} className="text-vapor-500 group-hover:text-amber-400 transition-colors" />
+                </div>
+                <div>
+                  <h4 className="font-display text-sm font-bold text-vapor-100 group-hover:text-amber-300 transition-colors">
+                    DRE & Cascata de Lucro
+                  </h4>
+                  <p className="font-sans text-[11.5px] text-vapor-400 mt-1 line-clamp-2">
+                    Faturamento bruto, deduções, custo químico, despesas fixas e o lucro líquido real do mês.
+                  </p>
+                </div>
+              </Link>
+
+              {/* Card Taxas de Cartão */}
+              <Link
+                to="/financeiro/taxas"
+                className="group p-4 bg-graphite-800/80 hover:bg-graphite-800 border border-graphite-700 hover:border-glass-400/50 rounded-xl transition-all flex flex-col justify-between gap-3 hover:shadow-lg hover:shadow-glass-400/5"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-lg bg-glass-400/10 border border-glass-400/25 flex items-center justify-center text-glass-400 group-hover:scale-110 transition-transform">
+                    <CreditCard size={16} />
+                  </div>
+                  <ArrowUpRight size={14} className="text-vapor-500 group-hover:text-glass-400 transition-colors" />
+                </div>
+                <div>
+                  <h4 className="font-display text-sm font-bold text-vapor-100 group-hover:text-glass-300 transition-colors">
+                    Taxas de Maquininha
+                  </h4>
+                  <p className="font-sans text-[11.5px] text-vapor-400 mt-1 line-clamp-2">
+                    Cadastre suas taxas de débito, crédito à vista e parcelado em até 12x para abater da margem.
+                  </p>
+                </div>
+              </Link>
+
+              {/* Card Contas a Receber */}
+              <Link
+                to="/financeiro/contas-a-receber"
+                className="group p-4 bg-graphite-800/80 hover:bg-graphite-800 border border-graphite-700 hover:border-mint-500/50 rounded-xl transition-all flex flex-col justify-between gap-3 hover:shadow-lg hover:shadow-mint-500/5"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-lg bg-mint-500/10 border border-mint-500/25 flex items-center justify-center text-mint-400 group-hover:scale-110 transition-transform">
+                    <Clock size={16} />
+                  </div>
+                  <ArrowUpRight size={14} className="text-vapor-500 group-hover:text-mint-400 transition-colors" />
+                </div>
+                <div>
+                  <h4 className="font-display text-sm font-bold text-vapor-100 group-hover:text-mint-300 transition-colors">
+                    Contas a Receber & Fiados
+                  </h4>
+                  <p className="font-sans text-[11.5px] text-vapor-400 mt-1 line-clamp-2">
+                    Controle cobranças pendentes, pagamentos parciais e faturamento a prazo dos clientes.
+                  </p>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Componente Integrado de Despesas Fixas e Custo/Hora */}
+          <AbaDespesasFixas />
+        </div>
+      )}
 
       {activeTab === 'perfil' && (
         <div className="flex flex-col lg:flex-row items-start gap-6">
