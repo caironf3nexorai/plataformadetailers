@@ -26,6 +26,7 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { traduzirErro } from '../../utils/erros';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
 
 const SUGESTOES = [
   { nome: 'Aluguel', categoria: 'Instalacao' as CategoriaDespesa, tipo: 'recorrente' as TipoDespesa },
@@ -174,6 +175,13 @@ export const AbaDespesasFixas: React.FC = () => {
         initialMap[p.id] = String(p.valor_mensal);
       });
       setValoresConfirmacao(initialMap);
+
+      if (tenant?.id && isDono) {
+        marcarPassoOnboarding(tenant.id, {
+          financeiro_revisado: true,
+          ...(listaDespesas.length > 0 ? { despesas_configuradas: true } : {}),
+        });
+      }
     } catch (err: any) {
       console.error('Erro ao carregar despesas fixas:', err);
     } finally {

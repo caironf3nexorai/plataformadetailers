@@ -31,6 +31,7 @@ export const ETAPAS_TUTORIAIS_ORDEM: EtapaOnboardingId[] = [
   'etapa_2',
   'etapa_3',
   'etapa_4',
+  'etapa_dre',
   'etapa_5',
   'etapa_6',
   'etapa_7',
@@ -89,6 +90,17 @@ export const TUTORIAL_VIDEOS: {
       tempoFinal: undefined,
       rotaDestino: '/servicos',
       labelBotao: 'Ir para esta configuração agora',
+    },
+    etapa_dre: {
+      id: 'etapa_dre',
+      titulo: 'Controle Financeiro: DRE, Custos & Contas a Receber',
+      descricao:
+        'Aprenda como a NuvemWash calcula seu lucro líquido real por serviço, desconta custos fixos por hora e controla contas a receber e fiados.',
+      url: '',
+      tempoInicial: 0,
+      tempoFinal: undefined,
+      rotaDestino: '/financeiro',
+      labelBotao: 'Ir para o Financeiro agora',
     },
     etapa_5: {
       id: 'etapa_5',

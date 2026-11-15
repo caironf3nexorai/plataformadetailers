@@ -47,6 +47,7 @@ interface RawStatusRpc {
   orcamentos_count?: number;
   termos_garantia_count?: number;
   membros_count?: number;
+  despesas_count?: number;
   onboarding_progress?: OnboardingProgressFlags;
   onboarding_widget_oculto?: boolean;
   tem_logo?: boolean;
@@ -133,6 +134,15 @@ export const WidgetProgressoOnboarding: React.FC = () => {
         }
         setWidgetOculto(ocultoFinal);
 
+        let despesasCount = Number(raw.despesas_count ?? 0);
+        if (raw.despesas_count === undefined) {
+          const { count } = await supabase
+            .from('despesas_fixas')
+            .select('id', { count: 'exact', head: true })
+            .eq('tenant_id', tenant.id);
+          despesasCount = Number(count ?? 0);
+        }
+
         setStatusInput({
           plano: raw.plano || tenant.plano || 'free',
           servicosCount: Number(raw.servicos_count ?? 0),
@@ -144,6 +154,7 @@ export const WidgetProgressoOnboarding: React.FC = () => {
           orcamentosCount: Number(raw.orcamentos_count ?? 0),
           termosGarantiaCount: Number(raw.termos_garantia_count ?? 0),
           membrosCount: Number(raw.membros_count ?? 1),
+          despesasCount,
           temLogo: Boolean(raw.tem_logo),
           temIdentidade: Boolean(raw.tem_identidade),
           temPix: Boolean(raw.tem_pix),
@@ -156,7 +167,7 @@ export const WidgetProgressoOnboarding: React.FC = () => {
       }
 
       // Fallback resiliente caso a migração 0171/0175 ainda não tenha sido executada no banco
-      const [resServs, resPrecos, resOrcs, resTermos, resMembros] = await Promise.all([
+      const [resServs, resPrecos, resOrcs, resTermos, resMembros, resDespesas] = await Promise.all([
         supabase
           .from('servicos')
           .select('id, sob_consulta')
@@ -181,6 +192,10 @@ export const WidgetProgressoOnboarding: React.FC = () => {
           .select('id', { count: 'exact', head: true })
           .eq('tenant_id', tenant.id)
           .in('status', ['ativo', 'convidado']),
+        supabase
+          .from('despesas_fixas')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.id),
       ]);
 
       const servsAtivos = resServs.data || [];
@@ -235,6 +250,7 @@ export const WidgetProgressoOnboarding: React.FC = () => {
         orcamentosCount: Number(resOrcs.count ?? 0),
         termosGarantiaCount: Number(resTermos.count ?? 0),
         membrosCount: Number(resMembros.count ?? 1),
+        despesasCount: Number(resDespesas?.count ?? 0),
         temLogo,
         temIdentidade,
         temPix,

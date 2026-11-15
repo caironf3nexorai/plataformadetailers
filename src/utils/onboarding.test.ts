@@ -25,9 +25,9 @@ const baseInput: StatusOnboardingInput = {
 };
 
 describe('onboarding progress calculation', () => {
-  it('inicia exatamente em 16% com a contagem exata de serviços carregados', () => {
+  it('inicia exatamente em 20% com a contagem exata de serviços carregados', () => {
     const res = calcularProgressoOnboarding(baseInput);
-    expect(res.porcentagem).toBe(16);
+    expect(res.porcentagem).toBe(20);
     expect(res.etapasConcluidas).toBe(0);
     expect(res.fase1Concluida).toBe(false);
     expect(res.tudoConcluido).toBe(false);
@@ -41,15 +41,16 @@ describe('onboarding progress calculation', () => {
     expect(etapa8?.subtitulo).toContain('Plano Free');
   });
 
-  it('soma +12% por etapa concluída automaticamente até fechar Fase 1 (52%) e 100%', () => {
+  it('soma +10% por etapa concluída automaticamente até fechar Fase 1 (60%) e 100%', () => {
     const fase1 = calcularProgressoOnboarding({
       ...baseInput,
       orcamentosCount: 1,
       temLogo: true,
       servicosConfirmadosCount: 3,
+      despesasCount: 2,
     });
-    expect(fase1.etapasConcluidas).toBe(3);
-    expect(fase1.porcentagem).toBe(52);
+    expect(fase1.etapasConcluidas).toBe(4);
+    expect(fase1.porcentagem).toBe(60);
     expect(fase1.fase1Concluida).toBe(true);
     expect(fase1.tudoConcluido).toBe(false);
 
@@ -58,14 +59,32 @@ describe('onboarding progress calculation', () => {
       orcamentosCount: 1,
       temLogo: true,
       servicosConfirmadosCount: 3,
+      despesasCount: 2,
       temTermoRespCustom: true,
       temPix: true,
       membrosCount: 2,
       progress: { horarios_revisados: true },
     });
-    expect(completo.etapasConcluidas).toBe(7);
+    expect(completo.etapasConcluidas).toBe(8);
     expect(completo.porcentagem).toBe(100);
     expect(completo.tudoConcluido).toBe(true);
+  });
+
+  it('detecta etapa_dre automaticamente via despesas cadastradas ou flags financeiras', () => {
+    const comDespesas = calcularProgressoOnboarding({
+      ...baseInput,
+      despesasCount: 3,
+    });
+    const etapaDre = comDespesas.etapas.find((e) => e.id === 'etapa_dre');
+    expect(etapaDre?.concluida).toBe(true);
+    expect(etapaDre?.rota).toBe('/financeiro');
+    expect(etapaDre?.numero).toBe(5);
+
+    const comFlagFinanceiro = calcularProgressoOnboarding({
+      ...baseInput,
+      progress: { financeiro_revisado: true },
+    });
+    expect(comFlagFinanceiro.etapas.find((e) => e.id === 'etapa_dre')?.concluida).toBe(true);
   });
 
   it('direciona Etapa 2 para ?novo=1 apenas quando há 0 orçamentos', () => {
@@ -90,7 +109,7 @@ describe('onboarding progress calculation', () => {
     expect(manual.etapas.find((e) => e.id === 'etapa_2')?.concluida).toBe(true);
     expect(manual.etapas.find((e) => e.id === 'etapa_5')?.concluida).toBe(true);
     expect(manual.etapas.find((e) => e.id === 'etapa_8')?.concluida).toBe(true);
-    expect(manual.porcentagem).toBe(16 + 3 * 12);
+    expect(manual.porcentagem).toBe(20 + 3 * 10);
   });
 
   it('preserva marcações manuais existentes ao fazer merge de flags de progresso', () => {

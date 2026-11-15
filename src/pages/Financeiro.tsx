@@ -35,6 +35,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { NavegacaoFinanceiro } from '../components/financeiro/NavegacaoFinanceiro';
 import { BloqueioRecursoPlano } from '../components/planos/BloqueioRecursoPlano';
 import { usePlano } from '../hooks/usePlano';
+import { marcarPassoOnboarding } from '../utils/onboarding';
 
 export const Financeiro: React.FC = () => {
   const navigate = useNavigate();
@@ -117,7 +118,10 @@ export const Financeiro: React.FC = () => {
 
   useEffect(() => {
     fetchDadosFinanceiros();
-  }, [tenant?.id, filtroPeriodo, customInicio, customFim]);
+    if (tenant?.id && podeVerFinanceiro) {
+      marcarPassoOnboarding(tenant.id, { financeiro_revisado: true, dre_revisado: true });
+    }
+  }, [tenant?.id, filtroPeriodo, customInicio, customFim, podeVerFinanceiro]);
 
   if (!podeVerFinanceiro) {
     return (

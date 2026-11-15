@@ -42,6 +42,7 @@ interface ItemContaReceber {
 import { NavegacaoFinanceiro } from '../../components/financeiro/NavegacaoFinanceiro';
 import { usePlano } from '../../hooks/usePlano';
 import { BloqueioRecursoPlano } from '../../components/planos/BloqueioRecursoPlano';
+import { marcarPassoOnboarding } from '../../utils/onboarding';
 
 export const ContasReceber: React.FC = () => {
   const navigate = useNavigate();
@@ -100,7 +101,10 @@ export const ContasReceber: React.FC = () => {
 
   useEffect(() => {
     fetchContasReceber();
-  }, [tenant?.id]);
+    if (tenant?.id && podeAcessar) {
+      marcarPassoOnboarding(tenant.id, { financeiro_revisado: true, contas_receber_revisado: true });
+    }
+  }, [tenant?.id, podeAcessar]);
 
   const handleSolicitarBaixa = (item: ItemContaReceber) => {
     setItemParaBaixar({

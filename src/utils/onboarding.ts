@@ -4,6 +4,7 @@ export type EtapaOnboardingId =
   | 'etapa_2'
   | 'etapa_3'
   | 'etapa_4'
+  | 'etapa_dre'
   | 'etapa_5'
   | 'etapa_6'
   | 'etapa_7'
@@ -17,6 +18,10 @@ export type OnboardingProgressFlags = {
   vitrine_revisada?: boolean;
   trabalho_sozinho?: boolean;
   equipe_configurada?: boolean;
+  financeiro_revisado?: boolean;
+  dre_revisado?: boolean;
+  despesas_configuradas?: boolean;
+  contas_receber_revisado?: boolean;
   manual?: Partial<Record<EtapaOnboardingId, boolean>>;
   [key: string]: unknown;
 };
@@ -29,6 +34,7 @@ export interface StatusOnboardingInput {
   orcamentosCount: number;
   termosGarantiaCount: number;
   membrosCount: number;
+  despesasCount?: number;
   temLogo: boolean;
   temIdentidade: boolean;
   temPix: boolean;
@@ -39,7 +45,7 @@ export interface StatusOnboardingInput {
 
 export interface EtapaOnboardingCalculada {
   id: EtapaOnboardingId;
-  numero: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  numero: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
   fase: 1 | 2;
   titulo: string;
   subtitulo: string;
@@ -250,6 +256,12 @@ export function calcularProgressoOnboarding(
     input.temLogo || input.temIdentidade || Boolean(progress.oficina_personalizada);
   const servicosAuto =
     input.servicosConfirmadosCount > 0 || Boolean(progress.catalogo_revisado);
+  const dreAuto =
+    (input.despesasCount !== undefined && input.despesasCount > 0) ||
+    Boolean(progress.financeiro_revisado) ||
+    Boolean(progress.dre_revisado) ||
+    Boolean(progress.despesas_configuradas) ||
+    Boolean(progress.contas_receber_revisado);
   const horariosAuto = Boolean(progress.horarios_revisados);
   const termosAuto =
     input.temTermoRespCustom ||
@@ -264,7 +276,7 @@ export function calcularProgressoOnboarding(
 
   const etapaDefs: Array<{
     id: EtapaOnboardingId;
-    numero: 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    numero: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
     fase: 1 | 2;
     titulo: string;
     subtitulo: string;
@@ -304,8 +316,17 @@ export function calcularProgressoOnboarding(
       auto: servicosAuto,
     },
     {
-      id: 'etapa_5',
+      id: 'etapa_dre',
       numero: 5,
+      fase: 1,
+      titulo: 'Controle Financeiro: DRE, Custos & Contas a Receber',
+      subtitulo: 'Cadastre suas despesas fixas para calcular o lucro líquido real e acompanhe recebimentos a prazo e fiados',
+      rota: '/financeiro',
+      auto: dreAuto,
+    },
+    {
+      id: 'etapa_5',
+      numero: 6,
       fase: 2,
       titulo: 'Horários, Capacidade e Vistoria',
       subtitulo: 'Defina expediente, quantos carros atende por hora e regra de check-in',
@@ -314,7 +335,7 @@ export function calcularProgressoOnboarding(
     },
     {
       id: 'etapa_6',
-      numero: 6,
+      numero: 7,
       fase: 2,
       titulo: 'Termos da Oficina e Garantias (CDC)',
       subtitulo: 'Resguarde sua estética contra danos preexistentes e falhas ocultas',
@@ -323,7 +344,7 @@ export function calcularProgressoOnboarding(
     },
     {
       id: 'etapa_7',
-      numero: 7,
+      numero: 8,
       fase: 2,
       titulo: 'Vitrine Online e Sinal Pix',
       subtitulo: 'Receba agendamentos no seu link público e peça sinal via Pix sem taxas',
@@ -332,7 +353,7 @@ export function calcularProgressoOnboarding(
     },
     {
       id: 'etapa_8',
-      numero: 8,
+      numero: 9,
       fase: 2,
       titulo: 'Equipe e Comissões',
       subtitulo: isFree
@@ -359,8 +380,8 @@ export function calcularProgressoOnboarding(
     };
   });
 
-  const basePercentual = 16;
-  const percentualPorEtapa = 12;
+  const basePercentual = 20;
+  const percentualPorEtapa = 10;
   const etapasConcluidas = etapas.filter((e) => e.concluida).length;
   const porcentagem = Math.min(100, basePercentual + etapasConcluidas * percentualPorEtapa);
   const fase1Concluida = etapas.filter((e) => e.fase === 1).every((e) => e.concluida);
