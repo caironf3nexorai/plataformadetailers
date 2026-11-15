@@ -843,8 +843,8 @@ export const Servicos: React.FC = () => {
                           />
 
                           <div className="flex-1 flex flex-col gap-1.5 min-w-0">
-                            <div className="flex flex-wrap items-start justify-between gap-1.5">
-                              <div className="min-w-0 flex-1">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                              <div className="min-w-0">
                                 <ServiceChip
                                   code={serv.codigo}
                                   label={serv.nome}
@@ -853,22 +853,24 @@ export const Servicos: React.FC = () => {
                               </div>
 
                               {/* Badges de Ocupação & Público */}
-                              <div className="flex flex-wrap gap-1 items-center shrink-0">
-                                {serv.publico && (
-                                  <Badge tone="mint">
-                                    <span className="flex items-center gap-1 text-[10px]">
-                                      <Globe size={10} />
-                                      Público
-                                    </span>
-                                  </Badge>
-                                )}
-                                {serv.modo_ocupacao === 'dia_inteiro' && (
-                                  <Badge tone="amber">Dia Inteiro</Badge>
-                                )}
-                                {serv.modo_ocupacao === 'multiplos_dias' && (
-                                  <Badge tone="glass">{serv.dias_ocupados} dias</Badge>
-                                )}
-                              </div>
+                              {(serv.publico || serv.modo_ocupacao === 'dia_inteiro' || serv.modo_ocupacao === 'multiplos_dias') && (
+                                <div className="flex flex-wrap gap-1 items-center shrink-0">
+                                  {serv.publico && (
+                                    <Badge tone="mint">
+                                      <span className="flex items-center gap-1 text-[10px]">
+                                        <Globe size={10} />
+                                        Público
+                                      </span>
+                                    </Badge>
+                                  )}
+                                  {serv.modo_ocupacao === 'dia_inteiro' && (
+                                    <Badge tone="amber">Dia Inteiro</Badge>
+                                  )}
+                                  {serv.modo_ocupacao === 'multiplos_dias' && (
+                                    <Badge tone="glass">{serv.dias_ocupados} dias</Badge>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {serv.descricao_publica && (

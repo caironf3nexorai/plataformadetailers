@@ -17,7 +17,7 @@ export const ServiceChip: React.FC<ServiceChipProps> = ({ code, label, tone }) =
   return (
     <div className="flex items-center gap-2">
       {code && (
-        <div className={`px-1.5 py-0.5 rounded-[2px] border ${toneMap[tone]} bg-transparent flex items-center justify-center`}>
+        <div className={`px-1.5 py-0.5 rounded-[2px] border ${toneMap[tone]} bg-transparent flex items-center justify-center shrink-0`}>
           <span className="font-mono text-[11px] font-semibold tracking-[0.08em] leading-none">
             {code}
           </span>
