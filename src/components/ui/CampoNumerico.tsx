@@ -28,6 +28,11 @@ export interface CampoNumericoProps
    */
   allowNull?: boolean;
   /**
+   * Se true, exibe e aceita 0 explicitamente (ex: "0,00" ou "0") sem esvaziar para marca-d'água.
+   * Essencial para valores gratuitos, brindes ou cortesias.
+   */
+  allowZero?: boolean;
+  /**
    * Alinhamento do texto ("left" | "center" | "right")
    */
   align?: 'left' | 'center' | 'right';
@@ -35,6 +40,28 @@ export interface CampoNumericoProps
    * Classe customizada para o wrapper externo (ex: flex-1, w-full, etc.)
    */
   wrapperClassName?: string;
+}
+
+/**
+ * Converte valor externo (número ou string) para string de exibição PT-BR.
+ * Quando allowZero for true, preserva o zero ("0,00" ou "0") ao invés de ocultar para placeholder.
+ */
+export function formatarValorNumerico(
+  val: number | string | null | undefined,
+  allowZero = false,
+  integerOnly = false
+): string {
+  if (val === null || val === undefined || val === '') return '';
+  const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+  if (isNaN(num)) return '';
+  if (num === 0) {
+    if (!allowZero) return '';
+    return integerOnly ? '0' : '0,00';
+  }
+
+  const strVal = String(val);
+  if (strVal.includes(',')) return strVal;
+  return strVal.replace('.', ',');
 }
 
 export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoProps>(
@@ -46,6 +73,7 @@ export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoPro
       suffix,
       integerOnly = false,
       allowNull = false,
+      allowZero = false,
       align = 'left',
       wrapperClassName = '',
       className = '',
@@ -73,17 +101,8 @@ export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoPro
 
     const [isFocused, setIsFocused] = useState(false);
 
-    // Converte valor externo para string de exibição PT-BR (com vírgula se for decimal)
-    const formatValueToString = (val: number | string | null | undefined): string => {
-      if (val === null || val === undefined || val === '') return '';
-      const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
-      if (isNaN(num)) return '';
-      if (num === 0) return ''; // 0 vira string vazia para exibir marca-d'água
-
-      const strVal = String(val);
-      if (strVal.includes(',')) return strVal;
-      return strVal.replace('.', ',');
-    };
+    const formatValueToString = (val: number | string | null | undefined): string =>
+      formatarValorNumerico(val, allowZero, integerOnly);
 
     const [editingValue, setEditingValue] = useState<string>(() => formatValueToString(value));
     const wasJustFocusedRef = useRef(false);
@@ -133,8 +152,8 @@ export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoPro
       setIsFocused(true);
       wasJustFocusedRef.current = true;
 
-      // Se o valor numérico atual for 0 e a string de exibição for "0", limpa para exibir placeholder
-      if (value === 0 && (editingValue === '0' || editingValue === '0,00' || editingValue === '')) {
+      // Se o valor numérico atual for 0 e allowZero não estiver ativo, limpa para exibir placeholder
+      if (!allowZero && value === 0 && (editingValue === '0' || editingValue === '0,00' || editingValue === '')) {
         setEditingValue('');
       }
 
@@ -160,6 +179,10 @@ export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoPro
         if (allowNull) {
           setEditingValue('');
           onChange(null, '');
+        } else if (allowZero) {
+          const zeroStr = integerOnly ? '0' : '0,00';
+          setEditingValue(zeroStr);
+          onChange(0, zeroStr);
         } else {
           setEditingValue('');
           onChange(0, '0');
@@ -171,13 +194,23 @@ export const CampoNumerico = React.forwardRef<HTMLInputElement, CampoNumericoPro
           if (allowNull) {
             setEditingValue('');
             onChange(null, '');
+          } else if (allowZero) {
+            const zeroStr = integerOnly ? '0' : '0,00';
+            setEditingValue(zeroStr);
+            onChange(0, zeroStr);
           } else {
             setEditingValue('');
             onChange(0, '0');
           }
         } else if (parsed === 0) {
-          setEditingValue('');
-          onChange(0, '0');
+          if (allowZero) {
+            const zeroStr = integerOnly ? '0' : '0,00';
+            setEditingValue(zeroStr);
+            onChange(0, zeroStr);
+          } else {
+            setEditingValue('');
+            onChange(0, '0');
+          }
         } else {
           setEditingValue(formatValueToString(parsed));
           onChange(parsed, String(parsed));

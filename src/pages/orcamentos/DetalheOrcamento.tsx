@@ -1068,7 +1068,8 @@ export const DetalheOrcamento: React.FC = () => {
   const handleAdicionarServicoUnico = (e: React.FormEvent) => {
     e.preventDefault();
     const nomeLimpo = suNome.trim();
-    const valorNum = parseFloat(suValor.replace(',', '.'));
+    const rawValor = (suValor ?? '').toString().trim();
+    const valorNum = rawValor === '' ? 0 : parseFloat(rawValor.replace(',', '.'));
     const horasNum = parseFloat(suDuracao.replace(',', '.'));
 
     if (!nomeLimpo) {
@@ -1076,7 +1077,7 @@ export const DetalheOrcamento: React.FC = () => {
       return;
     }
     if (isNaN(valorNum) || valorNum < 0) {
-      showError('Informe um valor válido para o serviço.');
+      showError('Informe um valor válido para o serviço (ou R$ 0,00 para cortesia/brinde).');
       return;
     }
     if (isNaN(horasNum) || horasNum <= 0) {
@@ -3812,18 +3813,26 @@ export const DetalheOrcamento: React.FC = () => {
                             }}
                           />
 
-                          <CampoNumerico
-                            prefix="R$"
-                            align="right"
-                            value={av.preco}
-                            onChange={(val) => {
-                              handleAtualizarServicoUnico(nivelKey, av.uid, {
-                                preco: Math.max(0, val ?? 0),
-                              });
-                            }}
-                            wrapperClassName="w-28 bg-graphite-950/80 border-cyan-500/40 focus-within:border-cyan-400"
-                            className="px-2 py-0.5 font-bold text-cyan-300 text-xs focus:text-white"
-                          />
+                          <div className="flex items-center gap-1.5">
+                            {Number(av.preco) === 0 && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                🎁 Cortesia
+                              </span>
+                            )}
+                            <CampoNumerico
+                              prefix="R$"
+                              align="right"
+                              allowZero
+                              value={av.preco}
+                              onChange={(val) => {
+                                handleAtualizarServicoUnico(nivelKey, av.uid, {
+                                  preco: Math.max(0, val ?? 0),
+                                });
+                              }}
+                              wrapperClassName="w-28 bg-graphite-950/80 border-cyan-500/40 focus-within:border-cyan-400"
+                              className="px-2 py-0.5 font-bold text-cyan-300 text-xs focus:text-white"
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -3929,6 +3938,12 @@ export const DetalheOrcamento: React.FC = () => {
                                         onClick={(e) => e.stopPropagation()}
                                         title="Clique para editar o valor deste serviço no orçamento"
                                       >
+                                        {(customPrecos[`${nivelKey}_${serv.id}`] === 0 ||
+                                          (customPrecos[`${nivelKey}_${serv.id}`] === undefined && (serv.precoMatriz || 0) === 0)) && (
+                                          <span className="inline-flex items-center gap-0.5 text-[9.5px] text-emerald-400 font-sans font-bold mr-0.5">
+                                            🎁 Cortesia
+                                          </span>
+                                        )}
                                         <span className="text-amber-400 font-bold text-[11px]">R$</span>
                                         <CampoNumerico
                                           value={
@@ -3941,6 +3956,7 @@ export const DetalheOrcamento: React.FC = () => {
                                           }}
                                           align="right"
                                           placeholder="0,00"
+                                          allowZero
                                           wrapperClassName="w-20 bg-transparent border-none rounded-none"
                                           className="px-0 py-0 font-bold text-amber-400 text-xs focus:text-white"
                                         />
@@ -4425,19 +4441,43 @@ export const DetalheOrcamento: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
-              <label className="font-sans text-[13px] font-bold text-vapor-200">
-                Valor (R$) <span className="text-amber-500">*</span>
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="font-sans text-[13px] font-bold text-vapor-200">
+                  Valor (R$) <span className="text-amber-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setSuValor('0,00')}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold transition-all border ${
+                    suValor === '0' ||
+                    suValor === '0,00' ||
+                    (suValor.trim() !== '' && parseFloat(suValor.replace(',', '.')) === 0)
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm shadow-emerald-500/20'
+                      : 'bg-graphite-950 text-vapor-400 border-graphite-800 hover:text-emerald-300 hover:border-emerald-500/40'
+                  }`}
+                  title="Marcar este serviço como cortesia ou brinde gratuito para o cliente (R$ 0,00)"
+                >
+                  <span>🎁</span>
+                  <span>Cortesia (R$ 0,00)</span>
+                </button>
+              </div>
               <CampoNumerico
-                allowNull
+                allowZero
                 prefix="R$"
                 value={suValor}
                 onChange={(_, valStr) => setSuValor(valStr)}
-                placeholder="Ex: 150,00"
-                required
+                placeholder="0,00"
                 wrapperClassName="bg-graphite-900 min-h-[44px] focus-within:border-cyan-400"
                 className="text-vapor-100 text-[14px]"
               />
+              {(suValor === '0' ||
+                suValor === '0,00' ||
+                (suValor.trim() !== '' && parseFloat(suValor.replace(',', '.')) === 0)) && (
+                <span className="text-[11.5px] text-emerald-400 flex items-center gap-1 font-sans font-medium mt-0.5">
+                  <Check size={12} strokeWidth={2.5} />
+                  Item lançado como <strong>Cortesia / Brinde (R$ 0,00)</strong> para o cliente.
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

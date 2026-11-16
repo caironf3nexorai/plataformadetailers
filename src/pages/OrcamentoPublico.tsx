@@ -1196,12 +1196,19 @@ export const OrcamentoPublico: React.FC = () => {
                                   >
                                     {it.servico_nome}
                                   </span>
-                                  {it.duracao_minutos > 0 && (
-                                    <span className="inline-flex items-center gap-1 font-mono text-[11px] text-vapor-400 bg-graphite-950/80 px-2 py-0.5 rounded border border-graphite-800 shrink-0">
-                                      <Clock size={10} className="text-amber-400" />
-                                      {formatarDuracao(it.duracao_minutos)}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {it.preco !== undefined && it.preco !== null && Number(it.preco) === 0 && (
+                                      <span className="inline-flex items-center gap-1 font-sans font-bold text-[10.5px] text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                                        🎁 Cortesia
+                                      </span>
+                                    )}
+                                    {it.duracao_minutos > 0 && (
+                                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-vapor-400 bg-graphite-950/80 px-2 py-0.5 rounded border border-graphite-800 shrink-0">
+                                        <Clock size={10} className="text-amber-400" />
+                                        {formatarDuracao(it.duracao_minutos)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 {it.servico_descricao && (
                                   <span className="text-[12px] text-vapor-400 line-clamp-2 leading-tight mt-0.5">

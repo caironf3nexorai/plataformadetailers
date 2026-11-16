@@ -414,10 +414,17 @@ export async function gerarPDFOrcamento(
 
         // Preço do serviço
         if (typeof item.preco === 'number') {
-          doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8);
-          doc.text(formatarMoeda(item.preco), rightMarginX - 5, currentCardY + 4.2, { align: 'right' });
+          if (item.preco === 0) {
+            doc.setTextColor(16, 185, 129); // Verde esmeralda para cortesia/brinde
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.text('CORTESIA (R$ 0,00)', rightMarginX - 5, currentCardY + 4.2, { align: 'right' });
+          } else {
+            doc.setTextColor(corDestaquePreco[0], corDestaquePreco[1], corDestaquePreco[2]);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text(formatarMoeda(item.preco), rightMarginX - 5, currentCardY + 4.2, { align: 'right' });
+          }
         }
 
         currentCardY += itemRowHeight;
