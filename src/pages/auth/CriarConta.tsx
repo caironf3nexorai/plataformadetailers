@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { AlertTriangle, UserPlus, Rocket, Eye, EyeOff } from 'lucide-react';
+import { AlertTriangle, UserPlus, Rocket, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 import { trackCompleteRegistration } from '../../utils/pixel';
 import { formatTelefone } from '../../utils/formatters';
@@ -35,7 +35,6 @@ export const CriarConta: React.FC = () => {
   const [trialDiasPadrao, setTrialDiasPadrao] = useState<number>(15);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [aceitouTermos, setAceitouTermos] = useState(false);
   const signedUpEmailRef = useRef<string | null>(null);
 
   const isUUID = (val: string) =>
@@ -202,6 +201,12 @@ export const CriarConta: React.FC = () => {
       return;
     }
 
+    const digitsTelefone = telefone.replace(/\D/g, '');
+    if (digitsTelefone.length < 10) {
+      setErrorMsg('Informe um WhatsApp / Telefone válido com DDD (mínimo 10 dígitos).');
+      return;
+    }
+
     if (password.length < 6) {
       setErrorMsg('A senha deve ter pelo menos 6 caracteres.');
       return;
@@ -353,195 +358,185 @@ export const CriarConta: React.FC = () => {
   };
 
   return (
-    <PublicLayout>
-      <div className="max-w-md mx-auto w-full flex flex-col gap-6 py-6">
-        <div className="text-center flex flex-col items-center gap-3">
-          <LogoNuvemWash size="lg" className="mb-1" />
-          <h1 className="font-display text-[24px] sm:text-[28px] text-vapor-100 uppercase tracking-wide">
+    <PublicLayout mainClassName="flex-1 px-3 sm:px-6 py-2 sm:py-8 max-w-6xl mx-auto w-full">
+      <div className="max-w-md mx-auto w-full flex flex-col gap-2.5 sm:gap-6 py-1 sm:py-6">
+        <div className="text-center flex flex-col items-center gap-1.5 sm:gap-2.5">
+          <LogoNuvemWash size="md" className="sm:hidden mb-0.5" />
+          <LogoNuvemWash size="lg" className="hidden sm:block mb-1" />
+          <h1 className="font-display text-[20px] sm:text-[28px] text-vapor-100 uppercase tracking-wide leading-tight">
             Criar Sua Conta
           </h1>
-          <p className="font-sans text-[14px] text-vapor-400">
-            {conviteOficina
-              ? `Você foi convidado para a oficina ${conviteOficina}`
-              : 'Comece a organizar sua oficina com o NuvemWash'}
-          </p>
+          {conviteOficina ? (
+            <p className="font-sans text-[13px] sm:text-[14px] text-vapor-300">
+              Você foi convidado para a oficina <strong>{conviteOficina}</strong>
+            </p>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/35 text-amber-300 text-[11.5px] sm:text-[13px] font-sans font-semibold shadow-sm">
+              <Sparkles size={13} className="text-amber-400 shrink-0" />
+              <span>
+                {campanhaInfo
+                  ? `Teste grátis por ${campanhaInfo.dias_trial} dias • Sem cartão de crédito`
+                  : trialCadastroAtivo
+                  ? `Teste grátis por ${trialDiasPadrao} dias • Sem cartão de crédito`
+                  : 'Teste grátis por 15 dias • Sem cartão de crédito'}
+              </span>
+            </div>
+          )}
         </div>
 
-        <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-4 shadow-xl">
+        <Card className="p-3.5 sm:p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-2.5 sm:gap-4 shadow-xl">
           {campanhaInfo && (
-            <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-amber-400 text-xs font-sans shadow-sm">
-              <Rocket size={18} className="shrink-0 text-amber-400 animate-pulse" />
+            <div className="p-2.5 sm:p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2 text-amber-400 text-xs font-sans shadow-sm">
+              <Rocket size={16} className="shrink-0 text-amber-400 animate-pulse" />
               <span>
-                <strong>Convite VIP de Lançamento Aplicado:</strong> Você terá <strong>{campanhaInfo.dias_trial} dias grátis</strong> no <strong>Plano {campanhaInfo.plano_nome}</strong>!
+                <strong>Convite VIP:</strong> Você terá <strong>{campanhaInfo.dias_trial} dias grátis</strong> no <strong>Plano {campanhaInfo.plano_nome}</strong>!
               </span>
             </div>
           )}
 
           {errorMsg && (
-            <div className="p-3 bg-flare-400/10 border border-flare-400/30 rounded flex items-center gap-2 text-flare-400 text-[13px]">
-              <AlertTriangle size={18} className="shrink-0" />
+            <div className="p-2.5 sm:p-3 bg-flare-400/10 border border-flare-400/30 rounded flex items-center gap-2 text-flare-400 text-[12.5px] sm:text-[13px]">
+              <AlertTriangle size={16} className="shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <label className="font-sans text-[13px] text-vapor-400 font-medium">Nome completo *</label>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-2 sm:gap-3.5">
+            <div className="flex flex-col gap-0.5 sm:gap-1">
+              <label className="font-sans text-[12px] sm:text-[13px] text-vapor-400 font-medium">Nome completo *</label>
+              <Input
+                type="text"
+                placeholder="Ex: João da Silva"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                required
+                className="!min-h-[42px] sm:!min-h-[48px] h-[42px] sm:h-[48px] text-[13.5px] sm:text-[14px]"
+              />
+            </div>
+
+            {!isConviteEquipe && (
+              <div className="flex flex-col gap-0.5 sm:gap-1">
+                <label className="font-sans text-[12px] sm:text-[13px] text-vapor-400 font-medium">Nome da sua Estética / Oficina *</label>
                 <Input
                   type="text"
-                  placeholder="Ex: João da Silva"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
+                  placeholder="Ex: Studio Auto Detail"
+                  value={nomeOficina}
+                  onChange={(e) => setNomeOficina(e.target.value)}
                   required
-                  className="min-h-[48px]"
+                  disabled={loading}
+                  className="!min-h-[42px] sm:!min-h-[48px] h-[42px] sm:h-[48px] text-[13.5px] sm:text-[14px]"
                 />
+                <span className="font-sans text-[10.5px] sm:text-[11px] text-vapor-400 leading-tight">
+                  Sua oficina já entra pré-configurada com serviços e preços médios do mercado.
+                </span>
               </div>
+            )}
 
-              {!isConviteEquipe && (
-                <div className="flex flex-col gap-1">
-                  <label className="font-sans text-[13px] text-vapor-400 font-medium">Nome da sua Estética / Oficina *</label>
-                  <Input
-                    type="text"
-                    placeholder="Ex: Studio Auto Detail"
-                    value={nomeOficina}
-                    onChange={(e) => setNomeOficina(e.target.value)}
-                    required
-                    disabled={loading}
-                    className="min-h-[48px]"
-                  />
-                  <span className="font-sans text-[11px] text-vapor-400">
-                    Sua oficina já entra pré-configurada com serviços e preços médios do mercado.
-                  </span>
-                </div>
+            <div className="flex flex-col gap-0.5 sm:gap-1">
+              <label className="font-sans text-[12px] sm:text-[13px] text-vapor-400 font-medium">E-mail *</label>
+              <Input
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={emailLocked || loading}
+                className="!min-h-[42px] sm:!min-h-[48px] h-[42px] sm:h-[48px] text-[13.5px] sm:text-[14px]"
+              />
+              {emailLocked && conviteOficina && (
+                <span className="font-sans text-[11px] sm:text-[12px] text-amber-400 mt-0.5">
+                  E-mail vinculado ao convite da oficina <strong>{conviteOficina}</strong>
+                </span>
               )}
-
-              <div className="flex flex-col gap-1">
-                <label className="font-sans text-[13px] text-vapor-400 font-medium">E-mail *</label>
-                <Input
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={emailLocked || loading}
-                  className="min-h-[48px]"
-                />
-                {emailLocked && conviteOficina && (
-                  <span className="font-sans text-[12px] text-amber-400 mt-1">
-                    E-mail vinculado ao convite da oficina <strong>{conviteOficina}</strong>
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-sans text-[13px] text-vapor-400 font-medium">WhatsApp / Telefone</label>
-                <Input
-                  type="tel"
-                  placeholder="(11) 99999-9999"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  className="min-h-[48px]"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="font-sans text-[13px] text-vapor-400 font-medium">Senha *</label>
-                <div className="relative flex items-center">
-                  <Input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Mínimo 6 caracteres"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="min-h-[48px] pr-12"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 p-1.5 text-vapor-400 hover:text-amber-400 focus:outline-none transition-colors"
-                    title={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Quadro de Aceite de Termos e Privacidade (LGPD) */}
-              <div className="p-3.5 bg-graphite-900/90 border border-graphite-700/80 rounded-xl space-y-2">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={aceitouTermos}
-                    onChange={(e) => setAceitouTermos(e.target.checked)}
-                    required
-                    className="mt-0.5 w-4 h-4 rounded border-graphite-600 text-amber-500 focus:ring-amber-500 bg-graphite-950 shrink-0 cursor-pointer"
-                  />
-                  <span className="font-sans text-[12px] text-vapor-300 leading-relaxed">
-                    Li e concordo com os{' '}
-                    <a
-                      href="/termos-de-uso"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-amber-400 hover:text-amber-300 underline font-medium"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Termos de Uso
-                    </a>{' '}
-                    e a{' '}
-                    <a
-                      href="/politica-de-privacidade"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-amber-400 hover:text-amber-300 underline font-medium"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Política de Privacidade
-                    </a>{' '}
-                    do NuvemWash.
-                  </span>
-                </label>
-                <p className="text-[11px] text-vapor-500 font-mono pl-6">
-                  {campanhaInfo ? (
-                    `Convite Especial ${campanhaInfo.nome}: ${campanhaInfo.dias_trial} dias grátis no Plano ${campanhaInfo.plano_nome}`
-                  ) : trialCadastroAtivo ? (
-                    `Trial de ${trialDiasPadrao} dias sem cartão • Isolamento de dados LGPD • Cancele quando quiser`
-                  ) : (
-                    'Crie sua conta em segundos • Isolamento de dados LGPD • Cancele quando quiser'
-                  )}
-                </p>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={loading || !aceitouTermos}
-                className={`mt-2 min-h-[48px] w-full font-semibold ${
-                  !aceitouTermos ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {loading ? (
-                  'Criando conta...'
-                ) : (
-                  <>
-                    <UserPlus size={18} />
-                    {isConviteEquipe ? 'Criar conta e Aceitar Convite' : 'Criar conta grátis e Entrar'}
-                  </>
-                )}
-              </Button>
-            </form>
-
-            <div className="pt-4 border-t border-graphite-600 text-center">
-              <p className="font-sans text-[13px] text-vapor-400">
-                Já possui uma conta?{' '}
-                <Link
-                  to={conviteToken ? `/entrar?convite=${conviteToken}` : '/entrar'}
-                  className="text-amber-500 font-semibold hover:underline"
-                >
-                  Entrar
-                </Link>
-              </p>
             </div>
+
+            <div className="flex flex-col gap-0.5 sm:gap-1">
+              <label className="font-sans text-[12px] sm:text-[13px] text-vapor-400 font-medium">
+                WhatsApp / Telefone <span className="text-amber-500 font-bold">*</span>
+              </label>
+              <Input
+                type="tel"
+                placeholder="(11) 99999-9999"
+                value={telefone}
+                onChange={(e) => setTelefone(formatTelefone(e.target.value))}
+                required
+                className="!min-h-[42px] sm:!min-h-[48px] h-[42px] sm:h-[48px] text-[13.5px] sm:text-[14px]"
+              />
+            </div>
+
+            <div className="flex flex-col gap-0.5 sm:gap-1">
+              <label className="font-sans text-[12px] sm:text-[13px] text-vapor-400 font-medium">Senha *</label>
+              <div className="relative flex items-center">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 6 caracteres"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="!min-h-[42px] sm:!min-h-[48px] h-[42px] sm:h-[48px] text-[13.5px] sm:text-[14px] pr-12"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 p-1.5 text-vapor-400 hover:text-amber-400 focus:outline-none transition-colors"
+                  title={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={loading}
+              className="mt-1 sm:mt-2 !min-h-[44px] sm:!min-h-[48px] h-[44px] sm:h-[48px] w-full font-semibold shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 text-sm sm:text-base flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                'Criando conta...'
+              ) : (
+                <>
+                  <UserPlus size={18} />
+                  {isConviteEquipe ? 'Criar conta e Aceitar Convite' : 'Criar conta grátis e Entrar'}
+                </>
+              )}
+            </Button>
+
+            <p className="font-sans text-[11px] sm:text-[12px] text-vapor-400 text-center leading-snug px-1 pt-0.5">
+              Ao criar sua conta, você concorda com nossos{' '}
+              <a
+                href="/termos-de-uso"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 hover:text-amber-300 underline font-medium"
+              >
+                Termos de Uso
+              </a>{' '}
+              e{' '}
+              <a
+                href="/politica-de-privacidade"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 hover:text-amber-300 underline font-medium"
+              >
+                Política de Privacidade
+              </a>
+              .
+            </p>
+          </form>
+
+          <div className="pt-2 sm:pt-3 border-t border-graphite-600 text-center">
+            <p className="font-sans text-[12px] sm:text-[13px] text-vapor-400">
+              Já possui uma conta?{' '}
+              <Link
+                to={conviteToken ? `/entrar?convite=${conviteToken}` : '/entrar'}
+                className="text-amber-500 font-semibold hover:underline"
+              >
+                Entrar
+              </Link>
+            </p>
+          </div>
         </Card>
       </div>
     </PublicLayout>

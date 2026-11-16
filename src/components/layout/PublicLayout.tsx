@@ -7,9 +7,10 @@ import { LogoNuvemWash } from '../ui/LogoNuvemWash';
 
 interface PublicLayoutProps {
   children: React.ReactNode;
+  mainClassName?: string;
 }
 
-export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
+export const PublicLayout: React.FC<PublicLayoutProps> = ({ children, mainClassName }) => {
   const { user, tenant, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -80,7 +81,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
       </header>
 
       {/* Conteúdo Principal */}
-      <main className="flex-1 px-4 sm:px-6 py-8 max-w-6xl mx-auto w-full">
+      <main className={mainClassName || "flex-1 px-4 sm:px-6 py-6 sm:py-8 max-w-6xl mx-auto w-full"}>
         {children}
       </main>
 
