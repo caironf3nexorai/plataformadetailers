@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
 import { usePlano } from '../../hooks/usePlano';
+import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import type { AppRole, ComissaoRegra, ComissaoTipo, TenantMember } from '../../types/auth';
 import { Card } from '../../components/ui/Card';
@@ -38,6 +39,7 @@ export const AbaEquipe: React.FC = () => {
   const { tenant, refetchTenantData } = useAuth();
   const { podeGerirEquipe } = usePermissao();
   const { limiteDe, nomePlano, planoAtual } = usePlano();
+  const { showSuccess, showError } = useToast();
 
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [comissaoMap, setComissaoMap] = useState<Record<string, ComissaoRegra[]>>({});
@@ -48,9 +50,11 @@ export const AbaEquipe: React.FC = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<AppRole>('operador');
+  const [invitePodeGerenciarDespesas, setInvitePodeGerenciarDespesas] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [togglingPermissaoId, setTogglingPermissaoId] = useState<string | null>(null);
 
   // Modal Comissão
   const [selectedMember, setSelectedMember] = useState<TenantMember | null>(null);
@@ -175,6 +179,7 @@ export const AbaEquipe: React.FC = () => {
         email: inviteEmail.trim().toLowerCase(),
         role: inviteRole,
         status: 'convidado',
+        pode_gerenciar_despesas: inviteRole === 'gerente' ? invitePodeGerenciarDespesas : false,
         convite_token: token,
       });
 
@@ -184,6 +189,7 @@ export const AbaEquipe: React.FC = () => {
         const generatedUrl = `${window.location.origin}/convite/${token}`;
         setInviteLink(generatedUrl);
         setInviteEmail('');
+        setInvitePodeGerenciarDespesas(false);
         await marcarPassoOnboarding(tenant?.id, {
           equipe_configurada: true,
           trabalho_sozinho: false,
@@ -193,6 +199,33 @@ export const AbaEquipe: React.FC = () => {
       }
     } catch (err: any) {
       setInviteError(err?.message || 'Erro ao criar convite.');
+    }
+  };
+
+  // Alternar permissão granular de Contas a Pagar / Despesas Fixas para Gerente
+  const handleTogglePermissaoDespesas = async (member: TenantMember) => {
+    if (member.role !== 'gerente') return;
+    const novoValor = !member.pode_gerenciar_despesas;
+    setTogglingPermissaoId(member.id);
+    try {
+      const { error } = await supabase.rpc('atualizar_permissao_despesas_membro', {
+        p_member_id: member.id,
+        p_pode_gerenciar: novoValor,
+      });
+      if (error) throw error;
+
+      setMembers((prev) =>
+        prev.map((m) => (m.id === member.id ? { ...m, pode_gerenciar_despesas: novoValor } : m))
+      );
+      showSuccess(
+        novoValor
+          ? `Acesso a Contas a Pagar / Despesas Fixas liberado para ${member.email}.`
+          : `Acesso a Contas a Pagar / Despesas Fixas restringido para ${member.email}.`
+      );
+    } catch (err: any) {
+      showError(err?.message || 'Não foi possível atualizar a permissão do gerente.');
+    } finally {
+      setTogglingPermissaoId(null);
     }
   };
 
@@ -454,6 +487,31 @@ export const AbaEquipe: React.FC = () => {
                       )}
                     </div>
                   )}
+
+                  {/* Permissão Granular de Contas a Pagar / Despesas Fixas (exclusivo para Gerentes) */}
+                  {m.role === 'gerente' && (
+                    <div className="mt-2 pt-2 border-t border-graphite-700/60 flex items-center justify-between gap-3 flex-wrap">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(m.pode_gerenciar_despesas)}
+                          disabled={togglingPermissaoId === m.id}
+                          onChange={() => handleTogglePermissaoDespesas(m)}
+                          className="w-4 h-4 rounded border-graphite-500 bg-graphite-900 text-amber-500 focus:ring-amber-500 cursor-pointer accent-amber-500"
+                        />
+                        <span className="font-sans text-[12.5px] text-vapor-200 font-medium">
+                          Acessar e gerenciar Contas a Pagar / Despesas Fixas
+                        </span>
+                      </label>
+                      <Badge tone={m.pode_gerenciar_despesas ? 'mint' : 'vapor'}>
+                        {togglingPermissaoId === m.id
+                          ? 'Salvando...'
+                          : m.pode_gerenciar_despesas
+                          ? 'LIBERADO'
+                          : 'RESTRITO'}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
 
                 {/* Ações do Membro */}
@@ -601,7 +659,11 @@ export const AbaEquipe: React.FC = () => {
               <label className="font-sans text-[13px] text-vapor-400 font-medium">Papel / Nível de Acesso</label>
               <select
                 value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as AppRole)}
+                onChange={(e) => {
+                  const nextRole = e.target.value as AppRole;
+                  setInviteRole(nextRole);
+                  if (nextRole !== 'gerente') setInvitePodeGerenciarDespesas(false);
+                }}
                 className="min-h-[44px] px-3 bg-graphite-900 border border-graphite-600 rounded text-vapor-100 font-sans text-[14px]"
               >
                 <option value="dono">Dono / Administrador (Acesso total + gestão de equipe)</option>
@@ -609,6 +671,25 @@ export const AbaEquipe: React.FC = () => {
                 <option value="operador">Operador (Executa serviços, sem valores financeiros)</option>
               </select>
             </div>
+
+            {inviteRole === 'gerente' && (
+              <div className="p-3.5 rounded-xl bg-graphite-900/90 border border-graphite-700 flex flex-col gap-1.5">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={invitePodeGerenciarDespesas}
+                    onChange={(e) => setInvitePodeGerenciarDespesas(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-graphite-500 bg-graphite-950 text-amber-500 focus:ring-amber-500 shrink-0 cursor-pointer accent-amber-500"
+                  />
+                  <span className="font-sans text-[13px] text-vapor-100 font-semibold leading-snug">
+                    Acessar e gerenciar Contas a Pagar / Despesas Fixas
+                  </span>
+                </label>
+                <p className="font-sans text-[11.5px] text-vapor-400 pl-6 leading-relaxed">
+                  Permite visualizar, editar e confirmar pagamentos de aluguel, salários e contas fixas da oficina (inclusive no Radar Financeiro). Mantido desligado por padrão para maior privacidade.
+                </p>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-graphite-700">
               <Button

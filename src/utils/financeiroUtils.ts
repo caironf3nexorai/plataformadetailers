@@ -1,14 +1,21 @@
 import type { TipoFiltroPeriodo } from '../types/financeiro';
 
 /**
- * Calcula a data de término (último dia do mês final) para uma despesa parcelada
+ * Calcula a data de término (último dia do mês final) para uma despesa parcelada,
+ * considerando o total de parcelas e a parcela inicial (padrão = 1).
  */
-export function calcularVigenciaFimParcelada(inicioDateStr: string, totalParcelas: number): string {
+export function calcularVigenciaFimParcelada(
+  inicioDateStr: string,
+  totalParcelas: number,
+  parcelaInicial: number = 1
+): string {
   if (!inicioDateStr || totalParcelas <= 0) return '';
   const [ano, mes] = inicioDateStr.split('-').map(Number);
   if (!ano || !mes) return '';
 
-  const totalMeses = (mes - 1) + (totalParcelas - 1);
+  const inicialSeguro = Math.max(1, parcelaInicial || 1);
+  const parcelasRestantes = Math.max(1, totalParcelas - inicialSeguro + 1);
+  const totalMeses = (mes - 1) + (parcelasRestantes - 1);
   const anoFinal = ano + Math.floor(totalMeses / 12);
   const mesFinal = (totalMeses % 12) + 1;
 
@@ -129,4 +136,56 @@ export function calcularCascata(
     lucroLiquido,
     margemLiquida,
   };
+}
+
+/**
+ * Calcula status de vencimento mensal de uma despesa fixa protegendo meses curtos
+ * (fevereiro 28/29 e meses de 30 dias) e dados legados onde dia_vencimento é null/undefined.
+ */
+export function calcularInfoVencimentoDespesa(
+  diaVencimento: number | null | undefined,
+  estaPago: boolean,
+  hojeIso: string
+): {
+  status: 'pago' | 'atrasada' | 'vence_hoje' | 'vence_em_breve' | 'pendente';
+  diasAtraso: number;
+  diaEfetivo: number | null;
+} {
+  if (estaPago) {
+    return { status: 'pago', diasAtraso: 0, diaEfetivo: diaVencimento ?? null };
+  }
+  if (diaVencimento == null || !Number.isFinite(diaVencimento) || diaVencimento < 1 || diaVencimento > 31) {
+    return { status: 'pendente', diasAtraso: 0, diaEfetivo: null };
+  }
+  const [ano, mes, diaHoje] = hojeIso.split('-').map(Number);
+  if (!ano || !mes || !diaHoje) {
+    return { status: 'pendente', diasAtraso: 0, diaEfetivo: diaVencimento };
+  }
+  const ultimoDiaMes = new Date(ano, mes, 0).getDate();
+  const diaEfetivo = Math.min(Math.trunc(diaVencimento), ultimoDiaMes);
+  if (diaEfetivo < diaHoje) {
+    return { status: 'atrasada', diasAtraso: diaHoje - diaEfetivo, diaEfetivo };
+  }
+  if (diaEfetivo === diaHoje) {
+    return { status: 'vence_hoje', diasAtraso: 0, diaEfetivo };
+  }
+  if (diaEfetivo - diaHoje <= 3) {
+    return { status: 'vence_em_breve', diasAtraso: 0, diaEfetivo };
+  }
+  return { status: 'pendente', diasAtraso: 0, diaEfetivo };
+}
+
+/**
+ * Regra canônica de acesso granular a Contas a Pagar / Despesas Fixas:
+ * - Dono: sempre true
+ * - Gerente: true somente se pode_gerenciar_despesas === true (default false para legados)
+ * - Operador ou indefinido: sempre false
+ */
+export function podeUsuarioGerenciarDespesas(
+  role?: string | null,
+  podeGerenciarFlag?: boolean | null
+): boolean {
+  if (role === 'dono') return true;
+  if (role === 'gerente') return Boolean(podeGerenciarFlag);
+  return false;
 }

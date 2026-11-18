@@ -64,8 +64,20 @@ interface ItemPagamentoLancado {
   numero_parcela?: number;
   valor_bruto: number;
   previsto_para: string;
+  recebido_no_ato?: boolean;
   observacao?: string;
 }
+
+const obterDataLocalISO = (diasAdicionar: number = 0): string => {
+  const d = new Date();
+  if (diasAdicionar !== 0) {
+    d.setDate(d.getDate() + diasAdicionar);
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 interface ModalFinalizarExecucaoProps {
   isOpen: boolean;
@@ -186,7 +198,8 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
   const [novoBandeiraCodigo, setNovoBandeiraCodigo] = useState('');
   const [novoParcelas, setNovoParcelas] = useState('1');
   const [novoValor, setNovoValor] = useState('');
-  const [novoVencimento, setNovoVencimento] = useState(new Date().toISOString().split('T')[0]);
+  const [novoVencimento, setNovoVencimento] = useState(() => obterDataLocalISO(0));
+  const [creditoRecebidoNoAto, setCreditoRecebidoNoAto] = useState(false);
   const [taxaInfoAviso, setTaxaInfoAviso] = useState<{ percentual: number; estimada: boolean } | null>(null);
 
 
@@ -211,6 +224,10 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
             setFormasPagamento(formasDisponiveis);
             if (formasDisponiveis.length > 0 && !novoFormaId) {
               setNovoFormaId(formasDisponiveis[0].id);
+              if (formasDisponiveis[0].tipo === 'credito') {
+                setCreditoRecebidoNoAto(false);
+                setNovoVencimento(obterDataLocalISO(30));
+              }
             }
           }
 
@@ -678,21 +695,38 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
         return itens;
       }
 
+      const isDebito = forma.tipo === 'debito';
+      const isCredito = forma.tipo === 'credito';
+      const recebidoNoAtoFinal = isDebito ? true : isCredito ? creditoRecebidoNoAto : false;
+      const previstoFinal = isDebito
+        ? obterDataLocalISO(0)
+        : isCredito
+        ? creditoRecebidoNoAto
+          ? obterDataLocalISO(0)
+          : novoVencimento || obterDataLocalISO(30)
+        : novoVencimento || obterDataLocalISO(0);
+
       return [
         {
           id: Math.random().toString(),
           forma_id: forma.id,
           forma_nome: forma.nome,
           forma_tipo: forma.tipo,
-          maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
+          maquininha_id: (isDebito || isCredito) ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
           maquininha_nome: maqNome,
-          bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
+          bandeira_codigo: (isDebito || isCredito) ? (novoBandeiraCodigo || undefined) : undefined,
           taxa_estimada: taxaEstimada,
           total_parcelas: parcelas,
           numero_parcela: 1,
           valor_bruto: valorTotal,
-          previsto_para: novoVencimento,
-          observacao: forma.tipo === 'fiado' ? `Fiado combinado para ${novoVencimento.split('-').reverse().join('/')}` : undefined,
+          previsto_para: previstoFinal,
+          recebido_no_ato: recebidoNoAtoFinal,
+          observacao:
+            forma.tipo === 'fiado'
+              ? `Fiado combinado para ${previstoFinal.split('-').reverse().join('/')}`
+              : isCredito && creditoRecebidoNoAto
+              ? 'Recebido / Antecipado na maquininha'
+              : undefined,
         },
       ];
     };
@@ -777,21 +811,38 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
         return itens;
       }
 
+      const isDebito = forma.tipo === 'debito';
+      const isCredito = forma.tipo === 'credito';
+      const recebidoNoAtoFinal = isDebito ? true : isCredito ? creditoRecebidoNoAto : false;
+      const previstoFinal = isDebito
+        ? obterDataLocalISO(0)
+        : isCredito
+        ? creditoRecebidoNoAto
+          ? obterDataLocalISO(0)
+          : novoVencimento || obterDataLocalISO(30)
+        : novoVencimento || obterDataLocalISO(0);
+
       return [
         {
           id: Math.random().toString(),
           forma_id: forma.id,
           forma_nome: forma.nome,
           forma_tipo: forma.tipo,
-          maquininha_id: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
+          maquininha_id: (isDebito || isCredito) ? (novoMaquininhaId || maquininhas[0]?.id) : undefined,
           maquininha_nome: maqNome,
-          bandeira_codigo: (forma.tipo === 'debito' || forma.tipo === 'credito') ? (novoBandeiraCodigo || undefined) : undefined,
+          bandeira_codigo: (isDebito || isCredito) ? (novoBandeiraCodigo || undefined) : undefined,
           taxa_estimada: taxaEstimada,
           total_parcelas: parcelas,
           numero_parcela: 1,
           valor_bruto: valorTotal,
-          previsto_para: novoVencimento,
-          observacao: forma.tipo === 'fiado' ? `Fiado combinado para ${novoVencimento.split('-').reverse().join('/')}` : undefined,
+          previsto_para: previstoFinal,
+          recebido_no_ato: recebidoNoAtoFinal,
+          observacao:
+            forma.tipo === 'fiado'
+              ? `Fiado combinado para ${previstoFinal.split('-').reverse().join('/')}`
+              : isCredito && creditoRecebidoNoAto
+              ? 'Recebido / Antecipado na maquininha'
+              : undefined,
         },
       ];
     };
@@ -868,6 +919,7 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
             numero_parcela: p.numero_parcela || 1,
             valor_bruto: p.valor_bruto,
             previsto_para: p.previsto_para,
+            recebido_no_ato: Boolean(p.recebido_no_ato),
             observacao: p.observacao || null,
           }))
         : [];
@@ -1216,7 +1268,23 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                           </span>
                         )}
                       </div>
-                      <span className="text-[11px] text-vapor-400">Vencimento: {p.previsto_para.split('-').reverse().join('/')}</span>
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] text-vapor-400">
+                        {p.forma_tipo === 'debito' ? (
+                          <span className="text-mint-400 font-semibold">
+                            ✓ Entra no caixa hoje (líquido da taxa)
+                          </span>
+                        ) : p.forma_tipo === 'credito' && p.recebido_no_ato ? (
+                          <span className="text-mint-400 font-semibold">
+                            ✓ Recebido / Antecipado na maquininha (hoje)
+                          </span>
+                        ) : p.forma_tipo === 'credito' ? (
+                          <span className="text-sky-300">
+                            Repasse previsto da operadora: {p.previsto_para.split('-').reverse().join('/')}
+                          </span>
+                        ) : (
+                          <span>Vencimento: {p.previsto_para.split('-').reverse().join('/')}</span>
+                        )}
+                      </div>
                       {p.observacao && (
                         <span className="text-[10px] text-vapor-500 italic break-words">{p.observacao}</span>
                       )}
@@ -1267,7 +1335,16 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                             value={novoFormaId}
                             onChange={(e) => {
                               setErrorMsg(null);
-                              setNovoFormaId(e.target.value);
+                              const nextId = e.target.value;
+                              setNovoFormaId(nextId);
+                              const proximaForma = formasPagamento.find((f) => f.id === nextId);
+                              if (proximaForma?.tipo === 'credito') {
+                                setCreditoRecebidoNoAto(false);
+                                setNovoVencimento(obterDataLocalISO(30));
+                              } else {
+                                setCreditoRecebidoNoAto(false);
+                                setNovoVencimento(obterDataLocalISO(0));
+                              }
                             }}
                             className="w-full min-w-0 max-w-full bg-graphite-900 border border-graphite-700 rounded-lg px-3 py-2.5 text-xs text-vapor-100 outline-none focus:border-amber-500 font-sans min-h-[44px]"
                           >
@@ -1349,6 +1426,81 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
                                 <span className="text-[11px] text-mint-400 font-mono flex items-center gap-1 bg-mint-500/10 border border-mint-500/20 p-1.5 rounded-lg">
                                   ✓ Taxa aplicável: {taxaInfoAviso.percentual}%
                                 </span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Clareza de Recebimento: Cartão de Débito */}
+                          {formaSelecionada?.tipo === 'debito' && (
+                            <div className="col-span-full p-2.5 rounded-lg bg-mint-500/10 border border-mint-500/25 text-[11px] text-mint-300 flex items-start gap-2 leading-relaxed">
+                              <CheckCircle2 size={15} className="shrink-0 text-mint-400 mt-0.5" />
+                              <span>
+                                <strong className="text-mint-200">Cartão de Débito:</strong> entra no caixa como{' '}
+                                <strong className="text-mint-200">Recebido hoje</strong> já descontando a taxa configurada da maquininha, sem gerar pendência futura.
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Escolha Intuitiva: Cartão de Crédito (Recebido no ato vs Repasse D+30) */}
+                          {formaSelecionada?.tipo === 'credito' && (
+                            <div className="col-span-full p-3 rounded-xl bg-graphite-900 border border-sky-500/30 flex flex-col gap-2.5">
+                              <span className="text-[10.5px] font-bold uppercase tracking-wider text-sky-300">
+                                Quando este valor do Crédito entra na sua conta?
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCreditoRecebidoNoAto(true);
+                                    setNovoVencimento(obterDataLocalISO(0));
+                                  }}
+                                  className={`p-2.5 rounded-lg border text-left transition-all text-xs ${
+                                    creditoRecebidoNoAto
+                                      ? 'bg-mint-500/15 border-mint-500 text-mint-200 font-semibold'
+                                      : 'bg-graphite-950 border-graphite-700 text-vapor-300 hover:border-graphite-600'
+                                  }`}
+                                >
+                                  <span className="block font-bold text-[11.5px]">Já recebido / Antecipado</span>
+                                  <span className="block text-[10.5px] text-vapor-400 mt-0.5 leading-snug">
+                                    Entra hoje como recebido no caixa (líquido da taxa)
+                                  </span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCreditoRecebidoNoAto(false);
+                                    setNovoVencimento(obterDataLocalISO(30));
+                                  }}
+                                  className={`p-2.5 rounded-lg border text-left transition-all text-xs ${
+                                    !creditoRecebidoNoAto
+                                      ? 'bg-sky-500/15 border-sky-500 text-sky-200 font-semibold'
+                                      : 'bg-graphite-950 border-graphite-700 text-vapor-300 hover:border-graphite-600'
+                                  }`}
+                                >
+                                  <span className="block font-bold text-[11.5px]">Receber depois (Repasse D+30)</span>
+                                  <span className="block text-[10.5px] text-vapor-400 mt-0.5 leading-snug">
+                                    Fica na aba Cartões / Maquininha até cair no banco
+                                  </span>
+                                </button>
+                              </div>
+
+                              {!creditoRecebidoNoAto && (
+                                <div className="pt-1 flex flex-col gap-1.5">
+                                  <label className="text-[10.5px] text-sky-300 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                                    <Calendar size={13} className="shrink-0" />
+                                    Data prevista do repasse da operadora (editável)
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={novoVencimento}
+                                    onChange={(e) => setNovoVencimento(e.target.value)}
+                                    className="w-full min-w-0 max-w-full block box-border bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-xs text-vapor-100 outline-none focus:border-sky-500 font-mono [color-scheme:dark] min-h-[42px]"
+                                  />
+                                  <span className="text-[10.5px] text-vapor-400">
+                                    Pré-preenchido para 30 dias. O cliente não será marcado como inadimplente.
+                                  </span>
+                                </div>
                               )}
                             </div>
                           )}

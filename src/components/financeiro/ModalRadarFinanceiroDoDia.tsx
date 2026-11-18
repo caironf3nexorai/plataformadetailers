@@ -13,10 +13,13 @@ import {
   Receipt,
   FileCheck,
   Check,
-  Sparkles
+  Sparkles,
+  CreditCard,
+  RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePermissao } from '../../hooks/usePermissao';
 import { useToast } from '../../contexts/ToastContext';
 import { formatarMoeda, formatTelefone, cleanTelefone } from '../../utils/formatters';
 import { useNavigate } from 'react-router-dom';
@@ -26,12 +29,30 @@ export interface ClienteCobrancaItem {
   cliente_id: string;
   cliente_nome: string;
   cliente_telefone: string | null;
+  forma_nome?: string | null;
+  forma_tipo?: string | null;
   valor: number;
   numero_parcela: number;
   total_parcelas: number;
   previsto_para: string;
   dias_atraso: number;
   observacao: string | null;
+  status: string;
+}
+
+export interface CartaoPrevistoRadarItem {
+  id: string;
+  cliente_id: string;
+  cliente_nome: string;
+  forma_nome: string;
+  forma_tipo: string;
+  valor_bruto: number;
+  valor_liquido: number;
+  valor_taxa: number;
+  numero_parcela: number;
+  total_parcelas: number;
+  previsto_para: string;
+  dias_atraso: number;
   status: string;
 }
 
@@ -44,32 +65,47 @@ export interface DespesaRadarItem {
   confirmado: boolean;
   vigencia_inicio: string;
   vigencia_fim: string | null;
+  dia_vencimento?: number | null;
+  data_vencimento_mes?: string | null;
+  pago?: boolean;
+  pago_em?: string | null;
+  valor_pago?: number | null;
+  status_pagamento?: 'pago' | 'atrasada' | 'vence_hoje' | 'vence_em_breve' | 'pendente';
+  dias_atraso?: number;
 }
 
 export interface MetricasRadar {
   total_receber_hoje: number;
   total_receber_atrasado: number;
   total_receber_geral: number;
+  total_cartoes_previstos?: number;
   total_despesas_pendentes: number;
+  total_despesas_pagas?: number;
   total_despesas_mes: number;
   saldo_esperado_hoje: number;
   qtd_vencendo_hoje: number;
   qtd_atrasados: number;
   qtd_cobrancas_total: number;
+  qtd_cartoes_previstos?: number;
   qtd_despesas_pendentes: number;
+  qtd_despesas_vencendo_ou_atrasadas?: number;
+}
+
+export interface RadarFinanceiroPayload {
+  clientes_vencendo_hoje: ClienteCobrancaItem[];
+  clientes_atrasados: ClienteCobrancaItem[];
+  cartoes_previstos?: CartaoPrevistoRadarItem[];
+  despesas_mes: DespesaRadarItem[];
+  metricas: MetricasRadar;
+  nome_oficina?: string;
+  pode_ver_despesas?: boolean;
 }
 
 interface ModalRadarFinanceiroDoDiaProps {
   aberto: boolean;
   onFechar: () => void;
   onDispensarHoje: () => void;
-  dadosIniciais?: {
-    clientes_vencendo_hoje: ClienteCobrancaItem[];
-    clientes_atrasados: ClienteCobrancaItem[];
-    despesas_mes: DespesaRadarItem[];
-    metricas: MetricasRadar;
-    nome_oficina?: string;
-  } | null;
+  dadosIniciais?: RadarFinanceiroPayload | null;
   onItemBaixado?: () => void;
 }
 
@@ -81,30 +117,64 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
   onItemBaixado,
 }) => {
   const { tenant } = useAuth();
+  const { podeGerenciarDespesas } = usePermissao();
   const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
 
   const [abaAtiva, setAbaAtiva] = useState<'receber' | 'pagar'>('receber');
   const [carregando, setCarregando] = useState(false);
   const [baixandoId, setBaixandoId] = useState<string | null>(null);
+  const [pagandoDespesaId, setPagandoDespesaId] = useState<string | null>(null);
 
   const [vencendoHoje, setVencendoHoje] = useState<ClienteCobrancaItem[]>(
-    dadosIniciais?.clientes_vencendo_hoje || []
+    dadosIniciais?.clientes_vencendo_hoje ?? []
   );
   const [atrasados, setAtrasados] = useState<ClienteCobrancaItem[]>(
-    dadosIniciais?.clientes_atrasados || []
+    dadosIniciais?.clientes_atrasados ?? []
+  );
+  const [cartoesPrevistos, setCartoesPrevistos] = useState<CartaoPrevistoRadarItem[]>(
+    dadosIniciais?.cartoes_previstos ?? []
   );
   const [despesas, setDespesas] = useState<DespesaRadarItem[]>(
-    dadosIniciais?.despesas_mes || []
+    dadosIniciais?.despesas_mes ?? []
   );
   const [metricas, setMetricas] = useState<MetricasRadar | null>(
-    dadosIniciais?.metricas || null
+    dadosIniciais?.metricas ?? null
   );
   const [nomeOficina, setNomeOficina] = useState<string>(
     dadosIniciais?.nome_oficina || tenant?.nome || 'Nossa Oficina'
   );
+  const [backendPermiteDespesas, setBackendPermiteDespesas] = useState<boolean>(
+    dadosIniciais?.pode_ver_despesas ?? podeGerenciarDespesas
+  );
 
-  // Recarregar dados se não fornecidos ou se abrir
+  const podeVerDespesas = podeGerenciarDespesas && backendPermiteDespesas;
+
+  const aplicarDados = (payload: RadarFinanceiroPayload) => {
+    const hojeLista = payload.clientes_vencendo_hoje ?? [];
+    const atrasoLista = payload.clientes_atrasados ?? [];
+    const despLista = payload.despesas_mes ?? [];
+    const permiteDesp = payload.pode_ver_despesas ?? podeGerenciarDespesas;
+
+    setVencendoHoje(hojeLista);
+    setAtrasados(atrasoLista);
+    setCartoesPrevistos(payload.cartoes_previstos ?? []);
+    setDespesas(permiteDesp ? despLista : []);
+    setMetricas(payload.metricas ?? null);
+    setBackendPermiteDespesas(permiteDesp);
+    if (payload.nome_oficina) setNomeOficina(payload.nome_oficina);
+
+    // Se usuário tem permissão e não há cobranças de clientes mas há conta a pagar urgente, abre direto na aba Contas a Pagar
+    const totalCli = hojeLista.length + atrasoLista.length;
+    const qtdDespUrgentes = payload.metricas?.qtd_despesas_vencendo_ou_atrasadas ?? 0;
+    if (!permiteDesp) {
+      setAbaAtiva('receber');
+    } else if (totalCli === 0 && qtdDespUrgentes > 0) {
+      setAbaAtiva('pagar');
+    }
+  };
+
+  // Recarregar dados ao abrir para refletir estado mais recente
   const carregarDados = async () => {
     if (!tenant?.id) return;
     setCarregando(true);
@@ -112,11 +182,7 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
       const { data, error } = await supabase.rpc('obter_radar_financeiro_do_dia');
       if (error) throw error;
       if (data && !data.erro) {
-        setVencendoHoje(data.clientes_vencendo_hoje || []);
-        setAtrasados(data.clientes_atrasados || []);
-        setDespesas(data.despesas_mes || []);
-        setMetricas(data.metricas || null);
-        if (data.nome_oficina) setNomeOficina(data.nome_oficina);
+        aplicarDados(data as RadarFinanceiroPayload);
       }
     } catch (err: any) {
       console.error('Erro ao carregar radar financeiro:', err);
@@ -127,17 +193,18 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
 
   useEffect(() => {
     if (aberto) {
-      if (!dadosIniciais) {
-        carregarDados();
-      } else {
-        setVencendoHoje(dadosIniciais.clientes_vencendo_hoje || []);
-        setAtrasados(dadosIniciais.clientes_atrasados || []);
-        setDespesas(dadosIniciais.despesas_mes || []);
-        setMetricas(dadosIniciais.metricas || null);
-        if (dadosIniciais.nome_oficina) setNomeOficina(dadosIniciais.nome_oficina);
+      if (dadosIniciais) {
+        aplicarDados(dadosIniciais);
       }
+      carregarDados();
     }
   }, [aberto, dadosIniciais]);
+
+  useEffect(() => {
+    if (!podeVerDespesas && abaAtiva === 'pagar') {
+      setAbaAtiva('receber');
+    }
+  }, [podeVerDespesas, abaAtiva]);
 
   if (!aberto) return null;
 
@@ -209,8 +276,52 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
     }
   };
 
-  const totalCobrancas = (vencendoHoje.length + atrasados.length);
-  const totalDespesasPendentes = despesas.filter((d) => !d.confirmado).length;
+  // Confirmar pagamento de uma conta fixa/variável no mês atual
+  const handleConfirmarPagamentoDespesa = async (despesa: DespesaRadarItem) => {
+    setPagandoDespesaId(despesa.id);
+    try {
+      const { data, error } = await supabase.rpc('confirmar_pagamento_despesa', {
+        p_despesa_id: despesa.id,
+        p_valor_pago: Number(despesa.valor_mensal),
+      });
+      if (error) throw error;
+
+      showSuccess(data?.mensagem || `Pagamento de "${despesa.nome}" confirmado!`);
+      await carregarDados();
+      if (onItemBaixado) onItemBaixado();
+    } catch (err: any) {
+      console.error('Erro ao confirmar pagamento da despesa:', err);
+      showError(err?.message || 'Erro ao confirmar pagamento.');
+    } finally {
+      setPagandoDespesaId(null);
+    }
+  };
+
+  // Desfazer pagamento de uma conta no mês atual
+  const handleDesfazerPagamentoDespesa = async (despesa: DespesaRadarItem) => {
+    setPagandoDespesaId(despesa.id);
+    try {
+      const { data, error } = await supabase.rpc('desfazer_pagamento_despesa', {
+        p_despesa_id: despesa.id,
+      });
+      if (error) throw error;
+
+      showSuccess(data?.mensagem || `Pagamento de "${despesa.nome}" desfeito.`);
+      await carregarDados();
+      if (onItemBaixado) onItemBaixado();
+    } catch (err: any) {
+      console.error('Erro ao desfazer pagamento da despesa:', err);
+      showError(err?.message || 'Erro ao desfazer pagamento.');
+    } finally {
+      setPagandoDespesaId(null);
+    }
+  };
+
+  const totalCobrancas = vencendoHoje.length + atrasados.length;
+  const despesasEmAberto = despesas.filter((d) => !d.pago).length;
+  const despesasUrgentesCount = despesas.filter(
+    (d) => !d.pago && (d.status_pagamento === 'atrasada' || d.status_pagamento === 'vence_hoje')
+  ).length;
 
   return createPortal(
     <div
@@ -239,7 +350,9 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
                 </span>
               </div>
               <p className="text-xs text-vapor-400">
-                Cobranças de clientes e contas que mexem com o caixa da sua oficina
+                {podeVerDespesas
+                  ? 'Cobranças de clientes e contas a pagar que mexem com o caixa da sua oficina'
+                  : 'Cobranças de clientes e fiados com vencimento para hoje ou em atraso'}
               </p>
             </div>
           </div>
@@ -255,7 +368,11 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
         </div>
 
         {/* CARDS RESUMO / MÉTRICAS DO DIA */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-4 sm:px-6 bg-graphite-900/60 border-b border-graphite-800/80">
+        <div
+          className={`grid gap-2.5 p-4 sm:px-6 bg-graphite-900/60 border-b border-graphite-800/80 ${
+            podeVerDespesas ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'
+          }`}
+        >
           <div className="bg-graphite-800/60 border border-mint-500/20 rounded-xl p-3 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-mint-400/90 font-medium mb-1">
               <span>A Receber Hoje</span>
@@ -282,18 +399,26 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
             </span>
           </div>
 
-          <div className="col-span-2 sm:col-span-1 bg-graphite-800/60 border border-graphite-700/60 rounded-xl p-3 flex flex-col justify-between">
-            <div className="flex items-center justify-between text-xs text-vapor-300 font-medium mb-1">
-              <span>Contas do Mês</span>
-              <Receipt size={14} className="text-vapor-400" />
+          {podeVerDespesas && (
+            <div
+              className={`col-span-2 sm:col-span-1 bg-graphite-800/60 rounded-xl p-3 flex flex-col justify-between border ${
+                despesasUrgentesCount > 0 ? 'border-amber-500/50 bg-amber-500/5' : 'border-graphite-700/60'
+              }`}
+            >
+              <div className="flex items-center justify-between text-xs text-vapor-300 font-medium mb-1">
+                <span>Contas a Pagar</span>
+                <Receipt size={14} className={despesasUrgentesCount > 0 ? 'text-amber-400' : 'text-vapor-400'} />
+              </div>
+              <div className="font-mono text-base sm:text-lg font-bold text-vapor-200 truncate">
+                {formatarMoeda(metricas?.total_despesas_pendentes ?? metricas?.total_despesas_mes ?? 0)}
+              </div>
+              <span className={`text-[11px] mt-0.5 ${despesasUrgentesCount > 0 ? 'text-amber-400 font-semibold' : 'text-vapor-400'}`}>
+                {despesasUrgentesCount > 0
+                  ? `${despesasUrgentesCount} ${despesasUrgentesCount === 1 ? 'conta vence hoje/atrasada' : 'contas vencem hoje/atrasadas'}`
+                  : `${despesasEmAberto} em aberto no mês`}
+              </span>
             </div>
-            <div className="font-mono text-base sm:text-lg font-bold text-vapor-200 truncate">
-              {formatarMoeda(metricas?.total_despesas_mes || 0)}
-            </div>
-            <span className="text-[11px] text-amber-400/90 mt-0.5">
-              {totalDespesasPendentes} a confirmar valor
-            </span>
-          </div>
+          )}
         </div>
 
         {/* NAVEGAÇÃO DE ABAS */}
@@ -315,22 +440,30 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
             )}
           </button>
 
-          <button
-            type="button"
-            onClick={() => setAbaAtiva('pagar')}
-            className={`flex items-center gap-2 pb-2.5 px-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors min-h-[44px] ${
-              abaAtiva === 'pagar'
-                ? 'border-amber-400 text-amber-400'
-                : 'border-transparent text-vapor-400 hover:text-vapor-200'
-            }`}
-          >
-            <span>Contas a Pagar</span>
-            {despesas.length > 0 && (
-              <span className="px-2 py-0.5 text-[11px] font-mono rounded-full bg-graphite-700 text-vapor-300">
-                {despesas.length}
-              </span>
-            )}
-          </button>
+          {podeVerDespesas && (
+            <button
+              type="button"
+              onClick={() => setAbaAtiva('pagar')}
+              className={`flex items-center gap-2 pb-2.5 px-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors min-h-[44px] ${
+                abaAtiva === 'pagar'
+                  ? 'border-amber-400 text-amber-400'
+                  : 'border-transparent text-vapor-400 hover:text-vapor-200'
+              }`}
+            >
+              <span>Contas a Pagar</span>
+              {despesasEmAberto > 0 && (
+                <span
+                  className={`px-2 py-0.5 text-[11px] font-mono rounded-full font-bold ${
+                    despesasUrgentesCount > 0
+                      ? 'bg-flare-500/20 text-flare-300'
+                      : 'bg-graphite-700 text-vapor-300'
+                  }`}
+                >
+                  {despesasEmAberto}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* CONTEÚDO SCROLLÁVEL */}
@@ -575,11 +708,36 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
                       )}
                     </>
                   )}
+
+                  {/* Resumo discreto de repasses de cartão previstos (separados de fiado) */}
+                  {cartoesPrevistos.length > 0 && (
+                    <div className="p-3.5 rounded-xl bg-graphite-800/50 border border-graphite-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 text-xs text-vapor-300">
+                        <CreditCard size={16} className="text-amber-400 shrink-0" />
+                        <span>
+                          <strong className="text-vapor-100">{cartoesPrevistos.length}</strong>{' '}
+                          {cartoesPrevistos.length === 1 ? 'repasse de cartão previsto' : 'repasses de cartão previstos'}{' '}
+                          (<strong className="font-mono text-mint-400">{formatarMoeda(metricas?.total_cartoes_previstos ?? 0)}</strong> líquido) — separado dos fiados de clientes.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onFechar();
+                          navigate('/financeiro/contas-a-receber');
+                        }}
+                        className="text-xs font-semibold text-amber-400 hover:text-amber-300 inline-flex items-center gap-1 shrink-0"
+                      >
+                        <span>Ver em Contas a Receber</span>
+                        <ArrowUpRight size={14} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* ABA 2: CONTAS A PAGAR / DESPESAS DO MÊS */}
-              {abaAtiva === 'pagar' && (
+              {/* ABA 2: CONTAS A PAGAR / DESPESAS DO MÊS (Somente se podeVerDespesas = true) */}
+              {abaAtiva === 'pagar' && podeVerDespesas && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -587,7 +745,7 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
                         Contas & Despesas do Mês
                       </h3>
                       <p className="text-xs text-vapor-400">
-                        Custos previstos e variáveis que impactam o custo/hora da oficina
+                        Acompanhe vencimentos e confirme pagamentos das despesas fixas e variáveis
                       </p>
                     </div>
 
@@ -595,7 +753,7 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
                       type="button"
                       onClick={() => {
                         onFechar();
-                        navigate('/configuracoes');
+                        navigate('/financeiro/despesas');
                       }}
                       className="text-xs font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 min-h-[44px]"
                     >
@@ -612,41 +770,124 @@ export const ModalRadarFinanceiroDoDia: React.FC<ModalRadarFinanceiroDoDiaProps>
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {despesas.map((d) => (
-                        <div
-                          key={d.id}
-                          className="bg-graphite-800/60 border border-graphite-700/60 rounded-xl p-3 sm:p-3.5 flex items-center justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-sm text-vapor-100 truncate">
-                                {d.nome}
-                              </span>
-                              <span className="text-[10px] px-2 py-0.5 rounded bg-graphite-700 text-vapor-300">
-                                {d.categoria}
-                              </span>
-                              {!d.confirmado && (
-                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
-                                  Pendente Confirmação
+                    <div className="space-y-2.5">
+                      {despesas.map((d) => {
+                        const isPago = Boolean(d.pago);
+                        const statusPgto = d.status_pagamento ?? (isPago ? 'pago' : 'pendente');
+                        const isAtrasada = !isPago && statusPgto === 'atrasada';
+                        const isVenceHoje = !isPago && statusPgto === 'vence_hoje';
+                        const isVenceBreve = !isPago && statusPgto === 'vence_em_breve';
+                        const diaVenc = d.dia_vencimento ?? null;
+                        const diasAtraso = d.dias_atraso ?? 0;
+
+                        return (
+                          <div
+                            key={d.id}
+                            className={`rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border transition-all ${
+                              isAtrasada
+                                ? 'bg-flare-500/5 border-flare-500/40'
+                                : isVenceHoje
+                                ? 'bg-amber-500/5 border-amber-500/40'
+                                : isPago
+                                ? 'bg-graphite-800/40 border-mint-500/30'
+                                : 'bg-graphite-800/60 border-graphite-700/60'
+                            }`}
+                          >
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`font-semibold text-sm truncate ${isPago ? 'text-vapor-300 line-through' : 'text-vapor-100'}`}>
+                                  {d.nome}
                                 </span>
+
+                                {isPago && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-mint-500/20 text-mint-300 font-bold border border-mint-500/30">
+                                    ✓ PAGO
+                                  </span>
+                                )}
+                                {isAtrasada && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-flare-500/20 text-flare-300 font-bold border border-flare-500/40">
+                                    ATRASADA {diasAtraso} {diasAtraso === 1 ? 'DIA' : 'DIAS'}
+                                  </span>
+                                )}
+                                {isVenceHoje && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                                    VENCE HOJE
+                                  </span>
+                                )}
+                                {isVenceBreve && diaVenc !== null && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/30">
+                                    VENCE DIA {String(diaVenc).padStart(2, '0')}
+                                  </span>
+                                )}
+                                {!isPago && !isAtrasada && !isVenceHoje && !isVenceBreve && diaVenc !== null && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-graphite-700 text-vapor-300">
+                                    Vence dia {String(diaVenc).padStart(2, '0')}
+                                  </span>
+                                )}
+
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-graphite-700/80 text-vapor-300">
+                                  {d.categoria}
+                                </span>
+
+                                {!d.confirmado && !isPago && (
+                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/30">
+                                    Estimado
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-xs text-vapor-400 block">
+                                {d.tipo === 'variavel' ? 'Variável (Luz, Água, etc.)' : d.tipo === 'parcelada' ? 'Parcelada' : 'Recorrente'}
+                                {isPago && d.pago_em
+                                  ? ` • Pago em ${new Date(d.pago_em).toLocaleDateString('pt-BR')}`
+                                  : d.data_vencimento_mes
+                                  ? ` • Vencimento: ${new Date(d.data_vencimento_mes + 'T00:00:00').toLocaleDateString('pt-BR')}`
+                                  : ''}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t border-graphite-700/50 sm:border-0 shrink-0">
+                              <div className="text-left sm:text-right">
+                                <span className={`font-mono text-sm sm:text-base font-bold block ${isPago ? 'text-mint-400' : isAtrasada ? 'text-flare-400' : 'text-vapor-100'}`}>
+                                  {formatarMoeda(Number(isPago && d.valor_pago != null ? d.valor_pago : d.valor_mensal))}
+                                </span>
+                                <span className="text-[10px] text-vapor-400">
+                                  {isPago ? 'Quitado' : d.confirmado ? 'Em aberto' : 'Estimado'}
+                                </span>
+                              </div>
+
+                              {!isPago ? (
+                                <button
+                                  type="button"
+                                  disabled={pagandoDespesaId === d.id}
+                                  onClick={() => handleConfirmarPagamentoDespesa(d)}
+                                  title="Confirmar pagamento desta conta no mês atual"
+                                  className="h-10 px-3 rounded-lg bg-mint-500 hover:bg-mint-400 text-graphite-950 font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm min-h-[40px]"
+                                >
+                                  {pagandoDespesaId === d.id ? (
+                                    <div className="w-4 h-4 border-2 border-graphite-950 border-t-transparent rounded-full animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Check size={15} />
+                                      <span>Confirmar Pagamento</span>
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={pagandoDespesaId === d.id}
+                                  onClick={() => handleDesfazerPagamentoDespesa(d)}
+                                  title="Desfazer pagamento deste mês"
+                                  className="h-9 px-2.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 border border-graphite-700 font-medium text-xs flex items-center gap-1.5 transition-colors min-h-[36px]"
+                                >
+                                  <RotateCcw size={13} />
+                                  <span>Desfazer</span>
+                                </button>
                               )}
                             </div>
-                            <span className="text-xs text-vapor-400 block mt-0.5">
-                              Tipo: {d.tipo === 'variavel' ? 'Variável (Luz, Água, etc.)' : d.tipo === 'parcelada' ? 'Parcelada' : 'Recorrente'}
-                            </span>
                           </div>
-
-                          <div className="text-right">
-                            <span className="font-mono text-sm sm:text-base font-bold text-vapor-200 block">
-                              {formatarMoeda(d.valor_mensal)}
-                            </span>
-                            <span className="text-[10px] text-vapor-400">
-                              {d.confirmado ? 'Confirmado' : 'Estimado'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

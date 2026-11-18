@@ -40,7 +40,7 @@ import { marcarPassoOnboarding } from '../utils/onboarding';
 export const Financeiro: React.FC = () => {
   const navigate = useNavigate();
   const { tenant } = useAuth();
-  const { isDono, isGerente } = usePermissao();
+  const { isDono, isGerente, podeGerenciarDespesas } = usePermissao();
   const { temFeature, carregandoPermissoes } = usePlano();
 
   const podeVerFinanceiro = isDono || isGerente;
@@ -251,7 +251,7 @@ export const Financeiro: React.FC = () => {
               </span>
             </div>
           </div>
-          {isDono && (
+          {podeGerenciarDespesas && (
             <Link to="/financeiro/despesas">
               <Button variant="primary" className="text-xs">
                 Cadastrar Contas & Despesas

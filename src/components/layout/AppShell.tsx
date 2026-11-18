@@ -18,6 +18,14 @@ import {
   ONBOARDING_EVENT_WELCOME_VISIBILITY,
 } from '../../utils/onboarding';
 
+const obterDataLocalISO = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 export const AppShell: React.FC = () => {
   const location = useLocation();
   const { tenant } = useAuth();
@@ -81,7 +89,7 @@ export const AppShell: React.FC = () => {
       return;
     }
 
-    const hojeStr = new Date().toISOString().slice(0, 10);
+    const hojeStr = obterDataLocalISO();
     const chaveVisto = `radar_financeiro_visto_${tenant.id}_${hojeStr}`;
 
     async function verificarRadarDiario() {
@@ -91,11 +99,11 @@ export const AppShell: React.FC = () => {
 
         setRadarDados(data);
 
-        // Se ainda não dispensou hoje e possui cobranças pendentes ou contas a pagar
+        // Se ainda não dispensou hoje e possui cobranças pendentes ou contas a pagar vencendo hoje/atrasadas
         const jaDispensouHoje = localStorage.getItem(chaveVisto);
         const temPendencias =
-          (data.metricas?.qtd_cobrancas_total || 0) > 0 ||
-          (data.metricas?.qtd_despesas_pendentes || 0) > 0;
+          (data.metricas?.qtd_cobrancas_total ?? 0) > 0 ||
+          (data.metricas?.qtd_despesas_vencendo_ou_atrasadas ?? 0) > 0;
 
         if (!jaDispensouHoje && temPendencias) {
           const timer = setTimeout(() => {
@@ -113,7 +121,7 @@ export const AppShell: React.FC = () => {
 
   const handleDispensarRadarHoje = () => {
     if (tenant?.id) {
-      const hojeStr = new Date().toISOString().slice(0, 10);
+      const hojeStr = obterDataLocalISO();
       localStorage.setItem(`radar_financeiro_visto_${tenant.id}_${hojeStr}`, 'true');
     }
     setRadarAberto(false);

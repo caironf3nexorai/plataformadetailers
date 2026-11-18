@@ -7,13 +7,15 @@ import { Input } from '../../components/ui/Input';
 import { Modal } from '../../components/ui/Modal';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { Badge } from '../../components/ui/Badge';
+import { CampoNumerico } from '../../components/ui/CampoNumerico';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { usePermissao } from '../../hooks/usePermissao';
 import { supabase } from '../../lib/supabase';
 import type { CategoriaVeiculo, Cliente, Veiculo } from '../../types/clientes';
 import { HistoricoServicos } from '../../components/clientes/HistoricoServicos';
 import { GarantiasClienteVeiculo } from '../../components/clientes/GarantiasClienteVeiculo';
-import { formatTelefone, formatPlaca, cleanTelefone } from '../../utils/formatters';
+import { formatTelefone, formatPlaca, cleanTelefone, formatarMoeda, parseNumeroFlexivel } from '../../utils/formatters';
 import {
   ArrowLeft,
   Car,
@@ -23,6 +25,8 @@ import {
   Trash2,
   AlertTriangle,
   Pencil,
+  CheckCircle2,
+  CreditCard,
 } from 'lucide-react';
 import { ModalEditarVeiculo, type VeiculoEditavel } from '../../components/clientes/ModalEditarVeiculo';
 
@@ -443,7 +447,7 @@ export const DetalheCliente: React.FC = () => {
 
       {/* Cartão de Saldo Devedor e Recebimentos (Visível apenas para Gestão) */}
       {!isOperador && cliente && (
-        <BlocoSaldoCliente clienteId={cliente.id} />
+        <BlocoSaldoCliente clienteId={cliente.id} clienteNome={cliente.nome} tenantId={tenant?.id} />
       )}
 
       {/* Seção de Veículos do Cliente */}
@@ -666,36 +670,130 @@ export const DetalheCliente: React.FC = () => {
   );
 };
 
+interface HistoricoRecebimentoCliente {
+  id: string;
+  forma_nome?: string | null;
+  forma_tipo?: string | null;
+  numero_parcela?: number | null;
+  total_parcelas?: number | null;
+  valor_bruto?: number | null;
+  valor_liquido?: number | null;
+  previsto_para?: string | null;
+  recebido_em?: string | null;
+  status?: string | null;
+  origem?: string | null;
+  observacao?: string | null;
+}
+
+const obterHojeLocalISO = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
 // Componente Auxiliar de Saldo Devedor do Cliente (Dono / Gerente)
-const BlocoSaldoCliente: React.FC<{ clienteId: string }> = ({ clienteId }) => {
+const BlocoSaldoCliente: React.FC<{ clienteId: string; clienteNome: string; tenantId?: string }> = ({
+  clienteId,
+  clienteNome,
+  tenantId,
+}) => {
+  const { showToast } = useToast();
   const [saldo, setSaldo] = useState(0);
-  const [historico, setHistorico] = useState<any[]>([]);
+  const [historico, setHistorico] = useState<HistoricoRecebimentoCliente[]>([]);
+  const [formasQuitacao, setFormasQuitacao] = useState<Array<{ id: string; nome: string; tipo: string }>>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchSaldo = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase.rpc('obter_saldo_devedor_cliente', {
-          p_cliente_id: clienteId,
-        });
+  const [itemBaixa, setItemBaixa] = useState<HistoricoRecebimentoCliente | null>(null);
+  const [valorBaixaInput, setValorBaixaInput] = useState('');
+  const [formaQuitacaoId, setFormaQuitacaoId] = useState('');
+  const [baixando, setBaixando] = useState(false);
 
-        if (!error && data) {
-          setSaldo(Number(data.saldo_devedor || 0));
-          setHistorico(data.historico || []);
-        }
-      } catch (err) {
-        console.error('Erro ao buscar saldo do cliente:', err);
-      } finally {
-        setLoading(false);
+  const fetchSaldo = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const [resSaldo, resFormas] = await Promise.all([
+        supabase.rpc('obter_saldo_devedor_cliente', {
+          p_cliente_id: clienteId,
+        }),
+        tenantId
+          ? supabase
+              .from('tenant_formas_pagamento')
+              .select('id, nome, tipo')
+              .eq('tenant_id', tenantId)
+              .eq('ativo', true)
+              .neq('tipo', 'fiado')
+              .order('ordem', { ascending: true })
+          : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      if (!resSaldo.error && resSaldo.data) {
+        setSaldo(Number(resSaldo.data.saldo_devedor || 0));
+        setHistorico(Array.isArray(resSaldo.data.historico) ? resSaldo.data.historico : []);
       }
-    };
+
+      if (!resFormas.error && Array.isArray(resFormas.data)) {
+        setFormasQuitacao(resFormas.data as Array<{ id: string; nome: string; tipo: string }>);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar saldo do cliente:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [clienteId, tenantId]);
+
+  useEffect(() => {
     fetchSaldo();
-  }, [clienteId]);
+  }, [fetchSaldo]);
+
+  const handleAbrirBaixa = (h: HistoricoRecebimentoCliente) => {
+    const bruto = Number(h.valor_bruto ?? 0);
+    setItemBaixa(h);
+    setValorBaixaInput(bruto.toFixed(2).replace('.', ','));
+    if (formasQuitacao.length > 0) {
+      const pixDefault = formasQuitacao.find((f) => f.tipo === 'pix') || formasQuitacao[0];
+      setFormaQuitacaoId(pixDefault?.id || '');
+    } else {
+      setFormaQuitacaoId('');
+    }
+  };
+
+  const handleConfirmarBaixa = async () => {
+    if (!itemBaixa) return;
+    const valPago = parseNumeroFlexivel(valorBaixaInput);
+    if (valPago <= 0) {
+      showToast('O valor recebido deve ser maior que zero.', 'error');
+      return;
+    }
+
+    setBaixando(true);
+    try {
+      const { data, error } = await supabase.rpc('dar_baixa_recebimento', {
+        p_recebimento_id: itemBaixa.id,
+        p_valor_pago: valPago,
+        p_forma_quitacao_id: formaQuitacaoId || null,
+      });
+
+      if (error) throw error;
+
+      showToast(data?.mensagem || 'Baixa registrada com sucesso!', 'success');
+      setItemBaixa(null);
+      await fetchSaldo();
+      window.dispatchEvent(new CustomEvent('financeiro_atualizado'));
+    } catch (err: any) {
+      console.error('Erro ao dar baixa na ficha do cliente:', err);
+      showToast(err?.message || 'Não foi possível dar baixa no título.', 'error');
+    } finally {
+      setBaixando(false);
+    }
+  };
 
   if (loading) {
     return <Card className="p-4 bg-graphite-800 border-graphite-700 animate-pulse h-24"><div /></Card>;
   }
+
+  const hojeIso = obterHojeLocalISO();
 
   return (
     <Card className="p-6 bg-graphite-800 border-graphite-600 flex flex-col gap-4 shadow-xl">
@@ -708,16 +806,25 @@ const BlocoSaldoCliente: React.FC<{ clienteId: string }> = ({ clienteId }) => {
         </Badge>
       </div>
 
-      <div className="p-4 bg-graphite-900 rounded-lg border border-graphite-700 flex items-center justify-between">
-        <span className="text-xs text-vapor-400 font-semibold uppercase tracking-wider">Saldo Devedor / A Receber</span>
+      <div className="p-4 bg-graphite-900 rounded-lg border border-graphite-700 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-vapor-400 font-semibold uppercase tracking-wider">
+            Saldo Devedor Real (Fiado / A Prazo)
+          </span>
+          <span className="text-[11px] text-vapor-500">
+            Pagamentos já passados no cartão não entram como dívida do cliente
+          </span>
+        </div>
         <span className={`font-mono text-2xl font-bold ${saldo > 0 ? 'text-amber-400' : 'text-mint-400'}`}>
-          {saldo > 0 ? `R$ ${saldo.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
+          {saldo > 0 ? formatarMoeda(saldo) : 'R$ 0,00'}
         </span>
       </div>
 
       {historico.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold text-vapor-300">Histórico de Títulos e Lançamentos ({historico.length})</span>
+          <span className="text-xs font-semibold text-vapor-300">
+            Histórico de Títulos e Lançamentos ({historico.length})
+          </span>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs font-sans">
               <thead>
@@ -727,30 +834,168 @@ const BlocoSaldoCliente: React.FC<{ clienteId: string }> = ({ clienteId }) => {
                   <th className="py-2 px-2 text-right">Valor</th>
                   <th className="py-2 px-2 text-center">Vencimento</th>
                   <th className="py-2 px-2 text-center">Status</th>
+                  <th className="py-2 px-2 text-center">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-graphite-750">
-                {historico.map((h: any) => (
-                  <tr key={h.id} className="hover:bg-graphite-750/50">
-                    <td className="py-2 px-2 text-vapor-200 font-medium">{h.forma_nome || '—'}</td>
-                    <td className="py-2 px-2 text-center font-mono text-vapor-400">{h.numero_parcela}/{h.total_parcelas}</td>
-                    <td className="py-2 px-2 text-right font-mono font-bold text-vapor-100">
-                      R$ {Number(h.valor_bruto).toFixed(2).replace('.', ',')}
-                    </td>
-                    <td className="py-2 px-2 text-center font-mono text-vapor-400">
-                      {h.previsto_para ? h.previsto_para.split('-').reverse().join('/') : '—'}
-                    </td>
-                    <td className="py-2 px-2 text-center">
-                      <Badge tone={h.status === 'recebido' ? 'mint' : h.status === 'previsto' ? 'amber' : 'vapor'}>
-                        {h.status.toUpperCase()}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                {historico.map((h) => {
+                  const isCartao = h?.forma_tipo === 'debito' || h?.forma_tipo === 'credito';
+                  const statusNorm = (h?.status || '').toLowerCase();
+                  const isPrevisto = statusNorm === 'previsto';
+                  const isFiadoAberto = isPrevisto && !isCartao;
+                  const dataIso = (h?.previsto_para || '').substring(0, 10);
+                  const isVencido = isFiadoAberto && Boolean(dataIso) && dataIso < hojeIso;
+                  const isVenceHoje = isFiadoAberto && Boolean(dataIso) && dataIso === hojeIso;
+                  const bruto = Number(h?.valor_bruto ?? 0);
+
+                  return (
+                    <tr key={h.id} className="hover:bg-graphite-750/50">
+                      <td className="py-2.5 px-2 text-vapor-200 font-medium">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1.5">
+                            {isCartao && <CreditCard size={12} className="text-sky-400 shrink-0" />}
+                            <span>{h?.forma_nome || '—'}</span>
+                          </span>
+                          {h?.observacao && (
+                            <span className="text-[10px] text-vapor-400 italic max-w-xs truncate">
+                              {h.observacao}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-mono text-vapor-400">
+                        {h?.numero_parcela || 1}/{h?.total_parcelas || 1}
+                      </td>
+                      <td className="py-2.5 px-2 text-right font-mono font-bold text-vapor-100">
+                        {formatarMoeda(bruto)}
+                      </td>
+                      <td className="py-2.5 px-2 text-center font-mono text-vapor-400">
+                        {dataIso ? dataIso.split('-').reverse().join('/') : '—'}
+                      </td>
+                      <td className="py-2.5 px-2 text-center">
+                        {statusNorm === 'recebido' ? (
+                          <Badge tone="mint">RECEBIDO</Badge>
+                        ) : isPrevisto && isCartao ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30 whitespace-nowrap">
+                            Pago no Cartão • Repasse Operadora
+                          </span>
+                        ) : isVencido ? (
+                          <Badge tone="flare">VENCIDO</Badge>
+                        ) : isVenceHoje ? (
+                          <Badge tone="amber">VENCE HOJE</Badge>
+                        ) : isPrevisto ? (
+                          <Badge tone="amber">EM ABERTO</Badge>
+                        ) : (
+                          <Badge tone="vapor">{(h?.status || '—').toUpperCase()}</Badge>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2 text-center">
+                        {isFiadoAberto ? (
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleAbrirBaixa(h)}
+                            className="text-[11px] px-2.5 py-1 bg-mint-500 hover:bg-mint-400 text-graphite-950 font-bold border-none whitespace-nowrap"
+                          >
+                            <CheckCircle2 size={12} />
+                            Dar Baixa
+                          </Button>
+                        ) : (
+                          <span className="text-[11px] text-vapor-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
+      )}
+
+      {/* Modal Rápido de Baixa de Fiado na Ficha do Cliente */}
+      {itemBaixa && (
+        <Modal
+          isOpen={Boolean(itemBaixa)}
+          onClose={() => setItemBaixa(null)}
+          title="Dar Baixa em Título do Cliente"
+          maxWidth="md"
+          footer={
+            <div className="flex items-center justify-end gap-2 w-full">
+              <Button variant="secondary" onClick={() => setItemBaixa(null)} disabled={baixando}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmarBaixa}
+                disabled={baixando}
+                className="bg-mint-500 hover:bg-mint-400 text-graphite-950 font-bold"
+              >
+                {baixando ? 'Confirmando...' : 'Confirmar Recebimento'}
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4 py-1">
+            <div className="p-3 bg-graphite-950 rounded-xl border border-graphite-800 text-xs flex flex-col gap-1">
+              <div className="flex justify-between">
+                <span className="text-vapor-400">Cliente:</span>
+                <span className="font-bold text-vapor-100">{clienteNome}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-vapor-400">Parcela:</span>
+                <span className="font-mono text-vapor-200">
+                  {itemBaixa.numero_parcela || 1}/{itemBaixa.total_parcelas || 1} •{' '}
+                  {itemBaixa.previsto_para ? itemBaixa.previsto_para.substring(0, 10).split('-').reverse().join('/') : '—'}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-graphite-800">
+                <span className="text-vapor-400">Valor Previsto:</span>
+                <span className="font-mono font-bold text-vapor-100">
+                  {formatarMoeda(Number(itemBaixa.valor_bruto ?? 0))}
+                </span>
+              </div>
+            </div>
+
+            {formasQuitacao.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-vapor-200 uppercase tracking-wider">
+                  Meio de pagamento recebido hoje
+                </label>
+                <select
+                  value={formaQuitacaoId}
+                  onChange={(e) => setFormaQuitacaoId(e.target.value)}
+                  className="w-full min-h-[42px] bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2 text-sm text-vapor-100 outline-none focus:border-amber-500"
+                >
+                  <option value="">Não especificar</option>
+                  {formasQuitacao.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-vapor-200 uppercase tracking-wider">
+                Valor Recebido no Caixa (R$)
+              </label>
+              <CampoNumerico
+                prefix="R$"
+                placeholder="0,00"
+                value={valorBaixaInput}
+                onChange={(_val, str) => setValorBaixaInput(str)}
+                wrapperClassName="min-h-[44px] bg-graphite-950"
+                className="text-lg font-bold text-mint-400"
+              />
+              <span className="text-[11px] text-vapor-400">
+                Pagamentos parciais ou excedentes ajustam automaticamente o saldo das próximas parcelas.
+              </span>
+            </div>
+          </div>
+        </Modal>
       )}
     </Card>
   );

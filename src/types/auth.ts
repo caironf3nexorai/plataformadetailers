@@ -82,6 +82,7 @@ export interface TenantMember {
   email: string;
   role: AppRole;
   status: MemberStatus;
+  pode_gerenciar_despesas?: boolean;
   convite_token?: string | null;
   created_at?: string;
   nome_usuario?: string; // vindo de join com profiles se disponível

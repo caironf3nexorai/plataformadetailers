@@ -5,10 +5,21 @@ import { CampoNumerico } from '../../components/ui/CampoNumerico';
 import { Badge } from '../../components/ui/Badge';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermissao } from '../../hooks/usePermissao';
+import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
-import type { DespesaFixa, CategoriaDespesa, TipoDespesa } from '../../types/financeiro';
+import type {
+  DespesaFixa,
+  DespesaFixaPagamento,
+  CategoriaDespesa,
+  TipoDespesa,
+} from '../../types/financeiro';
 import { formatarMoeda } from '../../utils/formatters';
-import { calcularVigenciaFimParcelada, calcularParcelaAtual, formatarMesAno } from '../../utils/financeiroUtils';
+import {
+  calcularVigenciaFimParcelada,
+  calcularParcelaAtual,
+  formatarMesAno,
+  calcularInfoVencimentoDespesa,
+} from '../../utils/financeiroUtils';
 import {
   DollarSign,
   Clock,
@@ -24,6 +35,8 @@ import {
   XCircle,
   Info,
   MoreVertical,
+  Calendar,
+  RotateCcw,
 } from 'lucide-react';
 import { traduzirErro } from '../../utils/erros';
 import { marcarPassoOnboarding } from '../../utils/onboarding';
@@ -68,11 +81,36 @@ const traduzirErroDespesa = (errMessage: string): string => {
   return traduzirErro(errMessage).mensagem;
 };
 
+const obterDataLocalISO = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const obterFimMesISO = (dataIso: string): string => {
+  const [ano, mes] = dataIso.split('-').map(Number);
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+};
+
+const parseDiaVencimentoOpcional = (val: string): number | null => {
+  const limpo = (val || '').trim();
+  if (!limpo) return null;
+  const num = parseInt(limpo, 10);
+  if (isNaN(num) || num < 1 || num > 31) return null;
+  return num;
+};
+
 export const AbaDespesasFixas: React.FC = () => {
   const { tenant } = useAuth();
-  const { isDono } = usePermissao();
+  const { podeGerenciarDespesas } = usePermissao();
+  const { showSuccess, showError } = useToast();
 
   const [despesas, setDespesas] = useState<DespesaFixa[]>([]);
+  const [pagamentosMesMap, setPagamentosMesMap] = useState<Record<string, DespesaFixaPagamento>>({});
+  const [pagandoId, setPagandoId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Métricas do topo
@@ -106,8 +144,9 @@ export const AbaDespesasFixas: React.FC = () => {
   const [totalParcelas, setTotalParcelas] = useState<number>(12);
   const [parcelaInicial, setParcelaInicial] = useState<number>(1);
   const [valorMensal, setValorMensal] = useState<string>('');
+  const [diaVencimento, setDiaVencimento] = useState<string>('');
   const [vigenciaInicio, setVigenciaInicio] = useState<string>(
-    new Date().toISOString().substring(0, 7) + '-01'
+    obterDataLocalISO().substring(0, 7) + '-01'
   );
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -115,15 +154,19 @@ export const AbaDespesasFixas: React.FC = () => {
   // Form State (Atualizar valor / Nova vigência)
   const [novoValor, setNovoValor] = useState<string>('');
   const [novaDataInicio, setNovaDataInicio] = useState<string>(
-    new Date().toISOString().substring(0, 7) + '-01'
+    obterDataLocalISO().substring(0, 7) + '-01'
   );
 
   const fetchDados = async () => {
-    if (!tenant) return;
+    if (!tenant || !podeGerenciarDespesas) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     try {
-      const mesAtualIso = new Date().toISOString().substring(0, 7) + '-01';
+      const hojeLocal = obterDataLocalISO();
+      const mesAtualIso = hojeLocal.substring(0, 7) + '-01';
 
       // 1. Garantir clonagem estimativa para o mês atual
       await supabase.rpc('obter_ou_gerar_despesas_mes', {
@@ -131,16 +174,34 @@ export const AbaDespesasFixas: React.FC = () => {
         p_mes: mesAtualIso,
       });
 
-      // 2. Buscar todas as despesas
-      const { data, error } = await supabase
-        .from('despesas_fixas')
-        .select('*')
-        .eq('tenant_id', tenant.id)
-        .order('created_at', { ascending: false });
+      // 2. Buscar todas as despesas e pagamentos da competência atual em paralelo
+      const [resDespesas, resPagamentos] = await Promise.all([
+        supabase
+          .from('despesas_fixas')
+          .select('*')
+          .eq('tenant_id', tenant.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('despesas_fixas_pagamentos')
+          .select('*')
+          .eq('tenant_id', tenant.id)
+          .eq('competencia_mes', mesAtualIso),
+      ]);
 
-      if (error) throw error;
-      const listaDespesas: DespesaFixa[] = data || [];
+      if (resDespesas.error) throw resDespesas.error;
+      const listaDespesas: DespesaFixa[] = resDespesas.data || [];
       setDespesas(listaDespesas);
+
+      // Mapeia baixas mensais com proteção null-safe (retrocompatível se tabela vazia/legado)
+      const pagMap: Record<string, DespesaFixaPagamento> = {};
+      if (!resPagamentos.error && Array.isArray(resPagamentos.data)) {
+        resPagamentos.data.forEach((p: any) => {
+          if (p?.despesa_id) {
+            pagMap[p.despesa_id] = p as DespesaFixaPagamento;
+          }
+        });
+      }
+      setPagamentosMesMap(pagMap);
 
       // 3. Calcular custo por hora da operação via RPC
       const { data: chData } = await supabase.rpc('custo_hora_operacao', {
@@ -156,10 +217,11 @@ export const AbaDespesasFixas: React.FC = () => {
       setCustoHora(Number(chData || 0));
       setHorasDisponiveis(Number(hdData || 0));
 
-      // 4. Somar total mensal vigente hoje
-      const hojeStr = new Date().toISOString().substring(0, 10);
+      // 4. Somar total mensal vigente na competência do mês atual (inclui contas com início ainda neste mês)
+      const fimMesLocal = obterFimMesISO(hojeLocal);
       const vigentes = listaDespesas.filter(
-        (d: DespesaFixa) => d.vigencia_inicio <= hojeStr && (!d.vigencia_fim || d.vigencia_fim >= hojeStr)
+        (d: DespesaFixa) =>
+          d.vigencia_inicio <= fimMesLocal && (!d.vigencia_fim || d.vigencia_fim >= mesAtualIso)
       );
       const soma = vigentes.reduce((acc: number, curr: DespesaFixa) => acc + Number(curr.valor_mensal), 0);
       setTotalMensal(soma);
@@ -176,7 +238,7 @@ export const AbaDespesasFixas: React.FC = () => {
       });
       setValoresConfirmacao(initialMap);
 
-      if (tenant?.id && isDono) {
+      if (tenant?.id && podeGerenciarDespesas) {
         marcarPassoOnboarding(tenant.id, {
           financeiro_revisado: true,
           ...(listaDespesas.length > 0 ? { despesas_configuradas: true } : {}),
@@ -191,22 +253,36 @@ export const AbaDespesasFixas: React.FC = () => {
 
   useEffect(() => {
     fetchDados();
-  }, [tenant?.id]);
+  }, [tenant?.id, podeGerenciarDespesas]);
 
-  if (!isDono) {
+  useEffect(() => {
+    const handleAtualizado = () => {
+      fetchDados();
+    };
+    window.addEventListener('financeiro_atualizado', handleAtualizado);
+    return () => window.removeEventListener('financeiro_atualizado', handleAtualizado);
+  }, [tenant?.id, podeGerenciarDespesas]);
+
+  if (!podeGerenciarDespesas) {
     return (
       <Card className="p-6 bg-graphite-900 border-graphite-800 text-center">
         <AlertTriangle size={32} className="text-amber-400 mx-auto mb-2" />
         <h3 className="font-bold text-vapor-100">Acesso Restrito</h3>
-        <p className="text-vapor-400 text-sm">Apenas o proprietário pode visualizar e gerenciar as despesas fixas.</p>
+        <p className="text-vapor-400 text-sm">
+          Apenas o proprietário ou gerentes autorizados em <strong className="text-vapor-200">Minha Oficina &gt; Equipe</strong> podem visualizar e gerenciar as contas a pagar e despesas fixas.
+        </p>
       </Card>
     );
   }
 
-  const hojeStr = new Date().toISOString().substring(0, 10);
+  const hojeStr = obterDataLocalISO();
+  const mesAtualCompetencia = hojeStr.substring(0, 7) + '-01';
+  const fimMesAtualStr = obterFimMesISO(hojeStr);
   const despesasVigentes = despesas.filter(
-    (d: DespesaFixa) => d.vigencia_inicio <= hojeStr && (!d.vigencia_fim || d.vigencia_fim >= hojeStr)
+    (d: DespesaFixa) =>
+      d.vigencia_inicio <= fimMesAtualStr && (!d.vigencia_fim || d.vigencia_fim >= mesAtualCompetencia)
   );
+  const despesasFuturas = despesas.filter((d: DespesaFixa) => d.vigencia_inicio > fimMesAtualStr);
   const pendentesVariaveis = despesasVigentes.filter((d) => d.tipo === 'variavel' && d.confirmado === false);
 
   const toggleMenu = (id: string, e: React.MouseEvent) => {
@@ -221,9 +297,47 @@ export const AbaDespesasFixas: React.FC = () => {
     setTotalParcelas(12);
     setParcelaInicial(1);
     setValorMensal('');
-    setVigenciaInicio(new Date().toISOString().substring(0, 7) + '-01');
+    setDiaVencimento('');
+    setVigenciaInicio(obterDataLocalISO().substring(0, 7) + '-01');
     setErrorMsg(null);
     setIsModalOpen(true);
+  };
+
+  const handleConfirmarPagamentoDespesa = async (d: DespesaFixa) => {
+    setPagandoId(d.id);
+    try {
+      const { data, error } = await supabase.rpc('confirmar_pagamento_despesa', {
+        p_despesa_id: d.id,
+        p_competencia: mesAtualCompetencia,
+        p_valor_pago: Number(d.valor_mensal),
+      });
+      if (error) throw error;
+      showSuccess(data?.mensagem || `Pagamento de "${d.nome}" confirmado!`);
+      await fetchDados();
+      window.dispatchEvent(new CustomEvent('financeiro_atualizado'));
+    } catch (err: any) {
+      showError(traduzirErroDespesa(err?.message || 'Erro ao confirmar pagamento.'));
+    } finally {
+      setPagandoId(null);
+    }
+  };
+
+  const handleDesfazerPagamentoDespesa = async (d: DespesaFixa) => {
+    setPagandoId(d.id);
+    try {
+      const { data, error } = await supabase.rpc('desfazer_pagamento_despesa', {
+        p_despesa_id: d.id,
+        p_competencia: mesAtualCompetencia,
+      });
+      if (error) throw error;
+      showSuccess(data?.mensagem || `Pagamento de "${d.nome}" desfeito.`);
+      await fetchDados();
+      window.dispatchEvent(new CustomEvent('financeiro_atualizado'));
+    } catch (err: any) {
+      showError(traduzirErroDespesa(err?.message || 'Erro ao desfazer pagamento.'));
+    } finally {
+      setPagandoId(null);
+    }
   };
 
   const handleConfirmarTodasVariaveis = async (e: React.FormEvent) => {
@@ -308,11 +422,21 @@ export const AbaDespesasFixas: React.FC = () => {
         setErrorMsg('Informe a quantidade de parcelas.');
         return;
       }
-      vigFim = calcularVigenciaFimParcelada(vigenciaInicio, totalParcelas);
+      if (parcelaInicial < 1 || parcelaInicial > totalParcelas) {
+        setErrorMsg('A parcela inicial deve estar entre 1 e o total de parcelas.');
+        return;
+      }
+      vigFim = calcularVigenciaFimParcelada(vigenciaInicio, totalParcelas, parcelaInicial);
     } else if (tipo === 'variavel') {
       const [year, month] = vigenciaInicio.split('-').map(Number);
       const lastDay = new Date(year, month, 0).getDate();
       vigFim = `${vigenciaInicio.substring(0, 7)}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    const diaVencNum = parseDiaVencimentoOpcional(diaVencimento);
+    if (diaVencimento.trim() !== '' && diaVencNum === null) {
+      setErrorMsg('O dia de vencimento deve estar entre 1 e 31.');
+      return;
     }
 
     setSaving(true);
@@ -330,6 +454,7 @@ export const AbaDespesasFixas: React.FC = () => {
         valor_mensal: val,
         vigencia_inicio: vigenciaInicio,
         vigencia_fim: vigFim,
+        dia_vencimento: diaVencNum,
         confirmado: tipo !== 'variavel',
         confirmado_em: tipo === 'variavel' ? new Date().toISOString() : null,
         confirmado_por: tipo === 'variavel' ? userData.user.id : null,
@@ -347,11 +472,12 @@ export const AbaDespesasFixas: React.FC = () => {
     }
   };
 
-  // 2. AÇÃO: EDITAR DADOS CADASTRAIS (NOME E CATEGORIA LIVREMENTE)
+  // 2. AÇÃO: EDITAR DADOS CADASTRAIS (NOME, CATEGORIA E DIA DE VENCIMENTO LIVREMENTE)
   const handleOpenEditarCadastral = (d: DespesaFixa) => {
     setSelectedDespesa(d);
     setNome(d.nome);
     setCategoria(d.categoria);
+    setDiaVencimento(d.dia_vencimento != null ? String(d.dia_vencimento) : '');
     setErrorMsg(null);
     setIsModalEditarCadastralOpen(true);
   };
@@ -366,6 +492,12 @@ export const AbaDespesasFixas: React.FC = () => {
       return;
     }
 
+    const diaVencNum = parseDiaVencimentoOpcional(diaVencimento);
+    if (diaVencimento.trim() !== '' && diaVencNum === null) {
+      setErrorMsg('O dia de vencimento deve estar entre 1 e 31.');
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase
@@ -373,6 +505,7 @@ export const AbaDespesasFixas: React.FC = () => {
         .update({
           nome: nome.trim(),
           categoria,
+          dia_vencimento: diaVencNum,
         })
         .eq('id', selectedDespesa.id);
 
@@ -436,6 +569,7 @@ export const AbaDespesasFixas: React.FC = () => {
     setTipo(d.tipo);
     setValorMensal(String(d.valor_mensal));
     setVigenciaInicio(d.vigencia_inicio);
+    setDiaVencimento(d.dia_vencimento != null ? String(d.dia_vencimento) : '');
     setTotalParcelas(d.total_parcelas || 12);
     setParcelaInicial(d.parcela_inicial || 1);
     setErrorMsg(null);
@@ -453,6 +587,12 @@ export const AbaDespesasFixas: React.FC = () => {
       return;
     }
 
+    const diaVencNum = parseDiaVencimentoOpcional(diaVencimento);
+    if (diaVencimento.trim() !== '' && diaVencNum === null) {
+      setErrorMsg('O dia de vencimento deve estar entre 1 e 31.');
+      return;
+    }
+
     setSaving(true);
     try {
       const { error } = await supabase.rpc('corrigir_despesa_fixa', {
@@ -464,6 +604,7 @@ export const AbaDespesasFixas: React.FC = () => {
         p_vigencia_inicio: vigenciaInicio,
         p_total_parcelas: tipo === 'parcelada' ? totalParcelas : null,
         p_parcela_inicial: tipo === 'parcelada' ? parcelaInicial : 1,
+        p_dia_vencimento: diaVencNum,
       });
 
       if (error) throw error;
@@ -722,11 +863,24 @@ export const AbaDespesasFixas: React.FC = () => {
                     const proximoDeEncerrar = isParcelada && restolhes !== null && restolhes <= 2 && restolhes > 0;
 
                     const criadaHoje = item.created_at?.substring(0, 10) === hojeStr;
+                    const pagamentoAtual = pagamentosMesMap[item.id];
+                    const vencInfo = calcularInfoVencimentoDespesa(item.dia_vencimento, Boolean(pagamentoAtual), hojeStr);
+                    const isPago = vencInfo.status === 'pago';
+                    const isAtrasada = vencInfo.status === 'atrasada';
+                    const isVenceHoje = vencInfo.status === 'vence_hoje';
 
                     return (
                       <div
                         key={item.id}
-                        className="p-3.5 rounded-lg bg-graphite-950/70 border border-graphite-800 flex flex-col gap-2.5"
+                        className={`p-3.5 rounded-lg bg-graphite-950/70 border flex flex-col gap-2.5 ${
+                          isAtrasada
+                            ? 'border-flare-500/40 bg-flare-500/5'
+                            : isVenceHoje
+                            ? 'border-amber-500/50 bg-amber-500/5'
+                            : isPago
+                            ? 'border-mint-500/30'
+                            : 'border-graphite-800'
+                        }`}
                       >
                         {/* LINHA 1: NOME E VALOR */}
                         <div className="flex items-center justify-between gap-2">
@@ -739,9 +893,31 @@ export const AbaDespesasFixas: React.FC = () => {
                           </span>
                         </div>
 
-                        {/* LINHA 2: BADGES DE STATUS E VIGÊNCIA */}
+                        {/* LINHA 2: BADGES DE STATUS, VENCIMENTO E VIGÊNCIA */}
                         <div className="flex items-center justify-between flex-wrap gap-2 text-xs text-vapor-400">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {isPago && (
+                              <Badge tone="mint">
+                                ✓ Pago{pagamentoAtual?.pago_em ? ` em ${new Date(pagamentoAtual.pago_em).toLocaleDateString('pt-BR')}` : ''}
+                              </Badge>
+                            )}
+                            {isAtrasada && (
+                              <Badge tone="flare">
+                                Atrasada {vencInfo.diasAtraso}d (dia {String(vencInfo.diaEfetivo).padStart(2, '0')})
+                              </Badge>
+                            )}
+                            {isVenceHoje && (
+                              <Badge tone="amber">
+                                Vence Hoje (dia {String(vencInfo.diaEfetivo).padStart(2, '0')})
+                              </Badge>
+                            )}
+                            {!isPago && !isAtrasada && !isVenceHoje && vencInfo.diaEfetivo !== null && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-mono bg-graphite-800 text-vapor-300 border border-graphite-700">
+                                <Calendar size={11} className="text-amber-400" />
+                                Vence dia {String(vencInfo.diaEfetivo).padStart(2, '0')}
+                              </span>
+                            )}
+
                             {isRecorrente && <Badge tone="vapor">recorrente</Badge>}
                             {isVariavel && (
                               <Badge tone={item.confirmado ? 'glass' : 'amber'}>
@@ -774,14 +950,32 @@ export const AbaDespesasFixas: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* LINHA 3: AÇÕES (AÇÃO PRINCIPAL EM LARGURA TOTAL NO MOBILE + MENU 3 PONTOS AO LADO) */}
-                        <div className="flex items-center gap-2 pt-1 border-t border-graphite-800/60">
-                          {/* Ação Primária da linha */}
+                        {/* LINHA 3: AÇÕES (CONFIRMAR PAGAMENTO + AÇÕES SECUNDÁRIAS + MENU 3 PONTOS) */}
+                        <div className="flex items-center flex-wrap gap-2 pt-1.5 border-t border-graphite-800/60">
+                          {/* Botão de Dar Baixa / Confirmar Pagamento do Mês */}
+                          {!isPago ? (
+                            <button
+                              type="button"
+                              disabled={pagandoId === item.id}
+                              onClick={() => handleConfirmarPagamentoDespesa(item)}
+                              className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-mint-500 hover:bg-mint-400 text-graphite-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm min-h-[36px]"
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>{pagandoId === item.id ? 'Confirmando...' : 'Confirmar Pagamento'}</span>
+                            </button>
+                          ) : (
+                            <span className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-mint-500/10 border border-mint-500/30 text-mint-400 text-xs font-semibold flex items-center justify-center gap-1.5 min-h-[36px]">
+                              <CheckCircle2 size={14} />
+                              <span>Pago este mês</span>
+                            </span>
+                          )}
+
+                          {/* Ação Secundária: Confirmar Valor (se variável pendente) ou Atualizar Valor */}
                           {isVariavel && !item.confirmado ? (
                             <button
                               type="button"
                               onClick={() => handleOpenConfirmarIndividual(item)}
-                              className="flex-1 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-graphite-950 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                              className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-colors flex items-center justify-center gap-1.5 min-h-[36px]"
                             >
                               <CheckCircle2 size={14} />
                               <span>Confirmar valor</span>
@@ -790,7 +984,7 @@ export const AbaDespesasFixas: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleOpenNovaVigencia(item)}
-                              className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium border border-amber-500/30 transition-colors flex items-center justify-center gap-1.5"
+                              className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-medium border border-amber-500/30 transition-colors flex items-center justify-center gap-1.5 min-h-[36px]"
                             >
                               <History size={14} />
                               <span>Atualizar valor</span>
@@ -798,11 +992,11 @@ export const AbaDespesasFixas: React.FC = () => {
                           )}
 
                           {/* Menu de Três Pontos com ações secundárias e tooltips claros */}
-                          <div className="relative">
+                          <div className="relative ml-auto">
                             <button
                               type="button"
                               onClick={(e) => toggleMenu(item.id, e)}
-                              className="p-1.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 border border-graphite-700 transition-colors flex items-center justify-center"
+                              className="p-1.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-300 border border-graphite-700 transition-colors flex items-center justify-center min-h-[36px] min-w-[36px]"
                               title="Mais opções"
                             >
                               <MoreVertical size={16} />
@@ -816,6 +1010,26 @@ export const AbaDespesasFixas: React.FC = () => {
                                 />
 
                                 <div className="absolute right-0 top-full mt-1.5 z-40 w-64 bg-graphite-900 border border-graphite-700 rounded-xl shadow-2xl p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100">
+                                  {/* Desfazer Pagamento (se já estiver pago este mês) */}
+                                  {isPago && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenMenuId(null);
+                                        handleDesfazerPagamentoDespesa(item);
+                                      }}
+                                      className="w-full px-3 py-2 rounded-lg text-left text-xs font-medium text-vapor-200 hover:bg-graphite-800 transition-colors flex flex-col gap-0.5"
+                                    >
+                                      <div className="flex items-center gap-1.5 font-semibold text-amber-400">
+                                        <RotateCcw size={13} />
+                                        <span>Desfazer pagamento do mês</span>
+                                      </div>
+                                      <span className="text-[10px] text-vapor-400 leading-tight">
+                                        Marcar conta como em aberto novamente neste mês
+                                      </span>
+                                    </button>
+                                  )}
+
                                   {/* Opção Atualizar valor (no menu caso a ação principal seja Confirmar valor) */}
                                   {isVariavel && !item.confirmado && (
                                     <button
@@ -836,7 +1050,7 @@ export const AbaDespesasFixas: React.FC = () => {
                                     </button>
                                   )}
 
-                                  {/* Editar Dados (Nome e Categoria) */}
+                                  {/* Editar Dados (Nome, Categoria e Dia de Vencimento) */}
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -847,10 +1061,10 @@ export const AbaDespesasFixas: React.FC = () => {
                                   >
                                     <div className="flex items-center gap-1.5 font-semibold text-vapor-200">
                                       <Edit2 size={13} />
-                                      <span>Editar dados</span>
+                                      <span>Editar dados e vencimento</span>
                                     </div>
                                     <span className="text-[10px] text-vapor-400 leading-tight">
-                                      Editar nome ou categoria sem alterar vigência
+                                      Editar nome, categoria ou dia do vencimento
                                     </span>
                                   </button>
 
@@ -914,6 +1128,72 @@ export const AbaDespesasFixas: React.FC = () => {
             );
           })}
         </div>
+      )}
+
+      {/* 5B. DESPESAS PROGRAMADAS (VIGÊNCIA FUTURA) */}
+      {!loading && despesasFuturas.length > 0 && (
+        <Card className="p-4 bg-graphite-900 border-graphite-800 flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-graphite-800 pb-2">
+            <span className="font-bold text-xs uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
+              <Calendar size={14} />
+              Despesas Programadas — Início Futuro ({despesasFuturas.length})
+            </span>
+            <span className="text-[11px] text-vapor-400">
+              Entram automaticamente no custo/hora na data de início
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {despesasFuturas.map((item: DespesaFixa) => {
+              const criadaHoje = item.created_at?.substring(0, 10) === hojeStr;
+              return (
+                <div
+                  key={item.id}
+                  className="p-3.5 rounded-lg bg-graphite-950/70 border border-graphite-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                >
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-vapor-100 truncate">{item.nome}</span>
+                      <Badge tone="glass">{item.tipo}</Badge>
+                      <Badge tone="amber">Inicia em {formatarMesAno(item.vigencia_inicio)}</Badge>
+                    </div>
+                    <div className="text-xs text-vapor-400 flex items-center gap-2 flex-wrap">
+                      <span>{CATEGORIAS_ROTULOS[item.categoria] || item.categoria}</span>
+                      {item.tipo === 'parcelada' && item.total_parcelas && (
+                        <span>
+                          • {item.parcela_inicial || 1}/{item.total_parcelas} parcelas
+                          {item.vigencia_fim ? ` (até ${formatarMesAno(item.vigencia_fim)})` : ''}
+                        </span>
+                      )}
+                      {item.dia_vencimento && <span>• Vence dia {String(item.dia_vencimento).padStart(2, '0')}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-sm font-bold text-vapor-100">
+                      {formatarMoeda(Number(item.valor_mensal))}/mês
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditarCadastral(item)}
+                      className="px-2.5 py-1.5 rounded-lg bg-graphite-800 hover:bg-graphite-700 text-vapor-200 text-xs font-medium border border-graphite-700"
+                    >
+                      Editar
+                    </button>
+                    {criadaHoje && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCorrigir(item)}
+                        className="px-2.5 py-1.5 rounded-lg bg-flare-500/15 hover:bg-flare-500/25 text-flare-300 text-xs font-medium border border-flare-500/30"
+                      >
+                        Corrigir
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
       )}
 
       {/* 6. MODAL DE CONFIRMAÇÃO INDIVIDUAL DE CONTA VARIÁVEL */}
@@ -1065,7 +1345,7 @@ export const AbaDespesasFixas: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-vapor-300">
                     {tipo === 'variavel' ? 'Valor de Referência (R$)' : 'Valor Mensal (R$)'}
@@ -1081,6 +1361,19 @@ export const AbaDespesasFixas: React.FC = () => {
                 </div>
 
                 <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-vapor-300">Dia Vencimento (1–31)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={diaVencimento}
+                    onChange={(e) => setDiaVencimento(e.target.value)}
+                    placeholder="Ex: 10"
+                    className="w-full bg-graphite-800 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-vapor-300">Vigência a partir de</label>
                   <input
                     type="date"
@@ -1091,6 +1384,9 @@ export const AbaDespesasFixas: React.FC = () => {
                   />
                 </div>
               </div>
+              <span className="text-[11px] text-vapor-400 -mt-2">
+                Informar o dia de vencimento (ex: dia 10 para Aluguel) ativa o alerta automático no Radar Financeiro do Dia.
+              </span>
 
               <div className="flex justify-end gap-3 pt-2 border-t border-graphite-800">
                 <Button type="button" variant="secondary" onClick={() => setIsModalOpen(false)}>
@@ -1121,7 +1417,7 @@ export const AbaDespesasFixas: React.FC = () => {
             )}
 
             <div className="p-3 bg-graphite-950 border border-graphite-800 rounded text-xs text-vapor-400">
-              Nome e categoria podem ser alterados a qualquer momento sem afetar o histórico financeiro da oficina.
+              Nome, categoria e dia de vencimento podem ser alterados a qualquer momento sem afetar o histórico financeiro da oficina.
             </div>
 
             <form onSubmit={handleSaveEditarCadastral} className="flex flex-col gap-4">
@@ -1136,20 +1432,35 @@ export const AbaDespesasFixas: React.FC = () => {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-vapor-300">Categoria</label>
-                <select
-                  value={categoria}
-                  onChange={(e) => setCategoria(e.target.value as CategoriaDespesa)}
-                  className="w-full bg-graphite-800 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm outline-none focus:border-amber-500"
-                >
-                  <option value="Instalacao">Instalação & Estrutura</option>
-                  <option value="Pessoal">Pessoal & Equipe</option>
-                  <option value="Servicos">Serviços & Sistemas</option>
-                  <option value="Impostos">Impostos & Taxas</option>
-                  <option value="Outros">Outros Custos</option>
-                  <option value="Geral">Geral</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-vapor-300">Categoria</label>
+                  <select
+                    value={categoria}
+                    onChange={(e) => setCategoria(e.target.value as CategoriaDespesa)}
+                    className="w-full bg-graphite-800 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm outline-none focus:border-amber-500"
+                  >
+                    <option value="Instalacao">Instalação & Estrutura</option>
+                    <option value="Pessoal">Pessoal & Equipe</option>
+                    <option value="Servicos">Serviços & Sistemas</option>
+                    <option value="Impostos">Impostos & Taxas</option>
+                    <option value="Outros">Outros Custos</option>
+                    <option value="Geral">Geral</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-vapor-300">Dia de Vencimento (1–31)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={diaVencimento}
+                    onChange={(e) => setDiaVencimento(e.target.value)}
+                    placeholder="Opcional (ex: 10)"
+                    className="w-full bg-graphite-800 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-2 border-t border-graphite-800">
@@ -1301,7 +1612,7 @@ export const AbaDespesasFixas: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-vapor-300">Valor Mensal (R$)</label>
                   <input
@@ -1309,6 +1620,19 @@ export const AbaDespesasFixas: React.FC = () => {
                     value={valorMensal}
                     onChange={(e) => setValorMensal(e.target.value)}
                     required
+                    className="w-full bg-graphite-800 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-vapor-300">Dia Vencimento (1–31)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={diaVencimento}
+                    onChange={(e) => setDiaVencimento(e.target.value)}
+                    placeholder="Opcional"
                     className="w-full bg-graphite-800 border border-graphite-700 rounded-lg px-3 py-2 text-vapor-100 text-sm font-mono outline-none focus:border-amber-500"
                   />
                 </div>

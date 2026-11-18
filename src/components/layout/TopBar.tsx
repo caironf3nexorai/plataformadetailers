@@ -22,6 +22,7 @@ const routeNames: Record<string, string> = {
   '/estoque': 'Estoque',
   '/financeiro': 'Financeiro',
   '/financeiro/contas-a-receber': 'Contas a Receber',
+  '/financeiro/despesas': 'Contas & Despesas',
   '/financeiro/taxas': 'Formas & Taxas',
   '/treinamentos': 'Academia Detailer',
   '/treinamento': 'Academia Detailer',

@@ -7,10 +7,9 @@ import { Card } from '../../components/ui/Card';
 import { ShieldAlert } from 'lucide-react';
 
 export const DespesasFinanceiro: React.FC = () => {
-  const { isDono, isGerente } = usePermissao();
-  const podeAcessar = isDono || isGerente;
+  const { podeGerenciarDespesas } = usePermissao();
 
-  if (!podeAcessar) {
+  if (!podeGerenciarDespesas) {
     return (
       <div className="flex flex-col gap-6 pb-12">
         <PageHeader
@@ -21,7 +20,7 @@ export const DespesasFinanceiro: React.FC = () => {
           <ShieldAlert className="text-amber-500 w-12 h-12" />
           <h3 className="font-display text-lg text-vapor-100">Acesso Restrito</h3>
           <p className="text-sm text-vapor-400 max-w-md">
-            Apenas proprietários e administradores têm acesso ao gerenciamento de custos, contas a pagar e despesas da oficina.
+            O acesso às Contas a Pagar e Despesas Fixas é restrito ao proprietário ou a gerentes autorizados em <strong className="text-vapor-200">Minha Oficina &gt; Equipe</strong>.
           </p>
         </Card>
       </div>

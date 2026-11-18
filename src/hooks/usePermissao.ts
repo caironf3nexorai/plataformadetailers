@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
+import { podeUsuarioGerenciarDespesas } from '../utils/financeiroUtils';
 
 export const usePermissao = () => {
   const { membership } = useAuth();
@@ -7,12 +8,14 @@ export const usePermissao = () => {
   const isDono = role === 'dono';
   const isGerente = role === 'gerente';
   const isOperador = role === 'operador';
+  const podeGerenciarDespesas = podeUsuarioGerenciarDespesas(role, membership?.pode_gerenciar_despesas);
 
   return {
     role,
     isDono,
     isGerente,
     isOperador,
+    podeGerenciarDespesas,
 
     podeVerValor: () => isDono || isGerente,
     podeVerCusto: () => isDono || isGerente,

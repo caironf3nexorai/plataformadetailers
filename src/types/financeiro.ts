@@ -12,6 +12,7 @@ export interface DespesaFixa {
   valor_mensal: number;
   vigencia_inicio: string;
   vigencia_fim?: string | null;
+  dia_vencimento?: number | null;
   confirmado?: boolean;
   confirmado_em?: string | null;
   confirmado_por?: string | null;
@@ -19,6 +20,19 @@ export interface DespesaFixa {
   criado_por: string;
   created_at: string;
 }
+
+export interface DespesaFixaPagamento {
+  id: string;
+  tenant_id: string;
+  despesa_id: string;
+  competencia_mes: string;
+  valor_pago: number;
+  pago_em: string;
+  pago_por?: string | null;
+  observacao?: string | null;
+}
+
+export type StatusPagamentoDespesa = 'pago' | 'atrasada' | 'vence_hoje' | 'vence_em_breve' | 'pendente';
 
 export interface ResumoFinanceiroComparativo {
   ant_faturamento: number;

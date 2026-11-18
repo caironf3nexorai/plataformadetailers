@@ -75,7 +75,7 @@ export const BannerPromocaoAtiva: React.FC<BannerPromocaoAtivaProps> = ({ assina
 
       <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
         <button
-          onClick={() => navigate('/configuracoes/assinatura')}
+          onClick={() => navigate('/configuracoes?aba=plano')}
           className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition"
         >
           <span>Ver Assinatura</span>
