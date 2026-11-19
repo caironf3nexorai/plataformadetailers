@@ -123,12 +123,14 @@ export async function verificarSeAdmin(userId?: string | null): Promise<boolean>
   try {
     const { data, error } = await supabase.rpc('is_platform_admin');
     if (error) {
+      console.warn('[ActivityTracker] Erro ao consultar is_platform_admin:', error.message);
       return false;
     }
     const isAdmin = !!data;
     adminCacheByUserId.set(targetUid, { isAdmin, timestamp: agora });
     return isAdmin;
-  } catch {
+  } catch (err) {
+    console.warn('[ActivityTracker] Exceção em is_platform_admin:', err);
     return false;
   }
 }
@@ -188,9 +190,12 @@ export async function registrarVisualizacaoPagina(
     const sessionUid = session?.user?.id;
     if (sessionUid) {
       uid = sessionUid;
+    } else if (!uid) {
+      console.warn('[ActivityTracker] Page_view ignorada: sessão Supabase ausente.');
+      return;
     }
   } catch {
-    // mantém fallback do userId recebido
+    // fallback para uid recebido
   }
 
   if (!uid) return;
@@ -198,6 +203,7 @@ export async function registrarVisualizacaoPagina(
   // Verifica se o usuário é administrador (não polui logs com suporte/testes)
   const isAdmin = await verificarSeAdmin(uid);
   if (isAdmin) {
+    console.log('[ActivityTracker] Ignorado: usuário é platform admin:', uid);
     return;
   }
 
@@ -212,7 +218,6 @@ export async function registrarVisualizacaoPagina(
 
   const label = traduzirRotaParaRotulo(pathname);
 
-  // Gravação silenciosa (Fire & Forget)
   try {
     const { error } = await supabase
       .from('user_activity_logs')
@@ -224,18 +229,15 @@ export async function registrarVisualizacaoPagina(
       });
 
     if (error) {
-      if (import.meta.env.DEV) {
-        console.warn('[ActivityTracker] Falha ao registrar page_view:', error.message);
-      }
+      console.error('[ActivityTracker] Erro ao registrar page_view em user_activity_logs:', error.message, error);
       return;
     }
 
+    console.log(`[ActivityTracker] PageView registrado: ${label} (${pathname})`);
     // Só atualiza o timestamp se o insert teve sucesso
     routeAccessCache.set(cacheKey, agora);
   } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn('[ActivityTracker] Exceção ao registrar page_view:', err);
-    }
+    console.error('[ActivityTracker] Exceção ao registrar page_view:', err);
   }
 }
 
@@ -256,15 +258,19 @@ export async function registrarAcaoUsuario(
     const sessionUid = session?.user?.id;
     if (sessionUid) {
       uid = sessionUid;
+    } else if (!uid) {
+      console.warn('[ActivityTracker] Ação ignorada: sessão Supabase ausente.');
+      return;
     }
   } catch {
-    // mantém fallback do userId recebido
+    // fallback para uid recebido
   }
 
   if (!uid) return;
 
   const isAdmin = await verificarSeAdmin(uid);
   if (isAdmin) {
+    console.log('[ActivityTracker] Ignorado ação: usuário é platform admin:', uid);
     return;
   }
 
@@ -277,7 +283,6 @@ export async function registrarAcaoUsuario(
     return;
   }
 
-  // Gravação silenciosa (Fire & Forget)
   try {
     const { error } = await supabase
       .from('user_activity_logs')
@@ -289,16 +294,13 @@ export async function registrarAcaoUsuario(
       });
 
     if (error) {
-      if (import.meta.env.DEV) {
-        console.warn('[ActivityTracker] Falha ao registrar action:', error.message);
-      }
+      console.error('[ActivityTracker] Erro ao registrar ação em user_activity_logs:', error.message, error);
       return;
     }
 
+    console.log(`[ActivityTracker] Ação registrada: ${label}`);
     actionAccessCache.set(cacheKey, agora);
   } catch (err) {
-    if (import.meta.env.DEV) {
-      console.warn('[ActivityTracker] Exceção ao registrar action:', err);
-    }
+    console.error('[ActivityTracker] Exceção ao registrar ação:', err);
   }
 }

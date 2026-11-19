@@ -268,6 +268,44 @@ export const AdminOficinas: React.FC = () => {
     carregarRadar();
   }, [carregarRadar]);
 
+  // Atualização em Tempo Real (Supabase Realtime) no Radar e Timeline ao vivo
+  useEffect(() => {
+    const canal = supabase
+      .channel('radar_user_activity_realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'user_activity_logs',
+        },
+        async () => {
+          // 1. Atualiza lista do radar e cards de métricas em segundo plano
+          carregarRadar();
+
+          // 2. Se houver uma oficina com a timeline aberta, atualiza a timeline automaticamente
+          if (selectedConta) {
+            try {
+              const { data: logsData, error: logsError } = await supabase.rpc('admin_obter_timeline_usuario', {
+                p_tenant_id: selectedConta.tenant_id,
+                p_limite: 50,
+              });
+              if (!logsError && logsData) {
+                setTimelineLogs(logsData);
+              }
+            } catch (err) {
+              console.warn('[AdminRadar] Erro ao sincronizar timeline realtime:', err);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(canal);
+    };
+  }, [carregarRadar, selectedConta]);
+
   // Carrega Timeline e Detalhes da Conta Selecionada
   const handleAbrirDrawer = async (conta: ContaRadarItem) => {
     setSelectedConta(conta);
