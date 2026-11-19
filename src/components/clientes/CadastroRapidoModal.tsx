@@ -10,6 +10,7 @@ import { formatTelefone, formatPlaca } from '../../utils/formatters';
 import { AlertTriangle, Car, Check, UserCheck, FileText, Calendar } from 'lucide-react';
 import { AlertaErro } from '../ui/AlertaErro';
 import { ModalLimiteAtingido } from '../planos/ModalLimiteAtingido';
+import { registrarAcaoUsuario } from '../../services/activityTracker';
 import { usePlano } from '../../hooks/usePlano';
 
 export type ProximaAcaoPosCadastro = 'nenhuma' | 'orcamento' | 'agendamento';
@@ -232,6 +233,7 @@ export const CadastroRapidoModal: React.FC<CadastroRapidoModalProps> = ({
         }
 
         onSuccess(cId, vId);
+        registrarAcaoUsuario('Cadastrou Cliente');
 
         if (proximaAcao === 'orcamento' && cId) {
           const { data: newOrcId, error: orcErr } = await supabase.rpc('criar_orcamento', {

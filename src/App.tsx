@@ -6,6 +6,7 @@ import { NotificacoesProvider } from './contexts/NotificacoesContext';
 import { RotaProtegida } from './components/auth/RotaProtegida';
 import { AppShell } from './components/layout/AppShell';
 import { AnalyticsTracker } from './components/analytics/AnalyticsTracker';
+import { ActivityTracker } from './components/analytics/ActivityTracker';
 import { lazyWithRetry } from './utils/lazyWithRetry';
 
 // Páginas Públicas (Carregamento Assíncrono sob Demanda)
@@ -101,6 +102,7 @@ function App() {
       <ToastProvider>
         <NotificacoesProvider>
           <AnalyticsTracker />
+          <ActivityTracker />
           <GlobalErrorBoundary>
             <Suspense fallback={<PaginaCarregando />}>
               <Routes>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -7,60 +7,86 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAdminAuth } from '../../components/admin/AdminGuard';
 import { 
   Search, 
-  Filter, 
   Building2, 
   Users, 
   Clock, 
   AlertTriangle,
   X,
-  Eye,
   Activity,
   Edit2,
-  Shield,
   LogIn,
-  Award,
-  Trash2,
   UserX,
   UserCheck,
-  Save,
   MessageCircle,
   Gift,
+  Car,
+  ChevronRight,
+  ChevronLeft,
+  History,
+  Check,
+  Sliders
 } from 'lucide-react';
 import { formatTelefone, cleanTelefone } from '../../utils/formatters';
 import {
   CORTESIA_DURACAO_OPCOES,
   calcularDataFimCortesiaISO,
   formatarDataSegura,
-  obterResumoStatusAssinatura,
 } from '../../utils/assinatura';
 
-interface TenantItem {
-  id: string;
-  nome: string;
+export interface ContaRadarItem {
+  tenant_id: string;
+  nome_estetica: string;
   slug: string;
   plano: 'free' | 'pro' | 'studio';
   cidade: string | null;
   uf: string | null;
-  telefone?: string | null;
-  created_at: string;
-  nome_alterado_em?: string | null;
-  total_membros: number;
-  total_clientes: number;
-  total_veiculos: number;
+  dono_id: string | null;
+  nome_dono: string;
+  telefone_dono: string | null;
+  email_dono: string | null;
+  data_cadastro: string;
+  ultimo_acesso: string | null;
+  ultima_acao_label: string | null;
+  ultima_acao_em: string | null;
+  assinatura_status: string;
+  trial_fim: string | null;
+  dias_trial_restantes: number;
+  total_clientes_reais: number;
+  total_servicos: number;
+  total_servicos_customizados: number;
   total_agendamentos: number;
   total_execucoes: number;
-  ultimo_acesso: string | null;
-  agendamento_online_ativo: boolean;
-  assinatura_status?: string | null;
-  is_cortesia?: boolean;
-  cortesia_ate?: string | null;
-  trial_fim?: string | null;
-  proximo_vencimento?: string | null;
-  asaas_subscription_id?: string | null;
+  total_vistorias: number;
+  total_veiculos: number;
+  score: 'operando' | 'configurando' | 'so_cadastro';
 }
 
-interface TenantDetail {
-  tenant: TenantItem;
+export interface RadarResumo {
+  total_contas: number;
+  total_ativos_hoje: number;
+  total_operando: number;
+  total_trial_vencendo: number;
+}
+
+export interface RadarPaginacao {
+  pagina_atual: number;
+  limite: number;
+  total_filtrados: number;
+  total_paginas: number;
+}
+
+export interface UserActivityLogItem {
+  id: string;
+  user_id: string;
+  user_nome: string;
+  user_email: string;
+  event_type: 'page_view' | 'action';
+  route: string | null;
+  label: string;
+  created_at: string;
+}
+
+interface TenantDetailLegacy {
   membros: Array<{
     id: string;
     user_id?: string;
@@ -84,6 +110,30 @@ interface TenantDetail {
   }>;
 }
 
+function formatarTempoRelativo(isoString?: string | null): string {
+  if (!isoString) return 'Nunca acessou';
+  const data = new Date(isoString);
+  const agora = new Date();
+  const diffSegundos = Math.floor((agora.getTime() - data.getTime()) / 1000);
+
+  if (diffSegundos < 60) return 'agora mesmo';
+  if (diffSegundos < 3600) return `há ${Math.floor(diffSegundos / 60)} min`;
+  if (diffSegundos < 86400) return `há ${Math.floor(diffSegundos / 3600)}h`;
+  if (diffSegundos < 172800) return 'ontem';
+  const dias = Math.floor(diffSegundos / 86400);
+  if (dias < 30) return `há ${dias} dias`;
+  return formatarDataSegura(isoString);
+}
+
+function obterLinkWhatsApp(telefone?: string | null, nomeOficina?: string): string | null {
+  if (!telefone) return null;
+  const limpo = cleanTelefone(telefone);
+  if (!limpo || limpo.length < 8) return null;
+  const ddi = limpo.startsWith('55') ? limpo : `55${limpo}`;
+  const texto = encodeURIComponent(`Olá! Aqui é da equipe da Plataforma Detailers. Como estão os testes na ${nomeOficina || 'sua oficina'}?`);
+  return `https://wa.me/${ddi}?text=${texto}`;
+}
+
 export const AdminOficinas: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const navigate = useNavigate();
@@ -91,24 +141,37 @@ export const AdminOficinas: React.FC = () => {
   const { adminLevel } = useAdminAuth();
   const isReadOnly = adminLevel === 'suporte';
 
-  const handleAcessarOficina = (id: string) => {
-    trocarTenant(id);
-    navigate('/');
-  };
+  // Estados do Radar
+  const [contas, setContas] = useState<ContaRadarItem[]>([]);
+  const [resumo, setResumo] = useState<RadarResumo>({
+    total_contas: 0,
+    total_ativos_hoje: 0,
+    total_operando: 0,
+    total_trial_vencendo: 0,
+  });
+  const [paginacao, setPaginacao] = useState<RadarPaginacao>({
+    pagina_atual: 1,
+    limite: 20,
+    total_filtrados: 0,
+    total_paginas: 1,
+  });
 
-  const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
-  const [planoFiltro, setPlanoFiltro] = useState<string>('');
-  const [ordenacao, setOrdenacao] = useState<'created_at' | 'ultimo_acesso'>('created_at');
-  
-  // Drawer / Modal detail state
-  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailData, setDetailData] = useState<TenantDetail | null>(null);
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [buscaDebounced, setBuscaDebounced] = useState('');
+  const [scoreFiltro, setScoreFiltro] = useState<'todos' | 'operando' | 'configurando' | 'so_cadastro'>('todos');
+  const [paginaAtual, setPaginaAtual] = useState(1);
 
-  // Estado para Modal de Alteração Manual de Plano
+  // Estados do Drawer e Detalhes
+  const [selectedConta, setSelectedConta] = useState<ContaRadarItem | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'timeline' | 'membros' | 'geral'>('timeline');
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [timelineLogs, setTimelineLogs] = useState<UserActivityLogItem[]>([]);
+  const [legacyDetail, setLegacyDetail] = useState<TenantDetailLegacy | null>(null);
+  const [estendendoTrial, setEstendendoTrial] = useState(false);
+
+  // Modais Administrativos
   const [modalPlanoOpen, setModalPlanoOpen] = useState(false);
   const [targetTenant, setTargetTenant] = useState<{
     id: string;
@@ -118,30 +181,11 @@ export const AdminOficinas: React.FC = () => {
   } | null>(null);
   const [novoPlano, setNovoPlano] = useState<'free' | 'pro' | 'studio'>('pro');
   const [isCortesiaAdmin, setIsCortesiaAdmin] = useState(true);
-  const [duracaoCortesiaOpcao, setDuracaoCortesiaOpcao] = useState<string>('30d');
-  const [diasCustomCortesia, setDiasCustomCortesia] = useState<string>('30');
-  const [motivoAudit, setMotivoAudit] = useState('');
-  const [salvandoPlano, setSalvandoPlano] = useState(false);
-  const [planosCadastrados, setPlanosCadastrados] = useState<{ codigo: string; nome: string; preco_centavos: number }[]>([]);
+  const [duracaoCortesiaId, setDuracaoCortesiaId] = useState<string>('30d');
+  const [motivoCortesia, setMotivoCortesia] = useState('');
+  const [savingPlano, setSavingPlano] = useState(false);
 
-  // Estados para Gestão de Membros (Promover Admin / Tornar Parceiro)
-  const [platformAdminsEmails, setPlatformAdminsEmails] = useState<string[]>([]);
-  const [parceirosEmails, setParceirosEmails] = useState<Map<string, string>>(new Map());
-
-  const [modalAdminTarget, setModalAdminTarget] = useState<{ nome: string; email: string } | null>(null);
-  const [adminNivel, setAdminNivel] = useState<'admin' | 'suporte'>('admin');
-  const [adminObservacao, setAdminObservacao] = useState('');
-  const [salvandoAdmin, setSalvandoAdmin] = useState(false);
-
-  const [modalParceiroTarget, setModalParceiroTarget] = useState<{ nome: string; email: string; user_id?: string } | null>(null);
-  const [parceiroCodigo, setParceiroCodigo] = useState('');
-  const [parceiroComissaoTipo, setParceiroComissaoTipo] = useState<'percentual' | 'valor_fixo'>('percentual');
-  const [parceiroComissaoValor, setParceiroComissaoValor] = useState('20');
-  const [parceiroRecorrente, setParceiroRecorrente] = useState(true);
-  const [parceiroPixChave, setParceiroPixChave] = useState('');
-  const [salvandoParceiro, setSalvandoParceiro] = useState(false);
-
-  // Estados para Modal de Alteração de Nome da Oficina
+  // Modal Nome Oficina
   const [modalEditarOficina, setModalEditarOficina] = useState<{
     id: string;
     nome: string;
@@ -149,592 +193,437 @@ export const AdminOficinas: React.FC = () => {
     nome_alterado_em?: string | null;
   } | null>(null);
   const [novoNomeOficina, setNovoNomeOficina] = useState('');
-  const [ignorarCooldownOficina, setIgnorarCooldownOficina] = useState(false);
+  const [novoSlugOficina, setNovoSlugOficina] = useState('');
   const [salvandoNomeOficina, setSalvandoNomeOficina] = useState(false);
 
-  const calcularSlugPreview = (nome: string, currentSlug: string) => {
-    const limpo = (nome || '').toLowerCase().trim();
-    if (!limpo) return '—';
-    const base = limpo
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'oficina';
-    const suffixMatch = currentSlug ? currentSlug.match(/-[a-f0-9]{6}$/) : null;
-    return suffixMatch ? `${base}${suffixMatch[0]}` : `${base}-xxxxxx`;
-  };
-
-  const handleAbrirModalEditarOficina = (
-    id: string,
-    nome: string,
-    slug: string,
-    nome_alterado_em?: string | null
-  ) => {
-    setModalEditarOficina({ id, nome, slug, nome_alterado_em });
-    setNovoNomeOficina(nome || '');
-    setIgnorarCooldownOficina(false);
-  };
-
-  const handleSalvarNomeOficina = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!modalEditarOficina) return;
-    const nomeLimpo = novoNomeOficina.trim();
-    if (!nomeLimpo || nomeLimpo.length < 2) {
-      showError('O nome da oficina deve ter pelo menos 2 caracteres.');
-      return;
-    }
-
-    setSalvandoNomeOficina(true);
-    try {
-      const { data, error } = await supabase.rpc('admin_atualizar_nome_oficina', {
-        p_tenant_id: modalEditarOficina.id,
-        p_novo_nome: nomeLimpo,
-        p_ignorar_cooldown: ignorarCooldownOficina,
-      });
-
-      if (error) throw error;
-
-      const novoSlug = data?.slug || modalEditarOficina.slug;
-      const novaDataAlteracao = data?.nome_alterado_em || new Date().toISOString();
-
-      showSuccess(`Nome alterado para "${nomeLimpo}" e endereço atualizado para "/${novoSlug}" com sucesso!`);
-
-      // Atualizar lista de oficinas na memória
-      setTenants((prev) =>
-        prev.map((t) =>
-          t.id === modalEditarOficina.id
-            ? {
-                ...t,
-                nome: nomeLimpo,
-                slug: novoSlug,
-                nome_alterado_em: novaDataAlteracao,
-              }
-            : t
-        )
-      );
-
-      // Se estiver com o modal de detalhes aberto para essa oficina, atualizar no detalhe também
-      if (detailData && detailData.tenant.id === modalEditarOficina.id) {
-        setDetailData({
-          ...detailData,
-          tenant: {
-            ...detailData.tenant,
-            nome: nomeLimpo,
-            slug: novoSlug,
-            nome_alterado_em: novaDataAlteracao,
-          },
-        });
-      }
-
-      setModalEditarOficina(null);
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao alterar nome da oficina:', err);
-      showError(err.message || 'Erro ao alterar nome da oficina');
-    } finally {
-      setSalvandoNomeOficina(false);
-    }
-  };
-
-  // Estados para Modal de Edição de Nome / Dados do Usuário
+  // Modal Editar Usuário
   const [modalEditarUsuario, setModalEditarUsuario] = useState<{
     user_id?: string;
     email: string;
     nome: string;
     telefone?: string | null;
   } | null>(null);
-  const [editNome, setEditNome] = useState('');
-  const [editTelefone, setEditTelefone] = useState('');
+  const [novoNomeUsuario, setNovoNomeUsuario] = useState('');
+  const [novoTelefoneUsuario, setNovoTelefoneUsuario] = useState('');
   const [salvandoUsuario, setSalvandoUsuario] = useState(false);
 
-  const handleAbrirModalEditarUsuario = (m: { user_id?: string; email: string; nome: string; telefone?: string | null }) => {
-    setModalEditarUsuario(m);
-    setEditNome(m.nome || '');
-    setEditTelefone(m.telefone || '');
-  };
+  // Modal Exclusão
+  const [modalExcluirOpen, setModalExcluirOpen] = useState(false);
+  const [tenantParaExcluir, setTenantParaExcluir] = useState<{ id: string; nome: string; slug: string } | null>(null);
+  const [confirmacaoNomeExclusao, setConfirmacaoNomeExclusao] = useState('');
+  const [purgarAuthNaExclusao, setPurgarAuthNaExclusao] = useState(true);
+  const [excluindoTenant, setExcluindoTenant] = useState(false);
 
-  const handleSalvarEdicaoUsuario = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!modalEditarUsuario) return;
-    if (!editNome.trim() || editNome.trim().length < 2) {
-      showError('O nome deve ter pelo menos 2 caracteres.');
-      return;
-    }
+  // Modal Purgar E-mail
+  const [modalPurgarEmailOpen, setModalPurgarEmailOpen] = useState(false);
+  const [emailParaPurgar, setEmailParaPurgar] = useState('');
+  const [purgandoEmail, setPurgandoEmail] = useState(false);
 
-    setSalvandoUsuario(true);
+  // Debounce na barra de busca (400ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setBuscaDebounced(busca);
+      setPaginaAtual(1);
+    }, 400);
+    return () => clearTimeout(handler);
+  }, [busca]);
+
+  // Carrega Radar de Ativação
+  const carregarRadar = useCallback(async () => {
+    setLoading(true);
     try {
-      let targetUserId = modalEditarUsuario.user_id;
-
-      if (!targetUserId) {
-        const { data: memberData } = await supabase
-          .from('tenant_members')
-          .select('user_id')
-          .eq('email', modalEditarUsuario.email.toLowerCase().trim())
-          .not('user_id', 'is', null)
-          .limit(1)
-          .maybeSingle();
-
-        targetUserId = memberData?.user_id;
-      }
-
-      if (!targetUserId) {
-        showError('Este membro ainda não concluiu o cadastro inicial (convite pendente).');
-        setSalvandoUsuario(false);
-        return;
-      }
-
-      const { error } = await supabase.rpc('admin_atualizar_usuario_perfil', {
-        p_user_id: targetUserId,
-        p_nome: editNome.trim(),
-        p_telefone: editTelefone.trim() || null,
+      const { data, error } = await supabase.rpc('admin_obter_radar_ativacao', {
+        p_pagina: paginaAtual,
+        p_limite: 20,
+        p_busca: buscaDebounced.trim() || null,
+        p_score: scoreFiltro !== 'todos' ? scoreFiltro : null,
       });
 
       if (error) throw error;
 
-      showSuccess(`Nome do usuário atualizado para "${editNome.trim()}" com sucesso!`);
-      
+      if (data) {
+        setResumo(data.resumo || {
+          total_contas: 0,
+          total_ativos_hoje: 0,
+          total_operando: 0,
+          total_trial_vencendo: 0,
+        });
+        setPaginacao(data.paginacao || {
+          pagina_atual: 1,
+          limite: 20,
+          total_filtrados: 0,
+          total_paginas: 1,
+        });
+        setContas(data.contas || []);
+      }
+    } catch (err: any) {
+      console.error('[AdminRadar] Erro ao carregar radar:', err);
+      showError(err.message || 'Erro ao carregar dados do Radar de Ativação.');
+    } finally {
+      setLoading(false);
+    }
+  }, [paginaAtual, buscaDebounced, scoreFiltro, showError]);
+
+  useEffect(() => {
+    carregarRadar();
+  }, [carregarRadar]);
+
+  // Carrega Timeline e Detalhes da Conta Selecionada
+  const handleAbrirDrawer = async (conta: ContaRadarItem) => {
+    setSelectedConta(conta);
+    setDrawerOpen(true);
+    setDrawerTab('timeline');
+    setLoadingTimeline(true);
+
+    try {
+      // 1. Busca timeline cronológica
+      const { data: logsData, error: logsError } = await supabase.rpc('admin_obter_timeline_usuario', {
+        p_tenant_id: conta.tenant_id,
+        p_limite: 50,
+      });
+
+      if (!logsError && logsData) {
+        setTimelineLogs(logsData);
+      } else {
+        setTimelineLogs([]);
+      }
+
+      // 2. Busca dados de apoio (membros legados e storage)
+      const { data: detailData } = await supabase.rpc('admin_detalhe_tenant', {
+        p_tenant_id: conta.tenant_id,
+      });
+
       if (detailData) {
-        setDetailData({
-          ...detailData,
-          membros: detailData.membros.map((mb) =>
-            mb.email.toLowerCase() === modalEditarUsuario.email.toLowerCase()
-              ? { ...mb, nome: editNome.trim(), telefone: editTelefone.trim() || null }
-              : mb
-          ),
+        setLegacyDetail(detailData);
+      }
+    } catch (err) {
+      console.error('[AdminRadar] Erro ao carregar timeline:', err);
+      setTimelineLogs([]);
+    } finally {
+      setLoadingTimeline(false);
+    }
+  };
+
+  // Estender Trial em +15 dias com um clique
+  const handleEstenderTrial = async (tenantId: string) => {
+    if (isReadOnly) {
+      showError('Apenas administradores editores podem estender trial.');
+      return;
+    }
+
+    setEstendendoTrial(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_estender_trial', {
+        p_tenant_id: tenantId,
+        p_dias: 15,
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Trial estendido em +15 dias com sucesso! Novo vencimento: ${formatarDataSegura(data.novo_trial_fim)}`);
+
+      // Atualiza estado local da conta selecionada
+      if (selectedConta && selectedConta.tenant_id === tenantId) {
+        setSelectedConta({
+          ...selectedConta,
+          trial_fim: data.novo_trial_fim,
+          dias_trial_restantes: data.dias_restantes,
+          assinatura_status: 'trial',
         });
       }
 
-      setModalEditarUsuario(null);
+      // Atualiza na listagem
+      setContas(prev => prev.map(c => {
+        if (c.tenant_id === tenantId) {
+          return {
+            ...c,
+            trial_fim: data.novo_trial_fim,
+            dias_trial_restantes: data.dias_restantes,
+            assinatura_status: 'trial',
+          };
+        }
+        return c;
+      }));
+
+      // Recarrega radar para métricas atualizadas
+      carregarRadar();
     } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao atualizar perfil do usuário:', err);
-      showError('Erro ao atualizar usuário', err);
+      console.error('[AdminRadar] Erro ao estender trial:', err);
+      showError(err.message || 'Erro ao estender o período de testes.');
+    } finally {
+      setEstendendoTrial(false);
+    }
+  };
+
+  const handleAcessarOficina = (id: string) => {
+    trocarTenant(id);
+    navigate('/');
+  };
+
+  // Handlers Administrativos Legados
+  const handleAbrirModalPlano = (id: string, nome: string, plano: string, asaasSubId?: string | null) => {
+    setTargetTenant({ id, nome, planoAtual: plano, asaasSubId });
+    setNovoPlano(plano as any);
+    setIsCortesiaAdmin(true);
+    setDuracaoCortesiaId('30d');
+    setMotivoCortesia('');
+    setModalPlanoOpen(true);
+  };
+
+  const handleAlterarPlanoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetTenant || isReadOnly) return;
+    setSavingPlano(true);
+
+    try {
+      let dataFimIso: string | null = null;
+      const opcaoCortesia = CORTESIA_DURACAO_OPCOES.find(o => o.id === duracaoCortesiaId);
+      if (isCortesiaAdmin && novoPlano !== 'free') {
+        dataFimIso = calcularDataFimCortesiaISO(opcaoCortesia?.dias);
+      }
+
+      const { error } = await supabase.rpc('admin_alterar_plano_manual', {
+        p_tenant_id: targetTenant.id,
+        p_novo_plano: novoPlano,
+        p_is_cortesia: isCortesiaAdmin && novoPlano !== 'free',
+        p_cortesia_ate: dataFimIso,
+        p_motivo: motivoCortesia.trim() || (isCortesiaAdmin ? `Cortesia concedida (${opcaoCortesia?.label || '30 dias'})` : 'Ajuste administrativo'),
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Plano de "${targetTenant.nome}" atualizado com sucesso!`);
+      setModalPlanoOpen(false);
+      carregarRadar();
+      if (selectedConta) {
+        handleAbrirDrawer(selectedConta);
+      }
+    } catch (err: any) {
+      showError(err.message || 'Erro ao alterar plano.');
+    } finally {
+      setSavingPlano(false);
+    }
+  };
+
+  const handleAbrirModalExcluir = (id: string, nome: string, slug: string) => {
+    setTenantParaExcluir({ id, nome, slug });
+    setConfirmacaoNomeExclusao('');
+    setPurgarAuthNaExclusao(true);
+    setModalExcluirOpen(true);
+  };
+
+  const handleConfirmarExcluir = async () => {
+    if (!tenantParaExcluir || isReadOnly) return;
+    if (confirmacaoNomeExclusao.trim() !== tenantParaExcluir.nome.trim()) {
+      showError('O nome digitado não coincide com o nome da oficina.');
+      return;
+    }
+
+    setExcluindoTenant(true);
+    try {
+      const { error } = await supabase.rpc('admin_excluir_oficina_e_usuario', {
+        p_tenant_id: tenantParaExcluir.id,
+        p_purga_auth: purgarAuthNaExclusao,
+      });
+
+      if (error) throw error;
+
+      showSuccess(`Oficina "${tenantParaExcluir.nome}" excluída com sucesso.`);
+      setModalExcluirOpen(false);
+      setDrawerOpen(false);
+      setSelectedConta(null);
+      carregarRadar();
+    } catch (err: any) {
+      showError(err.message || 'Erro ao excluir oficina.');
+    } finally {
+      setExcluindoTenant(false);
+    }
+  };
+
+  const handleAbrirModalEditarOficina = (id: string, nome: string, slug: string, alteradoEm?: string | null) => {
+    setModalEditarOficina({ id, nome, slug, nome_alterado_em: alteradoEm });
+    setNovoNomeOficina(nome);
+    setNovoSlugOficina(slug);
+  };
+
+  const handleSalvarNomeOficina = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalEditarOficina || isReadOnly) return;
+    setSalvandoNomeOficina(true);
+
+    try {
+      const { error } = await supabase.rpc('admin_atualizar_nome_oficina', {
+        p_tenant_id: modalEditarOficina.id,
+        p_novo_nome: novoNomeOficina.trim(),
+        p_novo_slug: novoSlugOficina.trim() || null,
+      });
+
+      if (error) throw error;
+
+      showSuccess('Nome da oficina atualizado com sucesso.');
+      setModalEditarOficina(null);
+      carregarRadar();
+      if (selectedConta) {
+        setSelectedConta({
+          ...selectedConta,
+          nome_estetica: novoNomeOficina.trim(),
+          slug: novoSlugOficina.trim() || selectedConta.slug,
+        });
+      }
+    } catch (err: any) {
+      showError(err.message || 'Erro ao atualizar nome da oficina.');
+    } finally {
+      setSalvandoNomeOficina(false);
+    }
+  };
+
+  const handleAbrirModalEditarUsuario = (m: { user_id?: string; email: string; nome: string; telefone?: string | null }) => {
+    setModalEditarUsuario(m);
+    setNovoNomeUsuario(m.nome || '');
+    setNovoTelefoneUsuario(m.telefone || '');
+  };
+
+  const handleSalvarEditarUsuario = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalEditarUsuario || isReadOnly) return;
+    setSalvandoUsuario(true);
+
+    try {
+      const { error } = await supabase.rpc('admin_atualizar_usuario_perfil', {
+        p_target_email: modalEditarUsuario.email,
+        p_target_user_id: modalEditarUsuario.user_id || null,
+        p_novo_nome: novoNomeUsuario.trim(),
+        p_novo_telefone: novoTelefoneUsuario.trim() || null,
+      });
+
+      if (error) throw error;
+
+      showSuccess('Perfil do usuário atualizado com sucesso.');
+      setModalEditarUsuario(null);
+      carregarRadar();
+      if (selectedConta) {
+        handleAbrirDrawer(selectedConta);
+      }
+    } catch (err: any) {
+      showError(err.message || 'Erro ao atualizar usuário.');
     } finally {
       setSalvandoUsuario(false);
     }
   };
 
-  // Estados para Modal de Exclusão de Oficina e Liberação de E-mail
-  const [modalExcluirOpen, setModalExcluirOpen] = useState(false);
-  const [tenantParaExcluir, setTenantParaExcluir] = useState<{ id: string; nome: string; slug: string } | null>(null);
-  const [excluirAuthUsers, setExcluirAuthUsers] = useState(true);
-  const [confirmacaoNome, setConfirmacaoNome] = useState('');
-  const [excluindoOficina, setExcluindoOficina] = useState(false);
-
-  // Estados para Modal de Purgação Manual de E-mail
-  const [modalPurgarEmailOpen, setModalPurgarEmailOpen] = useState(false);
-  const [emailParaPurgar, setEmailParaPurgar] = useState('');
-  const [purgandoEmail, setPurgandoEmail] = useState(false);
-
-  const handleConfirmarPurgarEmail = async (e: React.FormEvent) => {
+  const handlePurgarEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isReadOnly) return;
-
-    const cleanEmail = emailParaPurgar.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      showError('Informe um e-mail válido para liberar.');
-      return;
-    }
-
+    if (!emailParaPurgar.trim() || isReadOnly) return;
     setPurgandoEmail(true);
+
     try {
-      const { data, error } = await supabase.rpc('admin_purgar_usuario_por_email', {
-        p_email: cleanEmail,
+      const { error } = await supabase.rpc('admin_purgar_usuario_por_email', {
+        p_email: emailParaPurgar.trim(),
       });
 
       if (error) throw error;
 
-      showSuccess(
-        data?.mensagem ||
-          `E-mail "${cleanEmail}" liberado com sucesso do banco de dados e do auth.users!`
-      );
-      setEmailParaPurgar('');
+      showSuccess(`E-mail ${emailParaPurgar.trim()} purgado com sucesso.`);
       setModalPurgarEmailOpen(false);
-      fetchTenants();
+      setEmailParaPurgar('');
+      carregarRadar();
     } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao purgar e-mail:', err);
-      showError('Erro ao purgar e-mail', err);
+      showError(err.message || 'Erro ao purgar e-mail.');
     } finally {
       setPurgandoEmail(false);
     }
   };
 
-  const handleAbrirModalExcluir = (id: string, nome: string, slug: string) => {
-    if (isReadOnly) return;
-    setTenantParaExcluir({ id, nome, slug });
-    setConfirmacaoNome('');
-    setExcluirAuthUsers(true);
-    setModalExcluirOpen(true);
+  // Renderizadores de Badges
+  const renderScoreBadge = (score: 'operando' | 'configurando' | 'so_cadastro') => {
+    switch (score) {
+      case 'operando':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-500/10">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Operando no Pátio
+          </span>
+        );
+      case 'configurando':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
+            Configurando
+          </span>
+        );
+      case 'so_cadastro':
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+            <span className="w-2 h-2 rounded-full bg-rose-400" />
+            Só cadastrou
+          </span>
+        );
+    }
   };
 
-  const handleConfirmarExclusao = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tenantParaExcluir || isReadOnly) return;
-
-    if (confirmacaoNome.trim().toLowerCase() !== tenantParaExcluir.nome.trim().toLowerCase()) {
-      showError(`Digite exatamente "${tenantParaExcluir.nome}" para confirmar.`);
-      return;
+  const renderTrialBadge = (c: ContaRadarItem) => {
+    if (c.assinatura_status === 'ativa') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+          <Check className="w-3 h-3 text-emerald-400" /> Assinatura Ativa
+        </span>
+      );
     }
 
-    setExcluindoOficina(true);
-    try {
-      const { data, error } = await supabase.rpc('admin_excluir_oficina_e_usuario', {
-        p_tenant_id: tenantParaExcluir.id,
-        p_excluir_auth_users: excluirAuthUsers,
-      });
+    if (c.assinatura_status === 'cortesia') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium bg-purple-500/10 text-purple-300 border border-purple-500/20">
+          <Gift className="w-3 h-3 text-purple-400" /> Cortesia
+        </span>
+      );
+    }
 
-      if (error) throw error;
-
-      const emailsMsg = data?.emails_liberados?.length 
-        ? ` E-mails liberados: ${data.emails_liberados.join(', ')}`
-        : '';
-      showSuccess(`Oficina "${tenantParaExcluir.nome}" excluída com sucesso!${emailsMsg}`);
-      
-      setModalExcluirOpen(false);
-      setTenantParaExcluir(null);
-      if (selectedTenantId === tenantParaExcluir.id) {
-        setSelectedTenantId(null);
-        setDetailData(null);
+    if (c.dias_trial_restantes > 0) {
+      if (c.dias_trial_restantes <= 3) {
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+            <Clock className="w-3 h-3 text-amber-400" /> {c.dias_trial_restantes}d de trial
+          </span>
+        );
       }
-      fetchTenants();
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao excluir oficina:', err);
-      showError('Erro ao excluir oficina', err);
-    } finally {
-      setExcluindoOficina(false);
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+          <Clock className="w-3 h-3 text-cyan-400" /> {c.dias_trial_restantes}d de trial
+        </span>
+      );
     }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono text-slate-400 bg-slate-800/80 border border-slate-700">
+        Free / Expirado
+      </span>
+    );
   };
-
-  const fetchTenants = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase.rpc('admin_listar_tenants', {
-        p_busca: busca.trim() || null,
-        p_plano: planoFiltro || null,
-        p_limite: 100,
-        p_offset: 0
-      });
-
-      if (error) throw error;
-      
-      const tenantsList: TenantItem[] = (data || []).map((item: any) => ({ ...item }));
-      
-      // Enriquecer com telefone da oficina (para contato direto WhatsApp)
-      if (tenantsList.length > 0) {
-        try {
-          const tenantIds = tenantsList.map((t) => t.id);
-          const { data: phonesData } = await supabase
-            .from('tenants')
-            .select('id, telefone')
-            .in('id', tenantIds);
-
-          if (phonesData && phonesData.length > 0) {
-            const phoneMap = new Map(phonesData.map((p: any) => [p.id, p.telefone]));
-            tenantsList.forEach((t) => {
-              t.telefone = phoneMap.get(t.id) || null;
-            });
-          }
-        } catch {
-          // Fallback silencioso caso não consiga consultar a coluna
-        }
-      }
-
-      setTenants(tenantsList);
-
-      // Carregar planos ativos do banco de dados em tempo real
-      const { data: pData } = await supabase
-        .from('plans')
-        .select('codigo, nome, preco_centavos')
-        .eq('ativo', true)
-        .order('preco_centavos', { ascending: true });
-      if (pData && pData.length > 0) {
-        setPlanosCadastrados(pData);
-      }
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao carregar oficinas:', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchTenants();
-  }, [busca, planoFiltro]);
-
-  const handleOpenDetail = async (id: string) => {
-    setSelectedTenantId(id);
-    setDetailLoading(true);
-    setDetailError(null);
-    try {
-      const [{ data, error }, { data: adminsData }, { data: parceirosData }] = await Promise.all([
-        supabase.rpc('admin_detalhe_tenant', { p_tenant_id: id }),
-        supabase.from('platform_admins').select('email').eq('ativo', true),
-        supabase.from('parceiros').select('email, codigo').eq('ativo', true),
-      ]);
-
-      if (error) {
-        console.warn('[AdminOficinas] RPC admin_detalhe_tenant falhou, aplicando fallback local:', error.message);
-        
-        const tenantLocal = tenants.find((t) => t.id === id);
-        if (!tenantLocal) {
-          throw new Error(error.message || 'Oficina não encontrada.');
-        }
-
-        let fallbackMembros: any[] = [];
-        try {
-          const { data: membersRows } = await supabase
-            .from('tenant_members')
-            .select('id, user_id, email, role, status')
-            .eq('tenant_id', id);
-
-          if (membersRows && membersRows.length > 0) {
-            const userIds = membersRows.map((m: any) => m.user_id).filter(Boolean);
-            let profilesMap = new Map<string, { nome?: string; telefone?: string }>();
-            if (userIds.length > 0) {
-              const { data: profs } = await supabase
-                .from('profiles')
-                .select('id, nome, telefone')
-                .in('id', userIds);
-              (profs || []).forEach((p: any) => profilesMap.set(p.id, p));
-            }
-
-            fallbackMembros = membersRows.map((m: any) => {
-              const prof = m.user_id ? profilesMap.get(m.user_id) : null;
-              return {
-                id: m.id,
-                user_id: m.user_id,
-                email: m.email,
-                nome: prof?.nome || m.email,
-                telefone: prof?.telefone || null,
-                role: m.role,
-                status: m.status,
-                ultimo_acesso: null,
-              };
-            });
-          }
-        } catch {
-          // ignora se RLS na tabela impedir select direto
-        }
-
-        setDetailData({
-          tenant: tenantLocal,
-          membros: fallbackMembros,
-          historico_12m: [],
-          storage: [],
-        });
-      } else {
-        const tenantLocal = tenants.find((t) => t.id === id);
-        setDetailData({
-          ...data,
-          tenant: {
-            ...data.tenant,
-            telefone: tenantLocal?.telefone || data.tenant?.telefone || null,
-          },
-        });
-      }
-
-      if (adminsData) {
-        setPlatformAdminsEmails(adminsData.map((a: any) => (a.email || '').toLowerCase()));
-      }
-      if (parceirosData) {
-        const mapP = new Map<string, string>();
-        parceirosData.forEach((p: any) => {
-          if (p.email) mapP.set(p.email.toLowerCase(), p.codigo);
-        });
-        setParceirosEmails(mapP);
-      }
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao carregar detalhes:', err);
-      setDetailError(err.message || 'Erro ao carregar detalhes da oficina.');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const handleConfirmarPromocaoAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!modalAdminTarget) return;
-
-    setSalvandoAdmin(true);
-    try {
-      const { error } = await supabase.rpc('admin_promover_administrador', {
-        p_email: modalAdminTarget.email,
-        p_nivel: adminNivel,
-        p_observacao: adminObservacao.trim() || `Promovido pela tela de oficinas (${detailData?.tenant.nome || ''})`,
-        p_super_admin: false,
-      });
-
-      if (error) throw error;
-
-      showSuccess(`Usuário ${modalAdminTarget.nome} (${modalAdminTarget.email}) promovido a Administrador com sucesso!`);
-      setPlatformAdminsEmails((prev) => [...prev, modalAdminTarget.email.toLowerCase()]);
-      setModalAdminTarget(null);
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao promover administrador:', err);
-      showError('Erro ao promover usuário a administrador', err);
-    } finally {
-      setSalvandoAdmin(false);
-    }
-  };
-
-  const handleAbrirModalParceiro = (m: { nome: string; email: string; user_id?: string }) => {
-    setModalParceiroTarget(m);
-    const primeiroNome = m.nome.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    setParceiroCodigo(primeiroNome || 'PARCEIRO');
-    setParceiroComissaoTipo('percentual');
-    setParceiroComissaoValor('20');
-    setParceiroRecorrente(true);
-    setParceiroPixChave('');
-  };
-
-  const handleConfirmarTornarParceiro = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!modalParceiroTarget || !parceiroCodigo.trim()) {
-      showError('Informe o código de indicação do parceiro.');
-      return;
-    }
-
-    setSalvandoParceiro(true);
-    try {
-      const { error } = await supabase.from('parceiros').insert({
-        nome: modalParceiroTarget.nome,
-        email: modalParceiroTarget.email.toLowerCase().trim(),
-        codigo: parceiroCodigo.trim().toUpperCase(),
-        comissao_tipo: parceiroComissaoTipo,
-        comissao_valor: parseFloat(parceiroComissaoValor) || 0,
-        recorrente: parceiroRecorrente,
-        pix_chave: parceiroPixChave.trim() || null,
-        user_id: modalParceiroTarget.user_id || null,
-        ativo: true,
-      });
-
-      if (error) throw error;
-
-      showSuccess(`Parceiro comercial ${modalParceiroTarget.nome} cadastrado com o código "${parceiroCodigo.trim().toUpperCase()}"!`);
-      setParceirosEmails((prev) => {
-        const novo = new Map(prev);
-        novo.set(modalParceiroTarget.email.toLowerCase(), parceiroCodigo.trim().toUpperCase());
-        return novo;
-      });
-      setModalParceiroTarget(null);
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao cadastrar parceiro:', err);
-      showError('Erro ao cadastrar parceiro comercial', err);
-    } finally {
-      setSalvandoParceiro(false);
-    }
-  };
-
-  const handleAbrirModalPlano = (
-    tenantId: string,
-    tenantNome: string,
-    planoAtual: string,
-    asaasSubId?: string | null
-  ) => {
-    setTargetTenant({ id: tenantId, nome: tenantNome, planoAtual, asaasSubId });
-    setNovoPlano((planoAtual as any) || 'pro');
-    setIsCortesiaAdmin(true);
-    setDuracaoCortesiaOpcao('30d');
-    setDiasCustomCortesia('30');
-    setMotivoAudit('');
-    setModalPlanoOpen(true);
-  };
-
-  const resolverDiasCortesia = (): number | null => {
-    if (novoPlano === 'free') return null;
-    if (duracaoCortesiaOpcao === 'vitalicia') return null;
-    if (duracaoCortesiaOpcao === 'custom') {
-      const n = parseInt(diasCustomCortesia, 10);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    }
-    const found = CORTESIA_DURACAO_OPCOES.find((o) => o.id === duracaoCortesiaOpcao);
-    return found ? found.dias : 30;
-  };
-
-  const handleSalvarAlteracaoPlano = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetTenant) return;
-
-    if (!motivoAudit.trim()) {
-      showError('Informe a justificativa da alteração para auditoria.');
-      return;
-    }
-
-    const diasFinal = resolverDiasCortesia();
-    if (novoPlano !== 'free' && duracaoCortesiaOpcao === 'custom' && (!diasFinal || diasFinal <= 0)) {
-      showError('Informe uma quantidade de dias válida (maior que zero).');
-      return;
-    }
-
-    setSalvandoPlano(true);
-    try {
-      const { error } = await supabase.rpc('admin_alterar_plano_manual', {
-        p_tenant_id: targetTenant.id,
-        p_novo_plano: novoPlano,
-        p_motivo: motivoAudit.trim(),
-        p_dias_cortesia: novoPlano === 'free' ? null : diasFinal,
-        p_cortesia_ate: null,
-        p_is_cortesia: novoPlano === 'free' ? false : isCortesiaAdmin,
-      });
-
-      if (error) throw error;
-
-      const resumoPrazo =
-        novoPlano === 'free'
-          ? 'rebaixado para Free'
-          : isCortesiaAdmin
-            ? diasFinal
-              ? `como cortesia de ${diasFinal} dia(s)`
-              : 'como cortesia vitalícia'
-            : 'como assinatura comercial ativa';
-
-      showSuccess(`Plano da oficina "${targetTenant.nome}" alterado para ${novoPlano.toUpperCase()} (${resumoPrazo}) com sucesso!`);
-      setModalPlanoOpen(false);
-      setTargetTenant(null);
-
-      // Recarrega lista principal
-      fetchTenants();
-      // Recarrega modal de detalhes se estiver aberto para este mesmo tenant
-      if (selectedTenantId === targetTenant.id) {
-        handleOpenDetail(targetTenant.id);
-      }
-    } catch (err: any) {
-      console.error('[AdminOficinas] Erro ao alterar plano:', err);
-      showError('Erro ao alterar plano da oficina', err);
-    } finally {
-      setSalvandoPlano(false);
-    }
-  };
-
-  const isChurnRisk = (ultimoAcesso: string | null) => {
-    if (!ultimoAcesso) return true;
-    const dias = (new Date().getTime() - new Date(ultimoAcesso).getTime()) / (1000 * 3600 * 24);
-    return dias > 30;
-  };
-
-  const sortedTenants = [...tenants].sort((a, b) => {
-    if (ordenacao === 'ultimo_acesso') {
-      const tA = a.ultimo_acesso ? new Date(a.ultimo_acesso).getTime() : 0;
-      const tB = b.ultimo_acesso ? new Date(b.ultimo_acesso).getTime() : 0;
-      return tB - tA;
-    }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
 
   return (
     <div className="space-y-6">
-      {/* Header Title */}
+      {/* Header do Radar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-heading text-white">Oficinas Cadastradas</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold font-heading text-white">Radar de Ativação de Contas</h1>
+            <span className="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              Tempo Real
+            </span>
+          </div>
           <p className="text-slate-400 text-sm">
-            Visualização agregada do ecossistema de oficinas parceiras e gestão de planos.
+            Monitore o engajamento real, ative contas pelo WhatsApp e conceda extensão de trial com 1 clique.
           </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => navigate('/admin/contas')}
             className="flex items-center space-x-1.5 text-xs font-mono font-bold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
-            title="Ver todas as contas no Supabase Auth (órfãs, equipe extra, parceiros e admins)"
+            title="Ver todas as contas no Supabase Auth"
           >
             <UserCheck className="w-3.5 h-3.5" />
             <span>Contas Auth</span>
@@ -748,1254 +637,787 @@ export const AdminOficinas: React.FC = () => {
               setModalPurgarEmailOpen(true);
             }}
             className="flex items-center space-x-1.5 text-xs font-mono font-bold text-red-400 hover:text-red-300 disabled:opacity-40 disabled:cursor-not-allowed bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 px-3 py-1.5 rounded-lg transition shadow-sm cursor-pointer"
-            title="Exclui um e-mail do auth.users e de todas as tabelas para liberar novo cadastro"
+            title="Exclui um e-mail do auth.users para liberar novo cadastro"
           >
             <UserX className="w-3.5 h-3.5" />
             <span>Liberar E-mail</span>
           </button>
-
-          <div className="flex items-center space-x-2 text-xs font-mono text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
-            <Building2 className="w-4 h-4 text-amber-500" />
-            <span>Total: <strong className="text-white">{tenants.length}</strong> oficinas</span>
-          </div>
         </div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
-        {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+      {/* 4 Cards de Resumo no Topo */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Total de Contas */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-lg">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs sm:text-sm font-medium">Total de Contas</span>
+            <div className="p-2 rounded-xl bg-slate-800 text-slate-300">
+              <Building2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono">
+            {resumo.total_contas}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">Estéticas cadastradas</p>
+        </div>
+
+        {/* Card 2: Ativos Hoje */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-lg">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs sm:text-sm font-medium">Ativos Hoje</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+              <Activity className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">
+              {resumo.total_ativos_hoje}
+            </div>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">Acessaram nas últimas 24h</p>
+        </div>
+
+        {/* Card 3: Operando no Pátio */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-lg">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs sm:text-sm font-medium">Operando no Pátio</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+              <Car className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-white font-mono">
+            {resumo.total_operando}
+          </div>
+          <p className="text-[11px] text-emerald-500/90 font-medium mt-1">🟢 Clientes + OS/Vistoria</p>
+        </div>
+
+        {/* Card 4: Trial Vencendo */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col justify-between shadow-lg">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs sm:text-sm font-medium">Trial Vencendo</span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">
+            {resumo.total_trial_vencendo}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">⏳ Vence em até 3 dias</p>
+        </div>
+      </div>
+
+      {/* Barra de Pesquisa e Filtros Rápidos por Score */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col lg:flex-row items-center justify-between gap-4 shadow-sm">
+        {/* Input de Busca */}
+        <div className="relative w-full lg:w-96">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome, slug ou cidade..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+            placeholder="Buscar por estética, dono, e-mail ou WhatsApp..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50 transition"
           />
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-          <div className="flex items-center space-x-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <select
-              value={planoFiltro}
-              onChange={(e) => setPlanoFiltro(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
-            >
-              <option value="">Todos os Planos</option>
-              <option value="free">Free</option>
-              <option value="pro">Pro</option>
-              <option value="studio">Studio</option>
-            </select>
-          </div>
-
-          <select
-            value={ordenacao}
-            onChange={(e) => setOrdenacao(e.target.value as any)}
-            className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-500/50 cursor-pointer"
+        {/* Pílulas de Filtro por Score */}
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
+          <button
+            type="button"
+            onClick={() => { setScoreFiltro('todos'); setPaginaAtual(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              scoreFiltro === 'todos'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+            }`}
           >
-            <option value="created_at">Ordenar por Cadastro</option>
-            <option value="ultimo_acesso">Ordenar por Último Acesso</option>
-          </select>
+            Todos
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setScoreFiltro('operando'); setPaginaAtual(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              scoreFiltro === 'operando'
+                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                : 'bg-slate-950 text-slate-400 hover:text-emerald-400 border border-slate-800'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            🟢 Operando
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setScoreFiltro('configurando'); setPaginaAtual(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              scoreFiltro === 'configurando'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-950 text-slate-400 hover:text-amber-400 border border-slate-800'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+            🟡 Configurando
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setScoreFiltro('so_cadastro'); setPaginaAtual(1); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+              scoreFiltro === 'so_cadastro'
+                ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
+                : 'bg-slate-950 text-slate-400 hover:text-rose-400 border border-slate-800'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+            🔴 Só cadastrou
+          </button>
         </div>
       </div>
 
-      {/* Desktop Table & Mobile Cards */}
+      {/* Conteúdo: Loading, Vazio ou Dados */}
       {loading ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-400">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500 mx-auto mb-3"></div>
-          <p className="text-sm">Carregando dados das oficinas...</p>
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 text-center text-slate-400 shadow-lg">
+          <div className="animate-spin rounded-full h-9 w-9 border-t-2 border-b-2 border-amber-500 mx-auto mb-3" />
+          <p className="text-sm font-medium">Varrendo atividades e calculando scores do radar...</p>
         </div>
-      ) : sortedTenants.length === 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center text-slate-500">
-          Nenhuma oficina encontrada com os filtros aplicados.
+      ) : contas.length === 0 ? (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 text-center text-slate-500 shadow-lg">
+          <p className="text-base font-semibold text-slate-300">Nenhuma conta encontrada</p>
+          <p className="text-xs text-slate-500 mt-1">Tente ajustar os filtros de busca ou de score de uso.</p>
         </div>
       ) : (
         <>
-          {/* Desktop Table (Visible on md+) */}
-          <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
-            <table className="w-full text-left text-sm text-slate-300">
-              <thead className="bg-slate-950/80 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3.5">Oficina</th>
-                  <th className="px-4 py-3.5">Plano</th>
-                  <th className="px-4 py-3.5">Cidade/UF</th>
-                  <th className="px-4 py-3.5 text-center">Membros</th>
-                  <th className="px-4 py-3.5 text-center">Agendamentos</th>
-                  <th className="px-4 py-3.5 text-center">Execuções</th>
-                  <th className="px-4 py-3.5">Último Acesso</th>
-                  <th className="px-4 py-3.5 text-right font-mono">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {sortedTenants.map((t) => {
-                  const churn = isChurnRisk(t.ultimo_acesso);
-                  return (
-                    <tr key={t.id} className="hover:bg-slate-800/50 transition">
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-white">{t.nome}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
-                            className="p-1 hover:bg-slate-800 text-slate-500 hover:text-amber-400 rounded transition cursor-pointer"
-                            title="Alterar Nome da Oficina"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                        <div className="text-xs text-slate-500 font-mono">/{t.slug}</div>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex flex-col items-start gap-1">
-                          <span className={`inline-block px-2.5 py-0.5 rounded text-xs font-mono font-bold uppercase ${
-                            t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
-                            t.plano === 'pro' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' :
-                            'bg-slate-800 text-slate-400 border border-slate-700'
-                          }`}>
-                            {t.plano}
-                          </span>
-                          {t.plano !== 'free' && (() => {
-                            const resumo = obterResumoStatusAssinatura(t.assinatura_status, {
-                              isCortesia: t.is_cortesia,
-                              plano: t.plano,
-                            });
-                            if (resumo.isCortesia) {
-                              return (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/30 px-1.5 py-0.5 rounded">
-                                  <Gift className="w-2.5 h-2.5" />
-                                  {t.cortesia_ate ? `Cortesia até ${formatarDataSegura(t.cortesia_ate)}` : 'Cortesia vitalícia'}
-                                </span>
-                              );
-                            }
-                            if (resumo.statusEfetivo === 'trial') {
-                              return (
-                                <span className="text-[10px] font-mono text-amber-300">
-                                  {t.trial_fim ? `Trial até ${formatarDataSegura(t.trial_fim)}` : 'Em trial'}
-                                </span>
-                              );
-                            }
-                            if (resumo.statusEfetivo === 'atrasada') {
-                              return <span className="text-[10px] font-mono text-rose-400">Pagamento atrasado</span>;
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-slate-300">
-                        <div>{t.cidade ? `${t.cidade} - ${t.uf || ''}` : <span className="text-slate-600">Não informado</span>}</div>
-                        {t.telefone ? (
-                          <div className="mt-1 flex items-center gap-1.5">
-                            <span className="text-xs font-mono text-slate-400">{formatTelefone(t.telefone)}</span>
+          {/* VISUALIZAÇÃO DESKTOP (md: acima) - Tabela Completa */}
+          <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-slate-950/80 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3.5">Estética & Dono</th>
+                    <th className="px-4 py-3.5">WhatsApp / Contato</th>
+                    <th className="px-4 py-3.5 text-center">Score de Uso</th>
+                    <th className="px-4 py-3.5 text-center">Contadores Reais</th>
+                    <th className="px-4 py-3.5">Status & Trial</th>
+                    <th className="px-4 py-3.5">Última Atividade</th>
+                    <th className="px-4 py-3.5 text-right font-mono">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {contas.map((c) => {
+                    const waLink = obterLinkWhatsApp(c.telefone_dono, c.nome_estetica);
+                    return (
+                      <tr 
+                        key={c.tenant_id} 
+                        onClick={() => handleAbrirDrawer(c)}
+                        className="hover:bg-slate-800/60 transition cursor-pointer group"
+                      >
+                        {/* Estética & Dono */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white group-hover:text-amber-400 transition">{c.nome_estetica}</span>
+                            <span className="text-[10px] font-mono uppercase bg-slate-800 px-1.5 py-0.5 rounded text-slate-400 border border-slate-700">
+                              {c.plano}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-400 mt-0.5">
+                            {c.nome_dono} {c.cidade ? `• ${c.cidade}/${c.uf}` : ''}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            {c.email_dono}
+                          </div>
+                        </td>
+
+                        {/* WhatsApp / Contato */}
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          {waLink ? (
                             <a
-                              href={`https://wa.me/55${cleanTelefone(t.telefone)}`}
+                              href={waLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[11px] transition"
-                              title="Abrir WhatsApp da Oficina"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition shadow-sm"
+                              title="Abrir conversa de ativação no WhatsApp"
                             >
-                              <MessageCircle className="w-3 h-3" />
-                              <span>WhatsApp</span>
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>{formatTelefone(c.telefone_dono || '')}</span>
                             </a>
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3.5 text-center font-mono text-slate-200">
-                        {t.total_membros}
-                      </td>
-                      <td className="px-4 py-3.5 text-center font-mono text-slate-200">
-                        {t.total_agendamentos}
-                      </td>
-                      <td className="px-4 py-3.5 text-center font-mono text-slate-200">
-                        {t.total_execucoes}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-mono text-xs text-slate-400">
-                            {t.ultimo_acesso ? formatarDataSegura(t.ultimo_acesso) : 'Nunca'}
-                          </span>
-                          {churn && (
-                            <span className="flex items-center space-x-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded font-mono" title="Sem acesso há mais de 30 dias (Risco de Churn)">
-                              <AlertTriangle className="w-3 h-3" />
-                              <span>&gt;30d</span>
-                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-500 italic">Sem telefone</span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 text-right space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
-                          className="inline-flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 transition cursor-pointer"
-                          title="Alterar nome da oficina"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Nome</span>
-                        </button>
+                        </td>
 
-                        <button
-                          type="button"
-                          onClick={() => handleAcessarOficina(t.id)}
-                          className="inline-flex items-center space-x-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded text-xs font-medium border border-emerald-500/30 transition cursor-pointer"
-                          title="Acessar painel desta oficina no App"
-                        >
-                          <LogIn className="w-3.5 h-3.5" />
-                          <span>Acessar App</span>
-                        </button>
+                        {/* Score de Uso */}
+                        <td className="px-4 py-3.5 text-center">
+                          {renderScoreBadge(c.score)}
+                        </td>
 
-                        <button
-                          onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano, t.asaas_subscription_id)}
-                          className="inline-flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2.5 py-1 rounded text-xs font-medium border border-amber-500/30 transition"
-                          title="Alterar plano da oficina"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Mudar Plano</span>
-                        </button>
+                        {/* Contadores Reais */}
+                        <td className="px-4 py-3.5 text-center font-mono text-xs">
+                          <div className="flex items-center justify-center gap-2 text-slate-300">
+                            <span title="Clientes Reais">👥 <strong className="text-white">{c.total_clientes_reais}</strong></span>
+                            <span className="text-slate-600">•</span>
+                            <span title="Serviços">🛠️ <strong className="text-white">{c.total_servicos}</strong></span>
+                            <span className="text-slate-600">•</span>
+                            <span title="Agendamentos / OS">📋 <strong className="text-white">{c.total_agendamentos}</strong></span>
+                            <span className="text-slate-600">•</span>
+                            <span title="Vistorias">🔍 <strong className="text-white">{c.total_vistorias}</strong></span>
+                          </div>
+                        </td>
 
-                        <button
-                          onClick={() => handleOpenDetail(t.id)}
-                          className="inline-flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded text-xs font-medium border border-slate-700 transition cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Detalhes</span>
-                        </button>
+                        {/* Status & Trial */}
+                        <td className="px-4 py-3.5">
+                          {renderTrialBadge(c)}
+                        </td>
 
-                        <button
-                          onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
-                          disabled={isReadOnly}
-                          className="inline-flex items-center space-x-1 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-red-400 hover:text-red-300 px-2.5 py-1 rounded text-xs font-medium border border-red-500/30 transition cursor-pointer"
-                          title="Excluir oficina e liberar e-mail"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Excluir</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {/* Última Atividade */}
+                        <td className="px-4 py-3.5">
+                          <div className="text-xs text-slate-200 font-medium">
+                            {formatarTempoRelativo(c.ultimo_acesso)}
+                          </div>
+                          {c.ultima_acao_label && (
+                            <div className="text-[11px] text-slate-500 truncate max-w-[180px]" title={c.ultima_acao_label}>
+                              {c.ultima_acao_label}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Ações */}
+                        <td className="px-4 py-3.5 text-right font-mono" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAcessarOficina(c.tenant_id)}
+                              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-emerald-400 rounded-lg transition cursor-pointer"
+                              title="Acessar painel desta oficina no App"
+                            >
+                              <LogIn className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirDrawer(c)}
+                              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded-lg transition cursor-pointer"
+                              title="Ver histórico e timeline"
+                            >
+                              <History className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Mobile Stacked Cards (Visible on sm/mobile 375px) */}
-          <div className="md:hidden space-y-4">
-            {sortedTenants.map((t) => {
-              const churn = isChurnRisk(t.ultimo_acesso);
+          {/* VISUALIZAÇÃO MOBILE (< md) - Cards Empilhados Sem Scroll */}
+          <div className="block md:hidden space-y-3.5">
+            {contas.map((c) => {
+              const waLink = obterLinkWhatsApp(c.telefone_dono, c.nome_estetica);
               return (
-                <div key={t.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-md">
-                  <div className="flex items-start justify-between">
+                <div 
+                  key={c.tenant_id} 
+                  className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-md"
+                >
+                  {/* Topo do Card */}
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="font-bold text-white text-base leading-tight truncate">{t.nome}</h3>
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
-                          className="p-1 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded transition cursor-pointer shrink-0"
-                          title="Alterar Nome da Oficina"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="font-bold text-white text-base leading-tight">{c.nome_estetica}</h3>
+                        <span className="text-[10px] font-mono uppercase bg-slate-800 px-1.5 py-0.2 rounded text-slate-400 border border-slate-700">
+                          {c.plano}
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-500 font-mono">/{t.slug}</p>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {t.cidade ? `${t.cidade} - ${t.uf || ''}` : 'Local não informado'}
-                      </div>
-                      {t.telefone && (
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span className="text-[11px] font-mono text-slate-400">{formatTelefone(t.telefone)}</span>
-                          <a
-                            href={`https://wa.me/55${cleanTelefone(t.telefone)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] transition"
-                            title="Abrir WhatsApp da Oficina"
-                          >
-                            <MessageCircle className="w-3 h-3" />
-                            <span>WhatsApp</span>
-                          </a>
-                        </div>
-                      )}
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {c.nome_dono} {c.cidade ? `• ${c.cidade}/${c.uf}` : ''}
+                      </p>
                     </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold uppercase ${
-                        t.plano === 'studio' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' :
-                        t.plano === 'pro' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/30' :
-                        'bg-slate-800 text-slate-400 border border-slate-700'
-                      }`}>
-                        {t.plano}
-                      </span>
-                      {t.plano !== 'free' && (t.is_cortesia || t.assinatura_status === 'cortesia') && (
-                        <span className="text-[10px] font-mono text-cyan-300">
-                          {t.cortesia_ate ? `Cortesia até ${formatarDataSegura(t.cortesia_ate)}` : 'Cortesia vitalícia'}
-                        </span>
-                      )}
-                      {t.plano !== 'free' && t.assinatura_status === 'trial' && t.trial_fim && (
-                        <span className="text-[10px] font-mono text-amber-300">
-                          Trial até {formatarDataSegura(t.trial_fim)}
-                        </span>
-                      )}
+                    {renderScoreBadge(c.score)}
+                  </div>
+
+                  {/* Status do Trial e Último Acesso */}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-slate-400">Último:</span>
+                      <span className="font-medium text-slate-200">{formatarTempoRelativo(c.ultimo_acesso)}</span>
+                    </div>
+                    <div>
+                      {renderTrialBadge(c)}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 py-2 border-y border-slate-800/80 text-center font-mono text-xs">
-                    <div className="bg-slate-950 p-2 rounded">
-                      <span className="text-slate-500 block text-[10px]">Membros</span>
-                      <strong className="text-slate-200 text-sm">{t.total_membros}</strong>
-                    </div>
-                    <div className="bg-slate-950 p-2 rounded">
-                      <span className="text-slate-500 block text-[10px]">Agend.</span>
-                      <strong className="text-slate-200 text-sm">{t.total_agendamentos}</strong>
-                    </div>
-                    <div className="bg-slate-950 p-2 rounded">
-                      <span className="text-slate-500 block text-[10px]">Execuções</span>
-                      <strong className="text-slate-200 text-sm">{t.total_execucoes}</strong>
-                    </div>
+                  {/* Contadores em linha */}
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl px-3 py-2 flex items-center justify-around text-xs font-mono text-slate-300">
+                    <span title="Clientes">👥 <strong className="text-white">{c.total_clientes_reais}</strong></span>
+                    <span className="text-slate-700">•</span>
+                    <span title="Serviços">🛠️ <strong className="text-white">{c.total_servicos}</strong></span>
+                    <span className="text-slate-700">•</span>
+                    <span title="Agendamentos">📋 <strong className="text-white">{c.total_agendamentos}</strong></span>
+                    <span className="text-slate-700">•</span>
+                    <span title="Vistorias">🔍 <strong className="text-white">{c.total_vistorias}</strong></span>
                   </div>
 
-                  {/* Rodapé e Ações do Card (Mobile Safe) */}
-                  <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-1.5 text-slate-400">
-                        <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        <span className="font-mono text-[11px]">
-                          Acesso: {t.ultimo_acesso ? formatarDataSegura(t.ultimo_acesso) : 'Nunca'}
-                        </span>
-                        {churn && (
-                          <span className="bg-amber-500/10 text-amber-400 text-[10px] px-1.5 py-0.5 rounded border border-amber-500/30 font-semibold">
-                            Churn?
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                  {/* Última Ação do Usuário */}
+                  {c.ultima_acao_label && (
+                    <p className="text-[11px] text-slate-400 truncate">
+                      Última ação: <strong className="text-slate-200">{c.ultima_acao_label}</strong>
+                    </p>
+                  )}
 
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full pt-1">
+                  {/* Dois Botões Grandes na Base */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleAbrirDrawer(c)}
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition cursor-pointer shadow-sm"
+                    >
+                      <History className="w-4 h-4 text-amber-400" />
+                      <span>Ver Histórico</span>
+                    </button>
+
+                    {waLink ? (
+                      <a
+                        href={waLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-950 transition cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>WhatsApp</span>
+                      </a>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => handleAbrirModalEditarOficina(t.id, t.nome, t.slug, t.nome_alterado_em)}
-                        className="w-full bg-amber-500/10 hover:bg-amber-500/20 active:scale-95 text-amber-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-amber-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer"
-                        title="Alterar nome da oficina"
+                        disabled
+                        className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-semibold text-xs bg-slate-800/40 text-slate-600 border border-slate-800 cursor-not-allowed"
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        <span>Nome</span>
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Sem WhatsApp</span>
                       </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleAcessarOficina(t.id)}
-                        className="w-full bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-95 text-emerald-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-emerald-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer"
-                        title="Acessar painel desta oficina no App"
-                      >
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span>Acessar</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleAbrirModalPlano(t.id, t.nome, t.plano, t.asaas_subscription_id)}
-                        className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 py-2 px-2.5 rounded-lg text-xs font-medium border border-slate-700 flex items-center justify-center space-x-1.5 transition cursor-pointer"
-                      >
-                        <span>Plano</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleOpenDetail(t.id)}
-                        className="w-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 py-2 px-2.5 rounded-lg text-xs font-semibold border border-slate-700 flex items-center justify-center space-x-1.5 transition cursor-pointer"
-                      >
-                        <span>Detalhes</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => handleAbrirModalExcluir(t.id, t.nome, t.slug)}
-                        className="w-full bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 text-red-400 py-2 px-2.5 rounded-lg text-xs font-medium border border-red-500/30 flex items-center justify-center space-x-1.5 transition cursor-pointer col-span-2 sm:col-span-1"
-                        title="Excluir oficina"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Excluir</span>
-                      </button>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Paginação */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+            <div className="text-xs text-slate-400 font-mono">
+              Página <strong className="text-white">{paginacao.pagina_atual}</strong> de <strong className="text-white">{paginacao.total_paginas}</strong> (Total: <strong className="text-amber-400">{paginacao.total_filtrados}</strong> contas)
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={paginaAtual <= 1}
+                onClick={() => setPaginaAtual(prev => Math.max(1, prev - 1))}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-950 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-800 text-slate-300 flex items-center gap-1 transition cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Anterior
+              </button>
+
+              <button
+                type="button"
+                disabled={paginaAtual >= paginacao.total_paginas}
+                onClick={() => setPaginaAtual(prev => Math.min(paginacao.total_paginas, prev + 1))}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-950 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed border border-slate-800 text-slate-300 flex items-center gap-1 transition cursor-pointer"
+              >
+                Próxima
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         </>
       )}
 
-      {/* Detail Drawer Modal */}
-      {selectedTenantId && createPortal(
-        <div className="fixed inset-0 z-[90] bg-slate-950/80 backdrop-blur-sm flex justify-end">
-          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl h-full flex flex-col p-6 overflow-y-auto shadow-2xl animate-in slide-in-from-right duration-200">
+      {/* DRAWER LATERAL (Desktop) & MODAL TELA CHEIA / BOTTOM SHEET (Mobile) */}
+      {drawerOpen && selectedConta && createPortal(
+        <div className="fixed inset-0 z-[90] bg-slate-950/80 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
+          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl h-full flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-right duration-200">
             
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+            {/* Header do Drawer */}
+            <div className="p-4 sm:p-6 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-bold text-white">Detalhes da Oficina</h2>
-                <p className="text-xs text-slate-400 font-mono">ID: {selectedTenantId}</p>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold text-white leading-tight">
+                    {selectedConta.nome_estetica}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => handleAbrirModalEditarOficina(selectedConta.tenant_id, selectedConta.nome_estetica, selectedConta.slug)}
+                    className="p-1 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded-lg transition cursor-pointer"
+                    title="Alterar Nome da Oficina"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-400 mt-1 flex-wrap">
+                  <span>Dono: <strong className="text-slate-200">{selectedConta.nome_dono}</strong></span>
+                  <span>•</span>
+                  <span>{selectedConta.email_dono}</span>
+                </div>
               </div>
+
               <button
-                onClick={() => { setSelectedTenantId(null); setDetailData(null); }}
-                className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+                type="button"
+                onClick={() => { setDrawerOpen(false); setSelectedConta(null); }}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {detailLoading ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500 mb-3"></div>
-                <p className="text-sm">Carregando métricas e membros...</p>
-              </div>
-            ) : detailData ? (
-              <div className="space-y-6 pt-6">
-                
-                {/* Basic info card */}
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-bold text-white block">{detailData.tenant.nome}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleAbrirModalEditarOficina(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.slug, detailData.tenant.nome_alterado_em)}
-                          className="p-1 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded-md transition cursor-pointer"
-                          title="Alterar Nome da Oficina"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2 pt-0.5 flex-wrap">
-                        <span className="text-xs font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded inline-block">
-                          Plano {detailData.tenant.plano}
-                        </span>
-                        {detailData.tenant.plano !== 'free' && (detailData.tenant.is_cortesia || detailData.tenant.assinatura_status === 'cortesia') && (
-                          <span className="text-xs font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                            <Gift className="w-3 h-3" />
-                            {detailData.tenant.cortesia_ate
-                              ? `Cortesia até ${formatarDataSegura(detailData.tenant.cortesia_ate)}`
-                              : 'Cortesia vitalícia'}
-                          </span>
-                        )}
-                        {detailData.tenant.plano !== 'free' && detailData.tenant.assinatura_status === 'trial' && detailData.tenant.trial_fim && (
-                          <span className="text-xs font-mono bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded inline-block">
-                            Trial até {formatarDataSegura(detailData.tenant.trial_fim)}
-                          </span>
-                        )}
-                        <span className="text-xs text-slate-500 font-mono">/{detailData.tenant.slug}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => handleAbrirModalEditarOficina(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.slug, detailData.tenant.nome_alterado_em)}
-                        className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer"
-                        title="Alterar Nome da Oficina"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Alterar Nome</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleAcessarOficina(detailData.tenant.id)}
-                        className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
-                        title="Acessar painel desta oficina no App"
-                      >
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span>Acessar no App</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleAbrirModalPlano(
-                            detailData.tenant.id,
-                            detailData.tenant.nome,
-                            detailData.tenant.plano,
-                            detailData.tenant.asaas_subscription_id
-                          )
-                        }
-                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center space-x-1.5 transition shadow cursor-pointer"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                        <span>Alterar Plano</span>
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-400 pt-1">
-                    Cidade: {detailData.tenant.cidade ? `${detailData.tenant.cidade} - ${detailData.tenant.uf}` : 'Não cadastrada'}
-                  </p>
-                  {detailData.tenant.telefone && (
-                    <div className="flex items-center gap-2 pt-1 text-xs text-slate-400">
-                      <span>Telefone da Oficina: <strong className="font-mono text-slate-200">{formatTelefone(detailData.tenant.telefone)}</strong></span>
-                      <a
-                        href={`https://wa.me/55${cleanTelefone(detailData.tenant.telefone)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[11px] transition"
-                        title="Conversar com a Oficina no WhatsApp"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        <span>Chamar no WhatsApp</span>
-                      </a>
-                    </div>
-                  )}
-                  <p className="text-xs text-slate-400">
-                    Cadastrada em: {formatarDataSegura(detailData.tenant.created_at)}
-                  </p>
+            {/* Ações de Destaque no Topo do Drawer (+15 Dias e WhatsApp) */}
+            <div className="p-4 sm:p-6 bg-slate-950/30 border-b border-slate-800/80 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {renderScoreBadge(selectedConta.score)}
+                  {renderTrialBadge(selectedConta)}
                 </div>
 
-                {/* Members list */}
-                <div>
-                  <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-3 flex items-center space-x-2">
-                    <Users className="w-4 h-4 text-amber-500" />
-                    <span>Equipe da Oficina ({detailData.membros.length})</span>
-                  </h3>
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl divide-y divide-slate-800">
-                    {detailData.membros.length === 0 ? (
-                      <p className="p-4 text-xs text-slate-500 text-center">Nenhum membro cadastrado.</p>
-                    ) : (
-                      detailData.membros.map((m) => {
-                        const isAlreadyAdmin = platformAdminsEmails.includes(m.email.toLowerCase());
-                        const parceiroCod = parceirosEmails.get(m.email.toLowerCase());
-
-                        return (
-                          <div key={m.id} className="p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-slate-900/50 transition">
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-semibold text-slate-200">{m.nome}</span>
-                                {isAlreadyAdmin && (
-                                  <span className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 font-sans">
-                                    <Shield className="w-3 h-3 text-indigo-400" /> Admin Plataforma
-                                  </span>
-                                )}
-                                {parceiroCod && (
-                                  <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 font-sans">
-                                    <Award className="w-3 h-3 text-emerald-400" /> Parceiro ({parceiroCod})
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-slate-400 font-mono text-[11px] mt-0.5">{m.email}</div>
-                              {m.telefone && (
-                                <div className="mt-1 flex items-center gap-2">
-                                  <span className="text-slate-400 font-mono text-[11px]">{formatTelefone(m.telefone)}</span>
-                                  <a
-                                    href={`https://wa.me/55${cleanTelefone(m.telefone)}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded text-[10px] transition"
-                                    title="Conversar com este membro no WhatsApp"
-                                  >
-                                    <MessageCircle className="w-3 h-3" />
-                                    <span>WhatsApp</span>
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2 flex-wrap self-end md:self-center">
-                              {!isAlreadyAdmin && (
-                                <button
-                                  onClick={() => {
-                                    setModalAdminTarget({ nome: m.nome, email: m.email });
-                                    setAdminNivel('admin');
-                                    setAdminObservacao('');
-                                  }}
-                                  className="bg-indigo-950/60 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-800/60 hover:border-indigo-500 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-                                  title="Promover este membro a Administrador da Plataforma"
-                                >
-                                  <Shield className="w-3 h-3 text-indigo-400" />
-                                  <span>Promover Admin</span>
-                                </button>
-                              )}
-
-                              {!parceiroCod && (
-                                <button
-                                  onClick={() => handleAbrirModalParceiro(m)}
-                                  className="bg-emerald-950/60 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-800/60 hover:border-emerald-500 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-                                  title="Cadastrar como Parceiro Comercial"
-                                >
-                                  <Award className="w-3 h-3 text-emerald-400" />
-                                  <span>Tornar Parceiro</span>
-                                </button>
-                              )}
-
-                              <button
-                                onClick={() => handleAbrirModalEditarUsuario(m)}
-                                className="bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-                                title="Editar Nome e Telefone deste usuário"
-                              >
-                                <Edit2 className="w-3 h-3 text-amber-400" />
-                                <span>Editar Nome</span>
-                              </button>
-
-                              <div className="text-right pl-2 border-l border-slate-800">
-                                <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px] uppercase">
-                                  {m.role} ({m.status})
-                                </span>
-                                <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                                  Acesso: {m.ultimo_acesso ? formatarDataSegura(m.ultimo_acesso) : 'Nunca'}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                {/* 12 Months Activity */}
-                <div>
-                  <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider mb-3 flex items-center space-x-2">
-                    <Activity className="w-4 h-4 text-amber-500" />
-                    <span>Histórico dos Últimos 12 Meses</span>
-                  </h3>
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 overflow-x-auto">
-                    <table className="w-full text-xs text-left font-mono">
-                      <thead className="text-slate-500 border-b border-slate-800">
-                        <tr>
-                          <th className="pb-2">Mês</th>
-                          <th className="pb-2 text-center">Agendamentos</th>
-                          <th className="pb-2 text-center">Execuções Finalizadas</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-900 text-slate-300">
-                        {detailData.historico_12m.map((h) => (
-                          <tr key={h.mes}>
-                            <td className="py-1.5 text-slate-400">{h.mes}</td>
-                            <td className="py-1.5 text-center">{h.agendamentos_criados}</td>
-                            <td className="py-1.5 text-center text-emerald-400">{h.execucoes_finalizadas}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Zona de Perigo / Exclusão */}
-                <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center space-x-2 text-red-400">
-                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider">Zona de Exclusão de Oficina</h4>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Deseja apagar esta oficina de testes e liberar o e-mail do proprietário para testar um novo cadastro com link de parceiro/afiliado?
-                  </p>
+                {/* Botão +15 Dias de Trial (Oculto se assinatura for ativa) */}
+                {selectedConta.assinatura_status !== 'ativa' && (
                   <button
-                    onClick={() => handleAbrirModalExcluir(detailData.tenant.id, detailData.tenant.nome, detailData.tenant.slug)}
-                    className="inline-flex items-center space-x-2 bg-red-600 hover:bg-red-500 text-white font-bold px-3.5 py-2 rounded-lg text-xs uppercase tracking-wider transition cursor-pointer shadow"
+                    type="button"
+                    disabled={isReadOnly || estendendoTrial}
+                    onClick={() => handleEstenderTrial(selectedConta.tenant_id)}
+                    className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20 transition disabled:opacity-50 cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Excluir Oficina & Liberar E-mails</span>
+                    <Clock className="w-4 h-4" />
+                    <span>{estendendoTrial ? 'Estendendo...' : '+15 Dias de Trial'}</span>
                   </button>
-                </div>
-
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4 my-auto">
-                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-400">
-                  <AlertTriangle className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-base font-bold text-white">Não foi possível carregar os detalhes</h3>
-                  <p className="text-xs text-slate-400 max-w-sm">
-                    {detailError || 'Ocorreu uma instabilidade ao buscar os dados da oficina.'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => selectedTenantId && handleOpenDetail(selectedTenantId)}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer shadow-lg shadow-amber-950/40"
-                >
-                  Tentar Novamente
-                </button>
-              </div>
-            )}
-
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal de Alteração Manual de Plano */}
-      {modalPlanoOpen && targetTenant && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150 my-auto">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
-                <Shield className="text-amber-500" size={18} />
-                Alteração Manual de Plano
-              </h3>
-              <button onClick={() => setModalPlanoOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSalvarAlteracaoPlano} className="flex flex-col gap-4">
-              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300">
-                Oficina: <strong className="text-white">{targetTenant.nome}</strong> (Atual: <span className="uppercase font-mono text-amber-400">{targetTenant.planoAtual}</span>)
+                )}
               </div>
 
-              {targetTenant.asaasSubId && (
-                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 leading-relaxed">
-                  <strong>Atenção:</strong> Esta oficina possui assinatura Asaas (<span className="font-mono">{targetTenant.asaasSubId}</span>). Alterar o plano manualmente pelo Admin não cancela cobranças já criadas no gateway Asaas.
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Novo Plano</label>
-                <select
-                  value={novoPlano}
-                  onChange={(e) => setNovoPlano(e.target.value as any)}
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-amber-500 outline-none cursor-pointer"
-                >
-                  {planosCadastrados.length > 0 ? (
-                    planosCadastrados.map((p) => (
-                      <option key={p.codigo} value={p.codigo}>
-                        {p.nome.toUpperCase()} (R$ {(p.preco_centavos / 100).toFixed(2).replace('.', ',')}/mês)
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="free">FREE</option>
-                      <option value="pro">PRO</option>
-                      <option value="studio">STUDIO</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {novoPlano !== 'free' ? (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-mono font-bold text-slate-300 uppercase">Tipo de Concessão</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsCortesiaAdmin(true)}
-                        className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                          isCortesiaAdmin
-                            ? 'bg-cyan-500/15 border-cyan-500/50 text-cyan-200'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                        }`}
-                      >
-                        <span className="text-xs font-bold block">Cortesia Admin</span>
-                        <span className="text-[10px] opacity-80">Sem cobrança / Fora do MRR</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsCortesiaAdmin(false)}
-                        className={`p-2.5 rounded-lg border text-left transition cursor-pointer ${
-                          !isCortesiaAdmin
-                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-200'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                        }`}
-                      >
-                        <span className="text-xs font-bold block">Ativo Comercial</span>
-                        <span className="text-[10px] opacity-80">Pago manual / Conta no MRR</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-mono font-bold text-slate-300 uppercase">
-                      {isCortesiaAdmin ? 'Duração da Cortesia (Rebaixamento Automático)' : 'Vigência / Próximo Vencimento'}
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {CORTESIA_DURACAO_OPCOES.map((op) => (
-                        <button
-                          key={op.id}
-                          type="button"
-                          onClick={() => setDuracaoCortesiaOpcao(op.id)}
-                          className={`py-2 px-2 rounded-lg border text-xs font-semibold transition cursor-pointer ${
-                            duracaoCortesiaOpcao === op.id
-                              ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
-                          }`}
-                        >
-                          {op.label}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setDuracaoCortesiaOpcao('custom')}
-                        className={`py-2 px-2 rounded-lg border text-xs font-semibold transition cursor-pointer col-span-3 ${
-                          duracaoCortesiaOpcao === 'custom'
-                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                        }`}
-                      >
-                        Outro prazo (informar dias)
-                      </button>
-                    </div>
-
-                    {duracaoCortesiaOpcao === 'custom' && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <input
-                          type="number"
-                          min={1}
-                          max={3650}
-                          value={diasCustomCortesia}
-                          onChange={(e) => setDiasCustomCortesia(e.target.value)}
-                          placeholder="Dias (ex: 45)"
-                          className="w-32 p-2 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg text-xs text-slate-100 outline-none font-mono"
-                        />
-                        <span className="text-xs text-slate-400">dias a partir de hoje</span>
-                      </div>
-                    )}
-
-                    {(() => {
-                      const diasPrev = resolverDiasCortesia();
-                      const dataFimIso = calcularDataFimCortesiaISO(diasPrev);
-                      return (
-                        <div className="mt-1 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
-                          {dataFimIso ? (
-                            isCortesiaAdmin ? (
-                              <span>
-                                ⏳ Acesso liberado sem cobrança até <strong className="text-cyan-300">{formatarDataSegura(dataFimIso)}</strong> ({diasPrev} dias). Após essa data, a rotina diária rebaixa automaticamente para <strong className="text-slate-100">FREE</strong>.
-                              </span>
-                            ) : (
-                              <span>
-                                📅 Plano ativo no MRR com próximo vencimento em <strong className="text-emerald-300">{formatarDataSegura(dataFimIso)}</strong>.
-                              </span>
-                            )
-                          ) : (
-                            <span>
-                              ♾️ <strong className="text-amber-300">Sem prazo definido (vitalício):</strong> esta oficina não será rebaixada automaticamente pelo cron. {isCortesiaAdmin ? 'Não gera cobrança no Asaas e não entra no MRR.' : ''}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </>
-              ) : (
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-200">
-                  A oficina será rebaixada imediatamente para o plano <strong>FREE</strong> e eventuais cortesias ativas serão encerradas.
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase">
-                  Motivo / Justificativa (Obrigatório para Auditoria)
-                </label>
-                <textarea
-                  rows={3}
-                  value={motivoAudit}
-                  onChange={(e) => setMotivoAudit(e.target.value)}
-                  placeholder="Ex: Concessão de cortesia de 30 dias para parceiro ou teste comercial."
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-amber-500 outline-none resize-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={salvandoPlano || !motivoAudit.trim()}
-                className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg"
-              >
-                {salvandoPlano ? 'Salvando...' : 'Confirmar e Auditar Alteração'}
-              </button>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal Promover a Administrador */}
-      {modalAdminTarget && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
-                <Shield className="text-indigo-400" size={18} />
-                Promover a Administrador da Plataforma
-              </h3>
-              <button onClick={() => setModalAdminTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmarPromocaoAdmin} className="flex flex-col gap-4">
-              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-1">
-                <div>Membro: <strong className="text-white">{modalAdminTarget.nome}</strong></div>
-                <div>E-mail: <span className="text-indigo-400 font-mono">{modalAdminTarget.email}</span></div>
-                <div className="text-slate-500 text-[11px] pt-1">Ao promover, este usuário terá acesso ao painel de Super Admin e gestão global da Plataforma Detailers.</div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Nível de Permissão</label>
-                <select
-                  value={adminNivel}
-                  onChange={(e) => setAdminNivel(e.target.value as any)}
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-indigo-500 outline-none cursor-pointer"
-                >
-                  <option value="admin">Administrador (Controle Total de Edição)</option>
-                  <option value="suporte">Suporte (Visualização e Suporte Técnico)</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Observação / Justificativa</label>
-                <input
-                  type="text"
-                  value={adminObservacao}
-                  onChange={(e) => setAdminObservacao(e.target.value)}
-                  placeholder="Ex: Novo sócio ou membro da equipe interna"
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-indigo-500 outline-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={salvandoAdmin}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg flex items-center justify-center gap-2"
-              >
-                <Shield size={16} />
-                <span>{salvandoAdmin ? 'Promovendo...' : 'Confirmar Promoção para Admin'}</span>
-              </button>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal Tornar Parceiro Comercial */}
-      {modalParceiroTarget && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm flex items-center gap-2">
-                <Award className="text-emerald-400" size={18} />
-                Cadastrar como Parceiro Comercial
-              </h3>
-              <button onClick={() => setModalParceiroTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmarTornarParceiro} className="flex flex-col gap-4">
-              <div className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 space-y-1">
-                <div>Nome: <strong className="text-white">{modalParceiroTarget.nome}</strong></div>
-                <div>E-mail: <span className="text-emerald-400 font-mono">{modalParceiroTarget.email}</span></div>
-                <div className="text-slate-500 text-[11px] pt-1">O login deste usuário terá acesso ao Portal do Parceiro e link de indicação exclusivo.</div>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Código do Cupom / Link (URL)</label>
-                <input
-                  type="text"
-                  value={parceiroCodigo}
-                  onChange={(e) => setParceiroCodigo(e.target.value.toUpperCase().replace(/\s+/g, ''))}
-                  placeholder="Ex: MEUCUPOM"
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 font-mono focus:border-emerald-500 outline-none uppercase"
-                  required
-                />
-                <span className="text-[10px] text-slate-500">Link gerado: detailers.app/parceiro/{parceiroCodigo || 'CODIGO'}</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-mono font-bold text-slate-300 uppercase">Comissão</label>
-                  <select
-                    value={parceiroComissaoTipo}
-                    onChange={(e) => setParceiroComissaoTipo(e.target.value as any)}
-                    className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-emerald-500 outline-none cursor-pointer"
+              {/* Botões de Acesso Rápido */}
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                {obterLinkWhatsApp(selectedConta.telefone_dono, selectedConta.nome_estetica) && (
+                  <a
+                    href={obterLinkWhatsApp(selectedConta.telefone_dono, selectedConta.nome_estetica)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition shadow-sm"
                   >
-                    <option value="percentual">Percentual (%)</option>
-                    <option value="valor_fixo">Fixo (R$)</option>
-                  </select>
-                </div>
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>WhatsApp ({formatTelefone(selectedConta.telefone_dono || '')})</span>
+                  </a>
+                )}
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-mono font-bold text-slate-300 uppercase">Valor</label>
-                  <input
-                    type="number"
-                    value={parceiroComissaoValor}
-                    onChange={(e) => setParceiroComissaoValor(e.target.value)}
-                    className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-emerald-500 outline-none"
-                    required
-                  />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAcessarOficina(selectedConta.tenant_id)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Acessar no App</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAbrirModalPlano(selectedConta.tenant_id, selectedConta.nome_estetica, selectedConta.plano)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Alterar Plano</span>
+                </button>
               </div>
+            </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase">Chave PIX (Opcional)</label>
-                <input
-                  type="text"
-                  value={parceiroPixChave}
-                  onChange={(e) => setParceiroPixChave(e.target.value)}
-                  placeholder="CPF, Telefone, E-mail ou Aleatória"
-                  className="p-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 focus:border-emerald-500 outline-none"
-                />
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer pt-1">
-                <input
-                  type="checkbox"
-                  checked={parceiroRecorrente}
-                  onChange={(e) => setParceiroRecorrente(e.target.checked)}
-                  className="w-4 h-4 rounded bg-slate-950 border-slate-800 text-emerald-500 focus:ring-0"
-                />
-                <span className="text-xs text-slate-300">Comissão recorrente em todas as mensalidades</span>
-              </label>
+            {/* Abas do Drawer */}
+            <div className="flex items-center border-b border-slate-800 px-4 sm:px-6 bg-slate-950/20">
+              <button
+                type="button"
+                onClick={() => setDrawerTab('timeline')}
+                className={`py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition cursor-pointer ${
+                  drawerTab === 'timeline'
+                    ? 'border-amber-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <History className="w-4 h-4 text-amber-400" />
+                <span>Histórico de Atividade</span>
+              </button>
 
               <button
-                type="submit"
-                disabled={salvandoParceiro || !parceiroCodigo.trim()}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-lg flex items-center justify-center gap-2"
+                type="button"
+                onClick={() => setDrawerTab('membros')}
+                className={`py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition cursor-pointer ${
+                  drawerTab === 'membros'
+                    ? 'border-amber-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
               >
-                <Award size={16} />
-                <span>{salvandoParceiro ? 'Cadastrando...' : 'Confirmar Cadastro de Parceiro'}</span>
+                <Users className="w-4 h-4 text-slate-400" />
+                <span>Membros da Equipe</span>
               </button>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
 
-      {/* Modal de Exclusão Definitiva */}
-      {modalExcluirOpen && tenantParaExcluir && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-red-900/50 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2.5 text-red-400">
-                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <Trash2 className="w-5 h-5 text-red-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white font-display uppercase tracking-wider text-sm">
-                    Excluir Oficina Definitivamente
-                  </h3>
-                  <p className="text-[11px] text-slate-400">Ação irreversível de limpeza</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => { setModalExcluirOpen(false); setTenantParaExcluir(null); }} 
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              <button
+                type="button"
+                onClick={() => setDrawerTab('geral')}
+                className={`py-3 px-4 text-xs sm:text-sm font-semibold border-b-2 flex items-center gap-2 transition cursor-pointer ${
+                  drawerTab === 'geral'
+                    ? 'border-amber-500 text-white'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
               >
-                <X size={18} />
+                <Sliders className="w-4 h-4 text-slate-400" />
+                <span>Gerenciamento</span>
               </button>
             </div>
 
-            <div className="p-4 bg-red-950/30 border border-red-500/30 rounded-xl space-y-2 text-xs">
-              <p className="font-bold text-red-300 flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                Atenção: Esta ação não pode ser desfeita!
-              </p>
-              <ul className="list-disc list-inside text-slate-300 space-y-1 pl-1">
-                <li>Todos os dados da oficina (<strong className="text-white">{tenantParaExcluir.nome}</strong>) serão apagados: clientes, veículos, agendamentos, serviços, financeiro e histórico.</li>
-                <li>Se a opção abaixo estiver marcada, o usuário de login (<strong className="text-white">auth.users</strong>) será removido, liberando o e-mail para se cadastrar novamente do zero.</li>
-              </ul>
-            </div>
+            {/* Corpo do Drawer */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              
+              {/* ABA 1: TIMELINE CRONOLÓGICA */}
+              {drawerTab === 'timeline' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Rastreamento Recente
+                    </span>
+                    <span className="text-xs font-mono text-slate-500">
+                      {timelineLogs.length} registros
+                    </span>
+                  </div>
 
-            <form onSubmit={handleConfirmarExclusao} className="flex flex-col gap-4">
-              <label className="flex items-start gap-3 p-3 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition">
-                <input
-                  type="checkbox"
-                  checked={excluirAuthUsers}
-                  onChange={(e) => setExcluirAuthUsers(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 rounded bg-slate-900 border-slate-700 text-red-600 focus:ring-0 cursor-pointer"
-                />
-                <div className="text-xs">
-                  <span className="font-bold text-slate-200 block">Excluir usuário do login e liberar o e-mail</span>
-                  <span className="text-slate-400 text-[11px] block mt-0.5">
-                    Permite usar o mesmo e-mail imediatamente para testar o cadastro através do link de parceiro/afiliado.
-                  </span>
-                </div>
-              </label>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono font-bold text-slate-300">
-                  Para confirmar, digite o nome da oficina: <span className="text-red-400 select-all font-bold">"{tenantParaExcluir.nome}"</span>
-                </label>
-                <input
-                  type="text"
-                  value={confirmacaoNome}
-                  onChange={(e) => setConfirmacaoNome(e.target.value)}
-                  placeholder={`Digite "${tenantParaExcluir.nome}"`}
-                  autoFocus
-                  className="p-3 bg-slate-950 border border-slate-800 focus:border-red-500 rounded-xl text-xs text-white font-medium outline-none transition"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => { setModalExcluirOpen(false); setTenantParaExcluir(null); }}
-                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={excluindoOficina || confirmacaoNome.trim().toLowerCase() !== tenantParaExcluir.nome.trim().toLowerCase()}
-                  className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-red-950/50 flex items-center justify-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>{excluindoOficina ? 'Excluindo...' : 'Excluir Definitivamente'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal para Purgar / Liberar E-mail do auth.users */}
-      {modalPurgarEmailOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-red-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-red-950/40 relative">
-            <button
-              onClick={() => setModalPurgarEmailOpen(false)}
-              className="absolute top-4 right-4 text-slate-500 hover:text-white transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-red-500/15 border border-red-500/30 rounded-xl text-red-400 shrink-0">
-                <UserX className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white font-heading">
-                  Liberar E-mail / Excluir Cadastro
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Desbloqueia um e-mail do sistema de autenticação (auth.users)
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3 bg-red-950/30 border border-red-500/20 rounded-xl text-xs text-red-200 leading-relaxed mb-4">
-              <p>
-                Use esta ferramenta quando um colaborador ou usuário antigo foi apagado mas o e-mail continua aparecendo como <em>"já cadastrado"</em> ao tentar criar uma conta nova.
-              </p>
-              <p className="mt-1 font-semibold text-red-300">
-                O e-mail será totalmente expurgado e liberado imediatamente para novos cadastros e testes de afiliados.
-              </p>
-            </div>
-
-            <form onSubmit={handleConfirmarPurgarEmail} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono font-bold text-slate-300">
-                  E-mail para liberar:
-                </label>
-                <input
-                  type="email"
-                  value={emailParaPurgar}
-                  onChange={(e) => setEmailParaPurgar(e.target.value)}
-                  placeholder="exemplo@gmail.com"
-                  autoFocus
-                  required
-                  className="p-3 bg-slate-950 border border-slate-800 focus:border-red-500 rounded-xl text-xs text-white font-medium outline-none transition"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setModalPurgarEmailOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={purgandoEmail || !emailParaPurgar.trim()}
-                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-red-950/50 flex items-center justify-center gap-2"
-                >
-                  <UserX className="w-4 h-4" />
-                  <span>{purgandoEmail ? 'Liberando...' : 'Liberar E-mail'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Modal para Editar Nome e Dados do Usuário */}
-      {modalEditarUsuario && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-amber-950/40 relative">
-            <button
-              onClick={() => setModalEditarUsuario(null)}
-              className="absolute top-4 right-4 text-slate-500 hover:text-white transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
-                <Edit2 className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white font-heading">
-                  Editar Nome do Usuário
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {modalEditarUsuario.email}
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSalvarEdicaoUsuario} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono font-bold text-slate-300">
-                  Nome Completo *
-                </label>
-                <input
-                  type="text"
-                  value={editNome}
-                  onChange={(e) => setEditNome(e.target.value)}
-                  placeholder="Nome do cliente/usuário"
-                  autoFocus
-                  required
-                  className="p-3 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-white font-medium outline-none transition"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono font-bold text-slate-300">
-                  Telefone / WhatsApp (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={editTelefone}
-                  onChange={(e) => setEditTelefone(e.target.value)}
-                  placeholder="(11) 99999-9999"
-                  className="p-3 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-white font-medium outline-none transition"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setModalEditarUsuario(null)}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={salvandoUsuario || !editNome.trim()}
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-amber-950/50 flex items-center justify-center gap-2"
-                >
-                  {salvandoUsuario ? (
-                    'Salvando...'
+                  {loadingTimeline ? (
+                    <div className="py-12 text-center text-slate-400">
+                      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-500 mx-auto mb-2" />
+                      <p className="text-xs">Carregando histórico do usuário...</p>
+                    </div>
+                  ) : timelineLogs.length === 0 ? (
+                    <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-center text-slate-400 space-y-2">
+                      <History className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="font-semibold text-slate-300 text-sm">Nenhum evento registrado ainda.</p>
+                      <p className="text-xs text-slate-500">
+                        Conta criada em {formatarDataSegura(selectedConta.data_cadastro)}. Os eventos de navegação e ações de pátio aparecerão aqui automaticamente.
+                      </p>
+                    </div>
                   ) : (
-                    <>
-                      <Edit2 className="w-4 h-4" />
-                      <span>Salvar Nome</span>
-                    </>
+                    <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
+                      {timelineLogs.map((log) => (
+                        <div key={log.id} className="relative group">
+                          {/* Nó da Timeline */}
+                          <span className={`absolute -left-[19px] top-1.5 w-3 h-3 rounded-full border-2 border-slate-900 ${
+                            log.event_type === 'action' ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-cyan-400'
+                          }`} />
+
+                          <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 hover:border-slate-700 transition">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold ${
+                                log.event_type === 'action' 
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' 
+                                  : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
+                              }`}>
+                                {log.event_type === 'action' ? 'Ação' : 'Página'}
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-mono">
+                                {new Date(log.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                              </span>
+                            </div>
+                            <p className="text-sm font-bold text-white mt-1.5">{log.label}</p>
+                            {log.route && (
+                              <p className="text-[11px] text-slate-500 font-mono truncate mt-0.5">{log.route}</p>
+                            )}
+                            <p className="text-[10px] text-slate-400 mt-1">Por: {log.user_nome || log.user_email}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
+                </div>
+              )}
+
+              {/* ABA 2: MEMBROS DA EQUIPE */}
+              {drawerTab === 'membros' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Membros Vinculados
+                    </span>
+                  </div>
+
+                  {!legacyDetail?.membros || legacyDetail.membros.length === 0 ? (
+                    <div className="p-6 bg-slate-950/60 border border-slate-800/80 rounded-2xl text-center text-slate-400 text-xs">
+                      Nenhum membro encontrado.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {legacyDetail.membros.map((m) => (
+                        <div key={m.id} className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white text-sm">{m.nome}</span>
+                              <span className="text-[10px] font-mono uppercase bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700">
+                                {m.role}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">{m.email}</p>
+                            {m.telefone && (
+                              <p className="text-xs text-slate-500 font-mono">{formatTelefone(m.telefone)}</p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAbrirModalEditarUsuario(m)}
+                              className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded-lg transition cursor-pointer"
+                              title="Editar Perfil do Usuário"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ABA 3: GERENCIAMENTO & EXCLUSÃO */}
+              {drawerTab === 'geral' && (
+                <div className="space-y-6">
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <h4 className="text-sm font-bold text-white">Dados da Oficina</h4>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-slate-500 block">Slug público:</span>
+                        <span className="text-slate-300 font-mono">/{selectedConta.slug}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Data de Cadastro:</span>
+                        <span className="text-slate-300 font-mono">{formatarDataSegura(selectedConta.data_cadastro)}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Cidade / UF:</span>
+                        <span className="text-slate-300">{selectedConta.cidade ? `${selectedConta.cidade}/${selectedConta.uf}` : 'Não informada'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block">Vencimento Trial:</span>
+                        <span className="text-slate-300 font-mono">{selectedConta.trial_fim ? formatarDataSegura(selectedConta.trial_fim) : 'Sem trial'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Zona de Perigo */}
+                  <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>Zona de Perigo</span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      A exclusão é definitiva e removerá todos os clientes, veículos, ordens de serviço e fotos da oficina.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={() => handleAbrirModalExcluir(selectedConta.tenant_id, selectedConta.nome_estetica, selectedConta.slug)}
+                      className="w-full py-2.5 px-4 rounded-xl text-xs font-bold text-red-300 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition cursor-pointer"
+                    >
+                      Excluir Oficina Definitivamente
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL DE ALTERAÇÃO MANUAL DE PLANO */}
+      {modalPlanoOpen && targetTenant && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <h3 className="text-lg font-bold text-white">Alterar Plano — {targetTenant.nome}</h3>
+              <button onClick={() => setModalPlanoOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAlterarPlanoSubmit} className="space-y-4 pt-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Novo Plano</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['free', 'pro', 'studio'] as const).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setNovoPlano(p)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold uppercase transition cursor-pointer ${
+                        novoPlano === p
+                          ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                          : 'bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {novoPlano !== 'free' && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">Conceder como Cortesia</span>
+                    <input
+                      type="checkbox"
+                      checked={isCortesiaAdmin}
+                      onChange={(e) => setIsCortesiaAdmin(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-500 focus:ring-0 cursor-pointer"
+                    />
+                  </div>
+
+                  {isCortesiaAdmin && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 mb-1">Duração da Cortesia</label>
+                      <select
+                        value={duracaoCortesiaId}
+                        onChange={(e) => setDuracaoCortesiaId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                      >
+                        {CORTESIA_DURACAO_OPCOES.map(opt => (
+                          <option key={opt.id} value={opt.id}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Motivo do Ajuste</label>
+                <input
+                  type="text"
+                  value={motivoCortesia}
+                  onChange={(e) => setMotivoCortesia(e.target.value)}
+                  placeholder="Ex: Parceria comercial, teste estendido..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setModalPlanoOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPlano}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer"
+                >
+                  {savingPlano ? 'Salvando...' : 'Confirmar Alteração'}
                 </button>
               </div>
             </form>
@@ -2004,123 +1426,47 @@ export const AdminOficinas: React.FC = () => {
         document.body
       )}
 
-      {/* Modal de Alteração de Nome da Oficina */}
+      {/* MODAL EDITAR NOME DA OFICINA */}
       {modalEditarOficina && createPortal(
-        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 flex flex-col gap-5 animate-in zoom-in-95 duration-150 relative">
-            <button
-              onClick={() => setModalEditarOficina(null)}
-              className="absolute top-4 right-4 text-slate-500 hover:text-white transition cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
-                <Building2 className="w-6 h-6" />
-              </div>
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-white mb-4">Editar Nome da Oficina</h3>
+            <form onSubmit={handleSalvarNomeOficina} className="space-y-4">
               <div>
-                <h3 className="text-base font-bold text-white font-heading">
-                  Alterar Nome da Oficina
-                </h3>
-                <p className="text-xs text-slate-400">
-                  ID: <span className="font-mono">{modalEditarOficina.id}</span>
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSalvarNomeOficina} className="flex flex-col gap-4">
-              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1">
-                <div>Nome atual: <strong className="text-white">{modalEditarOficina.nome}</strong></div>
-                <div className="text-slate-400">
-                  Endereço público atual: <span className="text-amber-400 font-mono">/{modalEditarOficina.slug}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono font-bold text-slate-300">
-                  Novo Nome da Oficina *
-                </label>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Nome da Oficina</label>
                 <input
                   type="text"
                   value={novoNomeOficina}
                   onChange={(e) => setNovoNomeOficina(e.target.value)}
-                  placeholder="Ex: Detail Car Estética Automotiva"
-                  autoFocus
                   required
-                  className="p-3 bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-xl text-xs text-white font-medium outline-none transition"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
                 />
               </div>
 
-              {/* Preview Dinâmico do Slug */}
-              <div className="p-3 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-1 text-xs">
-                <span className="text-slate-400 block text-[11px] font-mono uppercase">
-                  Novo Endereço Público (Sincronizado):
-                </span>
-                <span className="font-mono font-bold text-amber-400 text-xs break-all">
-                  /{calcularSlugPreview(novoNomeOficina, modalEditarOficina.slug)}
-                </span>
-                <span className="text-[11px] text-slate-500 block pt-0.5">
-                  Ao alterar o nome, o link público (/agendar/...) é recalculado automaticamente.
-                </span>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Slug da URL</label>
+                <input
+                  type="text"
+                  value={novoSlugOficina}
+                  onChange={(e) => setNovoSlugOficina(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
               </div>
 
-              {/* Verificação do Intervalo de 15 Dias */}
-              {(() => {
-                const dataAlteracao = modalEditarOficina.nome_alterado_em ? new Date(modalEditarOficina.nome_alterado_em) : null;
-                const diasPassados = dataAlteracao ? (Date.now() - dataAlteracao.getTime()) / (1000 * 60 * 60 * 24) : 999;
-                const diasRestantes = Math.max(0, Math.ceil(15 - diasPassados));
-                const emCooldown = diasRestantes > 0;
-
-                return (
-                  <div className="space-y-2">
-                    {emCooldown && (
-                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-xs flex items-start gap-2">
-                        <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-400" />
-                        <div>
-                          <strong>Aviso de Intervalo:</strong> O nome desta oficina foi alterado recentemente. Faltam{' '}
-                          <strong>{diasRestantes} dia(s)</strong> para o prazo regular de 15 dias.
-                        </div>
-                      </div>
-                    )}
-
-                    <label className="flex items-center gap-2.5 p-2.5 bg-slate-950 border border-slate-800 rounded-xl cursor-pointer hover:border-slate-700 transition">
-                      <input
-                        type="checkbox"
-                        checked={ignorarCooldownOficina}
-                        onChange={(e) => setIgnorarCooldownOficina(e.target.checked)}
-                        className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0 cursor-pointer"
-                      />
-                      <span className="text-xs text-slate-300">
-                        Ignorar intervalo de 15 dias (Super Admin)
-                      </span>
-                    </label>
-                  </div>
-                );
-              })()}
-
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalEditarOficina(null)}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition cursor-pointer"
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
                   Cancelar
                 </button>
-
                 <button
                   type="submit"
-                  disabled={salvandoNomeOficina || !novoNomeOficina.trim() || novoNomeOficina.trim() === modalEditarOficina.nome}
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-amber-950/50 flex items-center justify-center gap-2"
+                  disabled={salvandoNomeOficina}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer"
                 >
-                  {salvandoNomeOficina ? (
-                    'Salvando...'
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      <span>Salvar Nome e Slug</span>
-                    </>
-                  )}
+                  {salvandoNomeOficina ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
               </div>
             </form>
@@ -2128,6 +1474,165 @@ export const AdminOficinas: React.FC = () => {
         </div>,
         document.body
       )}
+
+      {/* MODAL EDITAR PERFIL DO USUÁRIO */}
+      {modalEditarUsuario && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-white mb-1">Editar Usuário</h3>
+            <p className="text-xs text-slate-500 mb-4">{modalEditarUsuario.email}</p>
+
+            <form onSubmit={handleSalvarEditarUsuario} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Nome Completo</label>
+                <input
+                  type="text"
+                  value={novoNomeUsuario}
+                  onChange={(e) => setNovoNomeUsuario(e.target.value)}
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Telefone / WhatsApp</label>
+                <input
+                  type="text"
+                  value={novoTelefoneUsuario}
+                  onChange={(e) => setNovoTelefoneUsuario(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalEditarUsuario(null)}
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoUsuario}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer"
+                >
+                  {salvandoUsuario ? 'Salvando...' : 'Salvar Usuário'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL EXCLUSÃO DEFINITIVA */}
+      {modalExcluirOpen && tenantParaExcluir && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <div className="flex items-center gap-2 text-red-400 mb-2 font-bold text-base">
+              <AlertTriangle className="w-5 h-5" />
+              <span>Confirmar Exclusão</span>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Você está prestes a excluir permanentemente a oficina <strong className="text-white">{tenantParaExcluir.nome}</strong>.
+            </p>
+
+            <div className="space-y-3 pt-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Digite <strong className="text-white">{tenantParaExcluir.nome}</strong> para confirmar:
+                </label>
+                <input
+                  type="text"
+                  value={confirmacaoNomeExclusao}
+                  onChange={(e) => setConfirmacaoNomeExclusao(e.target.value)}
+                  placeholder="Nome exato da oficina"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="purgaAuth"
+                  checked={purgarAuthNaExclusao}
+                  onChange={(e) => setPurgarAuthNaExclusao(e.target.checked)}
+                  className="rounded text-red-500 focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="purgaAuth" className="text-xs text-slate-400 cursor-pointer">
+                  Liberar e-mail do dono no Auth (permite criar nova conta)
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setModalExcluirOpen(false)}
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={excluindoTenant || confirmacaoNomeExclusao.trim() !== tenantParaExcluir.nome.trim()}
+                  onClick={handleConfirmarExcluir}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 disabled:opacity-30 disabled:cursor-not-allowed text-white transition cursor-pointer"
+                >
+                  {excluindoTenant ? 'Excluindo...' : 'Excluir Definitivamente'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL PURGAR E-MAIL */}
+      {modalPurgarEmailOpen && createPortal(
+        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-white mb-2">Liberar E-mail Órfão</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Remove o e-mail do <code className="text-amber-400">auth.users</code> para que o cliente possa se cadastrar novamente do zero.
+            </p>
+
+            <form onSubmit={handlePurgarEmail} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">E-mail a ser liberado</label>
+                <input
+                  type="email"
+                  value={emailParaPurgar}
+                  onChange={(e) => setEmailParaPurgar(e.target.value)}
+                  placeholder="cliente@email.com"
+                  required
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setModalPurgarEmailOpen(false)}
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={purgandoEmail}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition cursor-pointer"
+                >
+                  {purgandoEmail ? 'Liberando...' : 'Liberar E-mail'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 };

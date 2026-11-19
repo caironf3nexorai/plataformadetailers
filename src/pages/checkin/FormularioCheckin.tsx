@@ -14,6 +14,7 @@ import { ModalConfirmarSemVistoria } from '../../components/checkin/ModalConfirm
 import { dispensarVistoriaAgendamento } from '../../utils/checkin';
 import { MarcadorCombustivelDigital } from '../../components/ui/MarcadorCombustivelDigital';
 import { gerarPDFCheckin } from '../../utils/pdfCheckin';
+import { registrarAcaoUsuario } from '../../services/activityTracker';
 import {
   Car,
   Fuel,
@@ -356,6 +357,8 @@ export const FormularioCheckin: React.FC = () => {
 
       if (rpcErr) throw rpcErr;
 
+      registrarAcaoUsuario('Iniciou Vistoria');
+
       // 3. Carregar o checkin completo
       const { data: chkData, error: chkErr } = await supabase
         .from('checkins')
@@ -617,6 +620,8 @@ export const FormularioCheckin: React.FC = () => {
       });
 
       if (rpcErr) throw rpcErr;
+
+      registrarAcaoUsuario('Finalizou Vistoria');
 
       // 2.1 Snapshot de termos devidamente preenchidos salvo no agendamento para rastreabilidade
       if (agendamentoId) {

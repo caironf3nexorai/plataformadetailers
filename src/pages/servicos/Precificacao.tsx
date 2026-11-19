@@ -6,6 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { ModalConfirmacao } from '../../components/ui/ModalConfirmacao';
 import { CampoNumerico } from '../../components/ui/CampoNumerico';
+import { registrarAcaoUsuario } from '../../services/activityTracker';
 import { 
   AlertTriangle, 
   CheckCircle, 
@@ -147,6 +148,7 @@ export const Precificacao: React.FC = () => {
       });
 
       if (rpcErr) throw rpcErr;
+      registrarAcaoUsuario('Salvou Precificação');
       setSuccess(`Preço de "${item.servico_nome} (${item.categoria_nome})" atualizado para R$ ${novoPreco.toFixed(2)} com sucesso!`);
       await fetchMatriz();
     } catch (err: any) {
@@ -196,6 +198,7 @@ export const Precificacao: React.FC = () => {
       });
 
       if (rpcErr) throw rpcErr;
+      registrarAcaoUsuario('Salvou Precificação');
       setSuccess(`Preços de ${itemsToUpdate.length} serviços reajustados para a margem alvo!`);
       await fetchMatriz();
     } catch (err: any) {

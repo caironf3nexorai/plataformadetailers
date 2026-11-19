@@ -23,6 +23,7 @@ import { SeletorServicos } from '../servicos/SeletorServicos';
 import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
 import { AvisoPernoite } from '../compartilhado/AvisoPernoite';
 import { montarTimestampLocal, formatarDataIsoSP } from '../../utils/datas';
+import { registrarAcaoUsuario } from '../../services/activityTracker';
 import { ModalLimiteAtingido } from '../planos/ModalLimiteAtingido';
 import { usePlano } from '../../hooks/usePlano';
 
@@ -509,6 +510,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
         .single();
 
       if (error) throw error;
+      registrarAcaoUsuario('Cadastrou Cliente');
       setSelectedCliente(data);
       setVeiculosList([]);
       setShowNovoClienteForm(false);
@@ -555,6 +557,7 @@ export const ModalNovoAgendamento: React.FC<ModalNovoAgendamentoProps> = ({
 
       if (error) throw error;
 
+      registrarAcaoUsuario('Criou Agendamento / OS');
       onSuccess();
       onClose();
     } catch (err: any) {

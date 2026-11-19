@@ -50,7 +50,7 @@ export const AdminLayout: React.FC = () => {
   }, []);
 
   const navItems = [
-    { label: 'Oficinas', path: '/admin/oficinas', icon: Building2 },
+    { label: 'Radar de Ativação', path: '/admin/oficinas', icon: Building2 },
     { label: 'Contas (Auth)', path: '/admin/contas', icon: UserCheck },
     { label: 'Quadro de Avisos', path: '/admin/comunicados', icon: Megaphone },
     { label: 'Campanhas & Trial', path: '/admin/campanhas', icon: Rocket },

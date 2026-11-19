@@ -67,7 +67,7 @@ const ROTAS_MAPEADAS: MapeamentoRota[] = [
 
   // Admin da Plataforma
   { padrao: /^\/admin$/, nome: 'Painel Admin' },
-  { padrao: /^\/admin\/oficinas$/, nome: 'Admin - Oficinas' },
+  { padrao: /^\/admin\/oficinas$/, nome: 'Admin - Radar de Ativação' },
   { padrao: /^\/admin\/planos$/, nome: 'Admin - Planos' },
   { padrao: /^\/admin\/permissoes$/, nome: 'Admin - Permissões' },
   { padrao: /^\/admin\/feedbacks$/, nome: 'Admin - Feedbacks' },

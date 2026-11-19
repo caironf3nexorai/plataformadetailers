@@ -24,6 +24,7 @@ import { notificarAtualizacaoTempo } from '../../hooks/useTempoExecucao';
 import { Cronometro } from './Cronometro';
 import { ModalProduto } from '../estoque/ModalProduto';
 import { usePlano } from '../../hooks/usePlano';
+import { registrarAcaoUsuario } from '../../services/activityTracker';
 
 interface ItemPreco {
   agendamento_item_id: string;
@@ -937,6 +938,8 @@ export const ModalFinalizarExecucao: React.FC<ModalFinalizarExecucaoProps> = ({
       });
 
       if (concErr) throw concErr;
+
+      registrarAcaoUsuario('Finalizou Execução de OS');
 
       concluiuRef.current = true;
       notificarAtualizacaoTempo(execucaoId);
