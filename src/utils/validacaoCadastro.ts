@@ -197,3 +197,4 @@ export function validarWhatsAppBrasileiro(telefone: string): ResultadoValidacao 
 
   return { valido: true };
 }
+
