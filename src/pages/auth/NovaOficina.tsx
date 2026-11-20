@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AlertTriangle, Building2, LogOut, ShieldCheck } from 'lucide-react';
 import { LogoNuvemWash } from '../../components/ui/LogoNuvemWash';
 import { trackCompleteRegistration } from '../../utils/pixel';
+import { validarWhatsAppBrasileiro } from '../../utils/validacaoCadastro';
 
 export const NovaOficina: React.FC = () => {
   const navigate = useNavigate();
@@ -78,6 +79,14 @@ export const NovaOficina: React.FC = () => {
     if (!nome.trim()) {
       setErrorMsg('Informe o nome da oficina.');
       return;
+    }
+
+    if (telefone.trim()) {
+      const resZap = validarWhatsAppBrasileiro(telefone);
+      if (!resZap.valido) {
+        setErrorMsg(resZap.erro || 'Informe um WhatsApp válido.');
+        return;
+      }
     }
 
     setLoading(true);

@@ -14,6 +14,10 @@ import {
   CALCULADORA_LEAD_STORAGE_KEY,
   type CalculadoraLeadSessao,
 } from '../../utils/calculadoraLead';
+import {
+  validarEmailReal,
+  validarWhatsAppBrasileiro,
+} from '../../utils/validacaoCadastro';
 
 export const CriarConta: React.FC = () => {
   const navigate = useNavigate();
@@ -201,9 +205,15 @@ export const CriarConta: React.FC = () => {
       return;
     }
 
-    const digitsTelefone = telefone.replace(/\D/g, '');
-    if (digitsTelefone.length < 10) {
-      setErrorMsg('Informe um WhatsApp / Telefone válido com DDD (mínimo 10 dígitos).');
+    const resEmail = validarEmailReal(email);
+    if (!resEmail.valido) {
+      setErrorMsg(resEmail.erro || 'Informe um e-mail válido.');
+      return;
+    }
+
+    const resZap = validarWhatsAppBrasileiro(telefone);
+    if (!resZap.valido) {
+      setErrorMsg(resZap.erro || 'Informe um WhatsApp válido com DDD.');
       return;
     }
 
