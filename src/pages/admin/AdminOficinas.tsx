@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -58,6 +58,7 @@ export interface ContaRadarItem {
   total_execucoes: number;
   total_vistorias: number;
   total_veiculos: number;
+  total_rotas_visitadas?: number;
   score: 'operando' | 'configurando' | 'so_cadastro';
 }
 
@@ -228,9 +229,18 @@ export const AdminOficinas: React.FC = () => {
     return () => clearTimeout(handler);
   }, [busca]);
 
+  // Referência estável para a conta selecionada (evita recriar canal WebSocket a cada clique)
+  const selectedContaRef = useRef<ContaRadarItem | null>(null);
+
+  useEffect(() => {
+    selectedContaRef.current = selectedConta;
+  }, [selectedConta]);
+
   // Carrega Radar de Ativação
-  const carregarRadar = useCallback(async () => {
-    setLoading(true);
+  const carregarRadar = useCallback(async (isBackground = false) => {
+    if (!isBackground) {
+      setLoading(true);
+    }
     try {
       const { data, error } = await supabase.rpc('admin_obter_radar_ativacao', {
         p_pagina: paginaAtual,
@@ -258,9 +268,13 @@ export const AdminOficinas: React.FC = () => {
       }
     } catch (err: any) {
       console.error('[AdminRadar] Erro ao carregar radar:', err);
-      showError(err.message || 'Erro ao carregar dados do Radar de Ativação.');
+      if (!isBackground) {
+        showError(err.message || 'Erro ao carregar dados do Radar de Ativação.');
+      }
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
   }, [paginaAtual, buscaDebounced, scoreFiltro, showError]);
 
@@ -279,35 +293,48 @@ export const AdminOficinas: React.FC = () => {
           schema: 'public',
           table: 'user_activity_logs',
         },
-        async () => {
-          // 1. Atualiza lista do radar e cards de métricas em segundo plano
-          carregarRadar();
+        async (payload) => {
+          console.log('[AdminRadar Realtime] Novo evento de atividade detectado:', payload);
 
-          // 2. Se houver uma oficina com a timeline aberta, atualiza a timeline automaticamente
-          if (selectedConta) {
+          // 1. Atualiza lista do radar e cards de métricas em segundo plano
+          carregarRadar(true);
+
+          // 2. Se houver uma oficina com a timeline aberta no drawer, atualiza a timeline automaticamente
+          const contaAtiva = selectedContaRef.current;
+          if (contaAtiva?.tenant_id) {
             try {
               const { data: logsData, error: logsError } = await supabase.rpc('admin_obter_timeline_usuario', {
-                p_tenant_id: selectedConta.tenant_id,
+                p_tenant_id: contaAtiva.tenant_id,
                 p_limite: 50,
               });
-              if (!logsError && logsData) {
-                setTimelineLogs(logsData);
+              if (logsError) {
+                console.error('[AdminRadar Realtime] Erro ao sincronizar timeline:', logsError);
+              } else if (logsData) {
+                const lista: UserActivityLogItem[] = Array.isArray(logsData)
+                  ? logsData
+                  : typeof logsData === 'string'
+                  ? JSON.parse(logsData)
+                  : [];
+                setTimelineLogs(lista);
               }
             } catch (err) {
-              console.warn('[AdminRadar] Erro ao sincronizar timeline realtime:', err);
+              console.warn('[AdminRadar Realtime] Exceção ao sincronizar timeline:', err);
             }
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[AdminRadar Realtime] Status da conexão WebSocket:', status);
+      });
 
     return () => {
       supabase.removeChannel(canal);
     };
-  }, [carregarRadar, selectedConta]);
+  }, [carregarRadar]);
 
   // Carrega Timeline e Detalhes da Conta Selecionada
   const handleAbrirDrawer = async (conta: ContaRadarItem) => {
+    console.log('[AdminRadar] Abrindo drawer para tenant:', conta.tenant_id, 'nome:', conta.nome_estetica);
     setSelectedConta(conta);
     setDrawerOpen(true);
     setDrawerTab('timeline');
@@ -320,8 +347,19 @@ export const AdminOficinas: React.FC = () => {
         p_limite: 50,
       });
 
-      if (!logsError && logsData) {
-        setTimelineLogs(logsData);
+      console.log('[AdminRadar] Resposta da timeline para tenant:', conta.tenant_id, { logsData, logsError });
+
+      if (logsError) {
+        console.error('[AdminRadar] Erro ao carregar timeline via RPC:', logsError);
+        setTimelineLogs([]);
+      } else if (logsData) {
+        const lista: UserActivityLogItem[] = Array.isArray(logsData)
+          ? logsData
+          : typeof logsData === 'string'
+          ? JSON.parse(logsData)
+          : [];
+        console.log(`[AdminRadar] Timeline carregada: ${lista.length} registros para ${conta.nome_estetica}`);
+        setTimelineLogs(lista);
       } else {
         setTimelineLogs([]);
       }
@@ -335,7 +373,7 @@ export const AdminOficinas: React.FC = () => {
         setLegacyDetail(detailData);
       }
     } catch (err) {
-      console.error('[AdminRadar] Erro ao carregar timeline:', err);
+      console.error('[AdminRadar] Exceção ao carregar timeline:', err);
       setTimelineLogs([]);
     } finally {
       setLoadingTimeline(false);
@@ -586,7 +624,7 @@ export const AdminOficinas: React.FC = () => {
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
             <span className="w-2 h-2 rounded-full bg-amber-400" />
-            Configurando
+            Navegou / Config.
           </span>
         );
       case 'so_cadastro':
@@ -796,7 +834,7 @@ export const AdminOficinas: React.FC = () => {
             }`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-            🟡 Configurando
+            🟡 Navegou / Config.
           </button>
 
           <button
@@ -900,6 +938,12 @@ export const AdminOficinas: React.FC = () => {
                             <span title="Agendamentos / OS">📋 <strong className="text-white">{c.total_agendamentos}</strong></span>
                             <span className="text-slate-600">•</span>
                             <span title="Vistorias">🔍 <strong className="text-white">{c.total_vistorias}</strong></span>
+                            {c.total_rotas_visitadas !== undefined && c.total_rotas_visitadas > 0 && (
+                              <>
+                                <span className="text-slate-600">•</span>
+                                <span title="Abas/Rotas navegadas">🧭 <strong className="text-amber-400">{c.total_rotas_visitadas}</strong></span>
+                              </>
+                            )}
                           </div>
                         </td>
 
@@ -996,6 +1040,12 @@ export const AdminOficinas: React.FC = () => {
                     <span title="Agendamentos">📋 <strong className="text-white">{c.total_agendamentos}</strong></span>
                     <span className="text-slate-700">•</span>
                     <span title="Vistorias">🔍 <strong className="text-white">{c.total_vistorias}</strong></span>
+                    {c.total_rotas_visitadas !== undefined && c.total_rotas_visitadas > 0 && (
+                      <>
+                        <span className="text-slate-700">•</span>
+                        <span title="Abas navegadas">🧭 <strong className="text-amber-400">{c.total_rotas_visitadas}</strong></span>
+                      </>
+                    )}
                   </div>
 
                   {/* Última Ação do Usuário */}
