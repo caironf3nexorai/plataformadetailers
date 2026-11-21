@@ -136,15 +136,23 @@ export const Orcamentos: React.FC = () => {
       });
 
       if (error) {
-        // Fallback para delete direto se RPC não estiver aplicada ainda
-        const { error: delErr } = await supabase
-          .from('orcamentos')
-          .delete()
-          .eq('id', orcamentoParaExcluir.id);
-        if (delErr) throw delErr;
+        if (error.message && error.message.includes('agendamento ativo')) {
+          throw error;
+        }
+
+        // Fallback apenas se a função não existir no schema cache
+        if (error.code === 'PGRST202' || error.message?.includes('Could not find')) {
+          const { error: delErr } = await supabase
+            .from('orcamentos')
+            .delete()
+            .eq('id', orcamentoParaExcluir.id);
+          if (delErr) throw delErr;
+        } else {
+          throw error;
+        }
       }
 
-      showSuccess(`Orçamento ${formatarCodigoProposta(orcamentoParaExcluir)} excluído com sucesso!`);
+      showSuccess(`Orçamento ${formatarCodigoProposta(orcamentoParaExcluir)} removido com sucesso!`);
       setShowConfirmExcluir(false);
       setOrcamentoParaExcluir(null);
       await fetchOrcamentos();

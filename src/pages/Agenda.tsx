@@ -16,6 +16,7 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Plus,
+  Clock,
   Search,
   Filter,
   X,
@@ -45,6 +46,7 @@ import {
 } from '../utils/datas';
 import { formatarOS, formatarMoeda } from '../utils/formatters';
 import { ModalNovoAgendamento } from '../components/agenda/ModalNovoAgendamento';
+import { ModalLancarServicoRetroativo } from '../components/execucao/ModalLancarServicoRetroativo';
 import { PainelAgendamento } from '../components/agenda/PainelAgendamento';
 import { verificarPapelDiaAgendamento } from '../utils/transbordoUtils';
 import { Hoje } from './Hoje';
@@ -166,6 +168,7 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
 
   // Modais
   const [isModalNovoOpen, setIsModalNovoOpen] = useState<boolean>(initialNovoAgendamento);
+  const [isModalRetroativoOpen, setIsModalRetroativoOpen] = useState<boolean>(false);
   const [targetClienteId, setTargetClienteId] = useState<string | undefined>(initialClienteId);
   const [targetVeiculoId, setTargetVeiculoId] = useState<string | undefined>(initialVeiculoId);
   const [selectedAgendamento, setSelectedAgendamento] = useState<Agendamento | null>(null);
@@ -670,14 +673,26 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
         <PageHeader title="Agenda" />
 
         {podeGerirServicos() && (
-          <Button
-            variant="primary"
-            onClick={() => setIsModalNovoOpen(true)}
-            className="flex items-center justify-center gap-2 font-bold bg-amber-500 text-graphite-950 hover:bg-amber-600 min-h-[46px] shrink-0 cursor-pointer"
-          >
-            <Plus size={18} />
-            <span>Novo Agendamento</span>
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsModalRetroativoOpen(true)}
+              className="flex items-center justify-center gap-2 font-semibold border-graphite-600 hover:border-amber-500/50 min-h-[46px] shrink-0"
+              title="Lançar serviço já realizado fora do sistema"
+            >
+              <Clock size={17} className="text-amber-500" />
+              <span>Lançar Retroativo</span>
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => setIsModalNovoOpen(true)}
+              className="flex items-center justify-center gap-2 font-bold bg-amber-500 text-graphite-950 hover:bg-amber-600 min-h-[46px] shrink-0 cursor-pointer"
+            >
+              <Plus size={18} />
+              <span>Novo Agendamento</span>
+            </Button>
+          </div>
         )}
       </div>
 
@@ -1575,6 +1590,15 @@ const VisaoAgenda: React.FC<VisaoAgendaProps> = ({
         initialDate={formatarDataIsoSP(selectedDate)}
         initialClienteId={targetClienteId}
         initialVeiculoId={targetVeiculoId}
+      />
+
+      {/* Modal de Lançamento Retroativo */}
+      <ModalLancarServicoRetroativo
+        isOpen={isModalRetroativoOpen}
+        onClose={() => setIsModalRetroativoOpen(false)}
+        onSuccess={() => {
+          fetchAgendaData();
+        }}
       />
 
       {/* Painel de Detalhes e Ações do Agendamento */}

@@ -34,6 +34,7 @@ export const DetalheCliente: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { tenant } = useAuth();
+  const { showError, showSuccess } = useToast();
   const { isDono, isOperador } = usePermissao();
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
@@ -188,25 +189,55 @@ export const DetalheCliente: React.FC = () => {
 
   const [showConfirmDesativar, setShowConfirmDesativar] = useState(false);
   const [desativandoCliente, setDesativandoCliente] = useState(false);
+  const [reativandoCliente, setReativandoCliente] = useState(false);
 
   const handleDesativarCliente = async () => {
     if (!isDono || !cliente) return;
     setDesativandoCliente(true);
 
     try {
-      const { error } = await supabase.rpc('inativar_ou_excluir_cliente', {
+      const { data, error } = await supabase.rpc('inativar_ou_excluir_cliente', {
         p_cliente_id: cliente.id,
       });
 
       if (error) throw error;
 
       setShowConfirmDesativar(false);
+      showSuccess(
+        data?.mensagem ||
+          (data?.acao === 'inativado'
+            ? 'Cliente arquivado com sucesso (histórico de atendimentos preservado)!'
+            : 'Cliente excluído definitivamente!')
+      );
       navigate('/clientes');
     } catch (err: any) {
       console.error('Erro ao excluir/desativar cliente:', err);
+      showError(err.message || 'Não foi possível excluir o cliente.', err);
       setFeedbackMsg({ type: 'error', text: 'Não foi possível excluir o cliente: ' + (err.message || 'Erro desconhecido') });
     } finally {
       setDesativandoCliente(false);
+    }
+  };
+
+  const handleReativarCliente = async () => {
+    if (!isDono || !cliente) return;
+    setReativandoCliente(true);
+
+    try {
+      const { error } = await supabase
+        .from('clientes')
+        .update({ ativo: true, updated_at: new Date().toISOString() })
+        .eq('id', cliente.id);
+
+      if (error) throw error;
+
+      showSuccess('Cliente reativado com sucesso!');
+      await fetchClienteDetails();
+    } catch (err: any) {
+      console.error('Erro ao reativar cliente:', err);
+      showError(err.message || 'Não foi possível reativar o cliente.', err);
+    } finally {
+      setReativandoCliente(false);
     }
   };
 
@@ -320,15 +351,29 @@ export const DetalheCliente: React.FC = () => {
             </a>
           )}
 
+          {isDono && !cliente.ativo && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleReativarCliente}
+              disabled={reativandoCliente}
+              className="min-h-[44px] px-3.5 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 font-semibold"
+            >
+              <CheckCircle2 size={16} className="text-emerald-400" />
+              {reativandoCliente ? 'Reativando...' : 'Reativar Cliente'}
+            </Button>
+          )}
+
           {isDono && (
             <Button
               type="button"
               variant="ghost"
               onClick={() => setShowConfirmDesativar(true)}
               className="min-h-[44px] px-3 text-flare-400 hover:bg-flare-400/10 hover:text-flare-400"
+              title="Excluir ou arquivar cliente"
             >
               <Trash2 size={18} />
-              Excluir cliente
+              {cliente.ativo ? 'Excluir / Arquivar' : 'Excluir definitivamente'}
             </Button>
           )}
         </div>
@@ -659,9 +704,9 @@ export const DetalheCliente: React.FC = () => {
         isOpen={showConfirmDesativar}
         onClose={() => setShowConfirmDesativar(false)}
         onConfirm={handleDesativarCliente}
-        title="Excluir Cliente"
-        mensagem="Deseja realmente remover este cliente? Se não houver histórico vinculado (agendamentos, orçamentos ou pagamentos), ele será excluído definitivamente do banco de dados. Caso já possua histórico, será desativado e ocultado das listas e seletores."
-        textoConfirmar="Excluir"
+        title={cliente.ativo ? "Excluir ou Arquivar Cliente" : "Excluir Definitivamente"}
+        mensagem="Deseja remover este cliente? Se ele possuir histórico (atendimentos, orçamentos, vistorias ou pagamentos), ele será arquivado e inativado automaticamente com segurança, saindo da sua lista principal e preservando seus dados operacionais. Se não possuir movimentações, será excluído definitivamente."
+        textoConfirmar="Confirmar"
         textoCancelar="Voltar"
         variant="danger"
         loading={desativandoCliente}

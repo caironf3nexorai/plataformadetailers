@@ -29,17 +29,19 @@ export const Clientes: React.FC = () => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [abaAtiva, setAbaAtiva] = useState<'todos' | 'incompletos' | 'oportunidades' | 'garantias'>('todos');
+  const [abaAtiva, setAbaAtiva] = useState<'todos' | 'incompletos' | 'inativos' | 'oportunidades' | 'garantias'>('todos');
   const [totalOportunidades, setTotalOportunidades] = useState<number>(0);
   const [totalGarantias, setTotalGarantias] = useState<number>(0);
 
-  // Sincroniza aba via URL (?aba=oportunidades ou ?aba=retorno ou ?aba=garantias)
+  // Sincroniza aba via URL (?aba=oportunidades ou ?aba=retorno ou ?aba=garantias ou ?aba=inativos)
   useEffect(() => {
     const abaParam = searchParams.get('aba');
     if (abaParam === 'oportunidades' || abaParam === 'retorno' || abaParam === 'reativacao') {
       setAbaAtiva('oportunidades');
     } else if (abaParam === 'garantias') {
       setAbaAtiva('garantias');
+    } else if (abaParam === 'inativos' || abaParam === 'arquivados') {
+      setAbaAtiva('inativos');
     }
   }, [searchParams]);
 
@@ -57,12 +59,13 @@ export const Clientes: React.FC = () => {
     setLoading(true);
 
     try {
-      // Busca clientes ativos do tenant com seus veículos
+      // Busca clientes (ativos ou inativos conforme aba selecionada)
+      const buscarAtivos = abaAtiva !== 'inativos';
       const query = supabase
         .from('clientes')
         .select('*, veiculos:veiculos(*)')
         .eq('tenant_id', tenant.id)
-        .eq('ativo', true)
+        .eq('ativo', buscarAtivos)
         .order('created_at', { ascending: false });
 
       if (debouncedQuery.trim()) {
@@ -114,7 +117,7 @@ export const Clientes: React.FC = () => {
 
   useEffect(() => {
     fetchClientes();
-  }, [tenant?.id, debouncedQuery]);
+  }, [tenant?.id, debouncedQuery, abaAtiva]);
 
   const isIncompleto = (c: Cliente) => {
     const isOnline = c.origem === 'online' || (c.origem as string) === 'agendamento_online';
@@ -204,6 +207,24 @@ export const Clientes: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => { setAbaAtiva('inativos'); setSearchParams({ aba: 'inativos' }); }}
+            className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
+              abaAtiva === 'inativos'
+                ? 'bg-graphite-700 text-vapor-100 border border-graphite-500 font-bold'
+                : 'text-vapor-400 hover:text-vapor-200'
+            }`}
+            title="Clientes arquivados para limpeza da base"
+          >
+            <span>Arquivados</span>
+            {abaAtiva === 'inativos' && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-graphite-600 text-vapor-200 font-bold">
+                {clientes.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => { setAbaAtiva('oportunidades'); setSearchParams({ aba: 'oportunidades' }); }}
             className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
               abaAtiva === 'oportunidades'
@@ -278,6 +299,8 @@ export const Clientes: React.FC = () => {
           title={
             abaAtiva === 'incompletos'
               ? 'Nenhum cliente com cadastro incompleto.'
+              : abaAtiva === 'inativos'
+              ? 'Nenhum cliente arquivado.'
               : searchQuery
               ? 'Nenhum cliente encontrado.'
               : 'Nenhum cliente cadastrado.'
@@ -285,6 +308,8 @@ export const Clientes: React.FC = () => {
           description={
             abaAtiva === 'incompletos'
               ? 'Todos os clientes de agendamento online possuem CPF/CNPJ preenchido.'
+              : abaAtiva === 'inativos'
+              ? 'Clientes antigos que você arquivar para limpar a base de dados aparecerão aqui.'
               : searchQuery
               ? 'Tente buscar por outro termo ou limpe o filtro.'
               : 'Cadastre o primeiro para começar a montar o histórico dos veículos.'
