@@ -391,7 +391,6 @@ BEGIN
     valor_definido_por,
     valor_definido_em,
     observacoes_saida,
-    ajuste_manual,
     created_at,
     updated_at
   ) VALUES (
@@ -406,7 +405,6 @@ BEGIN
     auth.uid(),
     p_data_realizacao,
     p_observacoes,
-    true,
     p_data_realizacao,
     p_data_realizacao
   ) RETURNING id INTO v_execucao_id;
