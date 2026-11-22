@@ -3,6 +3,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { CampoNumerico } from '../ui/CampoNumerico';
+import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
@@ -18,13 +19,16 @@ import {
   CheckCircle2,
   CreditCard,
   Sparkles,
+  Wrench,
 } from 'lucide-react';
 
 interface ServicoItem {
   id: string;
   nome: string;
+  grupo?: string;
   duracao_minutos: number;
   preco_padrao: number;
+  servico_precos?: any[];
 }
 
 interface ServicoSelecionado {
@@ -36,8 +40,11 @@ interface ServicoSelecionado {
 
 interface MembroEquipe {
   id: string;
-  nome?: string | null;
+  user_id?: string | null;
+  email: string;
+  nome: string;
   role: string;
+  status?: string;
 }
 
 interface FormaPagamento {
@@ -68,6 +75,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   const [membrosEquipe, setMembrosEquipe] = useState<MembroEquipe[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
   const [carregandoDados, setCarregandoDados] = useState(false);
+  const [showModalServicoRapido, setShowModalServicoRapido] = useState(false);
 
   // Estados do formulário
   const [dataHora, setDataHora] = useState<string>(() => {
@@ -95,6 +103,99 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     }
   }, [servicosSelecionados, duracaoCustomizada]);
 
+  // Categoria do veículo atualmente selecionado
+  const veiculoSelecionadoObj = veiculos.find((v) => v.id === veiculoId);
+  const categoriaVeiculoId = veiculoSelecionadoObj?.categoria_id;
+
+  // Carrega catálogo de serviços com precificação e duração da categoria
+  const carregarCatalogoServicos = async (catId?: string) => {
+    if (!tenant) return;
+    try {
+      const { data: servs, error: sErr } = await supabase
+        .from('servicos')
+        .select('id, nome, grupo, servico_precos(id, preco_base, duracao_minutos, categoria_id)')
+        .eq('tenant_id', tenant.id)
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+      if (sErr) throw sErr;
+
+      if (servs) {
+        const formatados: ServicoItem[] = servs.map((s: any) => {
+          const precos = s.servico_precos || [];
+          const precoCat = catId ? precos.find((p: any) => p.categoria_id === catId) : null;
+          const precoFinal = Number(precoCat?.preco_base ?? precos[0]?.preco_base ?? 0);
+          const duracaoFinal = Number(precoCat?.duracao_minutos ?? precos[0]?.duracao_minutos ?? 60);
+
+          return {
+            id: s.id,
+            nome: s.nome,
+            grupo: s.grupo || 'Geral',
+            duracao_minutos: duracaoFinal > 0 ? duracaoFinal : 60,
+            preco_padrao: precoFinal,
+            servico_precos: precos,
+          };
+        });
+        setServicosCatalogo(formatados);
+      }
+    } catch (err: any) {
+      console.error('[ModalLancarServicoRetroativo] Erro ao carregar serviços:', err);
+    }
+  };
+
+  // Carrega membros da equipe com resolução de nomes dos perfis
+  const carregarMembrosEquipe = async () => {
+    if (!tenant) return;
+    try {
+      const { data: membersData, error: mErr } = await supabase
+        .from('tenant_members')
+        .select('id, user_id, email, role, status')
+        .eq('tenant_id', tenant.id)
+        .order('created_at', { ascending: true });
+
+      if (mErr) throw mErr;
+
+      if (membersData && membersData.length > 0) {
+        const userIds = membersData.map((m: any) => m.user_id).filter(Boolean);
+        let profileMap = new Map<string, string>();
+        if (userIds.length > 0) {
+          const { data: profiles, error: pErr } = await supabase
+            .from('profiles')
+            .select('id, nome')
+            .in('id', userIds);
+          if (!pErr && profiles) {
+            profileMap = new Map(profiles.map((p: any) => [p.id, p.nome]));
+          }
+        }
+
+        const formatados: MembroEquipe[] = membersData.map((m: any) => {
+          const nomePerfil = m.user_id ? profileMap.get(m.user_id) : null;
+          let nomeFinal = nomePerfil?.trim();
+          if (!nomeFinal && m.email) {
+            const parteAntesArroba = m.email.split('@')[0];
+            nomeFinal = parteAntesArroba
+              .split(/[._-]/)
+              .map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+              .join(' ');
+          }
+          return {
+            id: m.id,
+            user_id: m.user_id,
+            email: m.email,
+            nome: nomeFinal || 'Membro da Equipe',
+            role: m.role,
+            status: m.status,
+          };
+        });
+        setMembrosEquipe(formatados);
+      } else {
+        setMembrosEquipe([]);
+      }
+    } catch (err: any) {
+      console.error('[ModalLancarServicoRetroativo] Erro ao carregar equipe:', err);
+    }
+  };
+
   // Carrega dados iniciais ao abrir o modal
   useEffect(() => {
     if (!isOpen || !tenant) return;
@@ -102,43 +203,35 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     const carregarTudo = async () => {
       setCarregandoDados(true);
       try {
-        const [resClientes, resServicos, resMembros, resFormas] = await Promise.all([
-          supabase
-            .from('clientes')
-            .select('id, nome, telefone, veiculos:veiculos(*)')
-            .eq('tenant_id', tenant.id)
-            .eq('ativo', true)
-            .order('nome', { ascending: true }),
-          supabase
-            .from('servicos')
-            .select('id, nome, duracao_minutos, preco_padrao')
-            .eq('tenant_id', tenant.id)
-            .eq('ativo', true)
-            .order('nome', { ascending: true }),
-          supabase
-            .from('tenant_members')
-            .select('id, nome, role')
-            .eq('tenant_id', tenant.id)
-            .order('nome', { ascending: true }),
-          supabase
-            .from('tenant_formas_pagamento')
-            .select('id, nome, tipo, permite_parcelar')
-            .eq('tenant_id', tenant.id)
-            .eq('ativo', true)
-            .order('ordem', { ascending: true }),
+        await Promise.all([
+          (async () => {
+            const { data } = await supabase
+              .from('clientes')
+              .select('id, nome, telefone, veiculos:veiculos(*)')
+              .eq('tenant_id', tenant.id)
+              .eq('ativo', true)
+              .order('nome', { ascending: true });
+            if (data) setClientes(data as any);
+          })(),
+          carregarCatalogoServicos(),
+          carregarMembrosEquipe(),
+          (async () => {
+            const { data } = await supabase
+              .from('tenant_formas_pagamento')
+              .select('id, nome, tipo, permite_parcelar')
+              .eq('tenant_id', tenant.id)
+              .eq('ativo', true)
+              .order('ordem', { ascending: true });
+            if (data) {
+              setFormasPagamento(data as FormaPagamento[]);
+              if (data.length > 0 && !formaPagamentoId) {
+                setFormaPagamentoId(data[0].id);
+              }
+            }
+          })(),
         ]);
-
-        if (resClientes.data) setClientes(resClientes.data as any);
-        if (resServicos.data) setServicosCatalogo(resServicos.data as ServicoItem[]);
-        if (resMembros.data) setMembrosEquipe(resMembros.data as MembroEquipe[]);
-        if (resFormas.data) {
-          setFormasPagamento(resFormas.data as FormaPagamento[]);
-          if (resFormas.data.length > 0 && !formaPagamentoId) {
-            setFormaPagamentoId(resFormas.data[0].id);
-          }
-        }
       } catch (err: any) {
-        console.error('[ModalLancarServicoRetroativo] Erro ao carregar dados:', err);
+        console.error('[ModalLancarServicoRetroativo] Erro geral ao carregar dados:', err);
       } finally {
         setCarregandoDados(false);
       }
@@ -170,6 +263,23 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     }
   }, [clienteId, clientes]);
 
+  // Atualiza preços e durações padrão do catálogo quando a categoria do veículo mudar
+  useEffect(() => {
+    if (servicosCatalogo.length > 0 && categoriaVeiculoId) {
+      setServicosCatalogo((prev) =>
+        prev.map((s) => {
+          const precos = s.servico_precos || [];
+          const precoCat = precos.find((p: any) => p.categoria_id === categoriaVeiculoId);
+          return {
+            ...s,
+            preco_padrao: Number(precoCat?.preco_base ?? precos[0]?.preco_base ?? s.preco_padrao ?? 0),
+            duracao_minutos: Number(precoCat?.duracao_minutos ?? precos[0]?.duracao_minutos ?? s.duracao_minutos ?? 60),
+          };
+        })
+      );
+    }
+  }, [categoriaVeiculoId]);
+
   // Atalhos rápidos de data
   const aplicarAtalhoData = (tipo: 'hoje_cedo' | 'ontem_tarde' | 'dois_dias_atras') => {
     const agora = new Date();
@@ -187,9 +297,10 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   };
 
   // Adicionar serviço à lista
-  const handleAdicionarServico = () => {
-    if (!servicoParaAdicionar) return;
-    const srv = servicosCatalogo.find((s) => s.id === servicoParaAdicionar);
+  const handleAdicionarServico = (idParaAdicionar?: string) => {
+    const srvId = idParaAdicionar || servicoParaAdicionar;
+    if (!srvId) return;
+    const srv = servicosCatalogo.find((s) => s.id === srvId);
     if (!srv) return;
 
     if (servicosSelecionados.some((s) => s.servico_id === srv.id)) {
@@ -197,13 +308,18 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
       return;
     }
 
+    const precos = srv.servico_precos || [];
+    const precoCat = categoriaVeiculoId ? precos.find((p: any) => p.categoria_id === categoriaVeiculoId) : null;
+    const precoFinal = Number(precoCat?.preco_base ?? precos[0]?.preco_base ?? srv.preco_padrao ?? 0);
+    const duracaoFinal = Number(precoCat?.duracao_minutos ?? precos[0]?.duracao_minutos ?? srv.duracao_minutos ?? 60);
+
     setServicosSelecionados((prev) => [
       ...prev,
       {
         servico_id: srv.id,
         nome: srv.nome,
-        duracao_minutos: srv.duracao_minutos || 60,
-        valor: Number(srv.preco_padrao) || 0,
+        duracao_minutos: duracaoFinal > 0 ? duracaoFinal : 60,
+        valor: precoFinal,
       },
     ]);
     setServicoParaAdicionar('');
@@ -351,7 +467,8 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   };
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Lançar Serviço Já Realizado"
@@ -476,31 +593,59 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
             </span>
           </div>
 
-          {/* Adicionar Serviço */}
-          <div className="flex items-center gap-2">
+          {/* Adicionar Serviço + Botão Cadastrar Serviço */}
+          <div className="flex flex-wrap items-center gap-2">
             <select
               value={servicoParaAdicionar}
               onChange={(e) => setServicoParaAdicionar(e.target.value)}
-              className="flex-1 min-h-[42px] bg-graphite-950 border border-graphite-700 rounded-lg px-3 text-xs text-vapor-100 outline-none focus:border-amber-500"
+              className="flex-1 min-w-[200px] min-h-[42px] bg-graphite-950 border border-graphite-700 rounded-lg px-3 text-xs text-vapor-100 outline-none focus:border-amber-500"
             >
-              <option value="">Selecione um serviço para adicionar...</option>
+              <option value="">
+                {servicosCatalogo.length === 0
+                  ? 'Nenhum serviço cadastrado ainda...'
+                  : 'Selecione um serviço para adicionar...'}
+              </option>
               {servicosCatalogo.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.nome} — {formatarMoeda(Number(s.preco_padrao) || 0)}
+                  {s.nome} {s.grupo ? `(${s.grupo})` : ''} — {formatarMoeda(Number(s.preco_padrao) || 0)}
                 </option>
               ))}
             </select>
             <Button
               type="button"
               variant="secondary"
-              onClick={handleAdicionarServico}
+              onClick={() => handleAdicionarServico()}
               disabled={!servicoParaAdicionar}
               className="min-h-[42px] px-3.5 text-xs font-semibold"
             >
               <Plus size={15} />
               Adicionar
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowModalServicoRapido(true)}
+              className="min-h-[42px] px-3 text-xs font-semibold border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+              title="Cadastrar um novo serviço no catálogo"
+            >
+              <Wrench size={14} className="text-amber-400" />
+              + Novo Serviço
+            </Button>
           </div>
+
+          {/* Aviso quando catálogo está vazio */}
+          {servicosCatalogo.length === 0 && !carregandoDados && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300 flex items-center justify-between gap-3">
+              <span>Sua oficina ainda não possui serviços cadastrados no catálogo.</span>
+              <button
+                type="button"
+                onClick={() => setShowModalServicoRapido(true)}
+                className="font-bold underline text-amber-400 hover:text-amber-300 shrink-0"
+              >
+                Cadastrar agora
+              </button>
+            </div>
+          )}
 
           {/* Lista de Serviços Adicionados */}
           {servicosSelecionados.length === 0 ? (
@@ -675,7 +820,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
               <option value="">Não especificar (ou o próprio dono)</option>
               {membrosEquipe.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.nome || 'Membro'} ({m.role})
+                  {m.nome} ({m.role === 'dono' ? 'Dono' : m.role === 'gerente' ? 'Gerente' : 'Operador'})
                 </option>
               ))}
             </select>
@@ -754,5 +899,19 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
         </div>
       </form>
     </Modal>
+
+    <ModalServicoRapido
+      isOpen={showModalServicoRapido}
+      onClose={() => setShowModalServicoRapido(false)}
+      categoriaVeiculoId={categoriaVeiculoId}
+      onSuccess={async (novoServico) => {
+        setShowModalServicoRapido(false);
+        if (novoServico?.id) {
+          await carregarCatalogoServicos(categoriaVeiculoId);
+          handleAdicionarServico(novoServico.id);
+        }
+      }}
+    />
+  </>
   );
 };

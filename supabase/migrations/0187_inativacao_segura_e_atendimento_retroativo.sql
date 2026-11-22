@@ -49,11 +49,6 @@ BEGIN
   ) INTO v_tem_historico;
 
   -- 1.2 Checa tabelas adicionais dinamicamente se existirem
-  IF NOT v_tem_historico AND to_regclass('public.checkins') IS NOT NULL THEN
-    EXECUTE 'SELECT EXISTS(SELECT 1 FROM public.checkins WHERE cliente_id = $1)'
-    INTO v_tem_historico USING p_cliente_id;
-  END IF;
-
   IF NOT v_tem_historico AND to_regclass('public.certificados_garantia') IS NOT NULL THEN
     EXECUTE 'SELECT EXISTS(SELECT 1 FROM public.certificados_garantia WHERE cliente_id = $1)'
     INTO v_tem_historico USING p_cliente_id;
@@ -82,12 +77,12 @@ BEGIN
     DELETE FROM public.veiculo_donos WHERE cliente_id = p_cliente_id;
   END IF;
 
-  IF to_regclass('public.fila_mensagens_whatsapp') IS NOT NULL THEN
-    DELETE FROM public.fila_mensagens_whatsapp WHERE cliente_id = p_cliente_id;
+  IF to_regclass('public.historico_contatos_retorno') IS NOT NULL THEN
+    DELETE FROM public.historico_contatos_retorno WHERE cliente_id = p_cliente_id;
   END IF;
 
-  IF to_regclass('public.oportunidades_retorno') IS NOT NULL THEN
-    DELETE FROM public.oportunidades_retorno WHERE cliente_id = p_cliente_id;
+  IF to_regclass('public.fila_mensagens_whatsapp') IS NOT NULL THEN
+    DELETE FROM public.fila_mensagens_whatsapp WHERE cliente_id = p_cliente_id;
   END IF;
 
   IF to_regclass('public.veiculos') IS NOT NULL THEN
