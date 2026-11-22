@@ -1,12 +1,16 @@
 -- ==============================================================================
 -- MIGRAÇÃO 0187: INATIVAÇÃO SEGURA DE CLIENTES E LANÇAMENTO DE SERVIÇOS RETROATIVOS
 -- 1. inativar_ou_excluir_cliente: Trata erros de Foreign Key com fallback automático
---    para inativação (ativo = false) e limpeza prévia de dependências fracas.
+--    para inativação (ativo = false), trava de papel (dono/gerente) e limpeza prévia
+--    de dependências fracas.
 -- 2. excluir_orcamento: Desvincula agendamentos cancelados e trata FK com status 'cancelado'.
 -- 3. lancar_atendimento_retroativo: RPC atômica para lançar serviços realizados
 --    fora do sistema em datas retroativas com agendamento concluído, execução finalizada,
---    recebimentos financeiros, comissões e fechamento de DRE.
+--    recebimentos financeiros (com taxas e valor líquido preservados), comissões e DRE.
+-- 4. Blindagem de permissões (REVOKE PUBLIC/anon) e validação estrita anti-PGRST203.
 -- ==============================================================================
+
+BEGIN;
 
 -- ------------------------------------------------------------------------------
 -- 1. INATIVAÇÃO OU EXCLUSÃO SEGURA DE CLIENTES
@@ -28,6 +32,11 @@ BEGIN
 
   IF NOT (v_tenant_id IN (SELECT public.meus_tenants())) AND NOT public.is_platform_admin() THEN
     RAISE EXCEPTION 'Acesso negado.';
+  END IF;
+
+  -- Trava de papel: Apenas dono e gerente (ou admin da plataforma) podem excluir/inativar
+  IF NOT public.tem_papel(v_tenant_id, ARRAY['dono', 'gerente']::app_role[]) AND NOT public.is_platform_admin() THEN
+    RAISE EXCEPTION 'Acesso negado. Apenas donos e gerentes podem inativar ou excluir clientes.';
   END IF;
 
   -- 1.1 Verifica agendamentos, orçamentos e recebimentos (tabelas core)
@@ -68,7 +77,7 @@ BEGIN
     );
   END IF;
 
-  -- 1.3 Se NÃO tem histórico operacional, limpa dependências fracas / tabelas auxiliares
+  -- 1.3 Se NÃO tem histórico operacional, limpa dependências fracas
   IF to_regclass('public.veiculo_donos') IS NOT NULL THEN
     DELETE FROM public.veiculo_donos WHERE cliente_id = p_cliente_id;
   END IF;
@@ -85,7 +94,7 @@ BEGIN
     UPDATE public.veiculos SET cliente_id = NULL WHERE cliente_id = p_cliente_id;
   END IF;
 
-  -- 1.4 Tenta DELETE físico protegido com fallback automático para inativação
+  -- 1.4 Tenta DELETE físico com fallback automático para inativação
   BEGIN
     DELETE FROM public.clientes WHERE id = p_cliente_id;
     RETURN jsonb_build_object(
@@ -108,6 +117,7 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.inativar_ou_excluir_cliente(UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.inativar_ou_excluir_cliente(UUID) TO authenticated;
 
 
@@ -145,7 +155,6 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'Este orçamento possui um agendamento ativo. Cancele o agendamento antes de excluir o orçamento.';
     ELSE
-      -- Agendamento já cancelado ou inexistente: desvincula antes de excluir
       UPDATE public.orcamentos SET agendamento_id = NULL WHERE id = p_orcamento_id;
     END IF;
   END IF;
@@ -177,6 +186,7 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.excluir_orcamento(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.excluir_orcamento(uuid) TO authenticated;
 
 
@@ -226,6 +236,8 @@ DECLARE
   v_pgto_previsto DATE;
   v_pgto_status TEXT;
   v_pgto_recebido_em TIMESTAMPTZ;
+  v_pgto_taxa NUMERIC(10,2) := 0.00;
+  v_pgto_liquido NUMERIC(10,2) := 0.00;
   v_comissao_tipo public.comissao_tipo;
   v_comissao_val NUMERIC(10,2);
   v_comissao_calc NUMERIC(10,2) := 0.00;
@@ -257,7 +269,7 @@ BEGIN
     RAISE EXCEPTION 'Informe a data de realização do serviço.';
   END IF;
 
-  -- Determina categoria do veículo ou categoria padrão da oficina
+  -- Determina categoria do veículo ou primeira cadastrada na oficina
   IF p_veiculo_id IS NOT NULL THEN
     SELECT categoria_id INTO v_categoria_id FROM public.veiculos WHERE id = p_veiculo_id;
   END IF;
@@ -461,6 +473,17 @@ BEGIN
       v_pgto_num_parcela := COALESCE((v_pgto->>'numero_parcela')::integer, 1);
       v_pgto_previsto := COALESCE((v_pgto->>'previsto_para')::date, v_data_servico);
 
+      -- Leitura segura das taxas informadas no JSON com fallbacks para o DRE
+      v_pgto_taxa := COALESCE(
+        (v_pgto->>'valor_taxa')::numeric,
+        (v_pgto->>'taxa_valor')::numeric,
+        0.00
+      );
+      v_pgto_liquido := COALESCE(
+        (v_pgto->>'valor_liquido')::numeric,
+        GREATEST(0.00, v_pgto_valor - v_pgto_taxa)
+      );
+
       IF v_forma_id IS NOT NULL AND v_pgto_valor > 0 THEN
         SELECT tipo INTO v_forma_tipo FROM public.tenant_formas_pagamento WHERE id = v_forma_id;
         
@@ -497,8 +520,8 @@ BEGIN
           p_cliente_id,
           v_forma_id,
           v_pgto_valor,
-          v_pgto_valor,
-          0.00,
+          v_pgto_liquido,
+          v_pgto_taxa,
           v_pgto_parcelas,
           v_pgto_num_parcela,
           v_pgto_status,
@@ -526,7 +549,35 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT) TO authenticated;
 
--- Notifica o PostgREST para recarregar o schema cache imediatamente
+
+-- ------------------------------------------------------------------------------
+-- 4. VERIFICAÇÃO ESTREITA ANTI-PGRST203 NO CATÁLOGO PG_PROC
+-- ------------------------------------------------------------------------------
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN (
+    SELECT p.proname, count(*) as total
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN (
+        'inativar_ou_excluir_cliente',
+        'excluir_orcamento',
+        'lancar_atendimento_retroativo'
+      )
+    GROUP BY p.proname
+    HAVING count(*) > 1
+  ) LOOP
+    RAISE EXCEPTION 'ALERTA CRÍTICO ANTI-PGRST203: Função pública % possui % assinaturas ativas!', r.proname, r.total;
+  END LOOP;
+END $$;
+
+-- 5. RECARREGAR O SCHEMA CACHE DO POSTGREST
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;
