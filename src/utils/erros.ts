@@ -344,9 +344,23 @@ export function traduzirErro(erro: any, _contextoTela?: string): ErroTraduzido {
 
   // 6. Chave Estrangeira / Vínculo (23503 / foreign key)
   else if (code === '23503' || msgLower.includes('foreign key') || msgLower.includes('violates foreign key')) {
-    titulo = 'Item em uso';
-    mensagem = 'Não é possível excluir ou alterar este item pois ele está vinculado a outros registros no sistema (ex: atendimentos, orçamentos ou histórico).';
-    acao = 'Remova as associações ou desative o item em vez de excluí-lo.';
+    const isInsert =
+      msgLower.includes('insert into') ||
+      msgLower.includes('insert or update') ||
+      msgLower.includes('not present in table') ||
+      (!msgLower.includes('delete') && !msgLower.includes('referenced from table'));
+
+    if (isInsert) {
+      titulo = 'Item vinculado não encontrado';
+      mensagem =
+        'Não foi possível salvar pois um dos registros selecionados (veículo, serviço, produto ou forma de pagamento) não foi encontrado no sistema ou foi desativado.';
+      acao = 'Revise os dados selecionados no formulário e tente novamente.';
+    } else {
+      titulo = 'Item em uso';
+      mensagem =
+        'Não é possível excluir ou alterar este item pois ele está vinculado a outros registros no sistema (ex: atendimentos, orçamentos ou histórico).';
+      acao = 'Remova as associações ou desative o item em vez de excluí-lo.';
+    }
     ehInesperado = false;
   }
 

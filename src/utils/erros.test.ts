@@ -39,6 +39,10 @@ describe('Sistema de Tradução de Erros (erros.ts)', () => {
     const res = traduzirErro({ code: '23503', message: 'update or delete on table violates foreign key constraint' });
     expect(res.titulo).toBe('Item em uso');
     expect(res.mensagem).toContain('Não é possível excluir ou alterar este item pois ele está vinculado a outros registros');
+
+    const resInsert = traduzirErro({ code: '23503', message: 'insert or update on table violates foreign key constraint' });
+    expect(resInsert.titulo).toBe('Item vinculado não encontrado');
+    expect(resInsert.mensagem).toContain('Não foi possível salvar pois um dos registros selecionados');
   });
 
   it('traduz campo obrigatório não preenchido (Postgres 23502)', () => {

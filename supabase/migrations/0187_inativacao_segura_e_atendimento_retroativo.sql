@@ -15,6 +15,7 @@ BEGIN;
 -- ------------------------------------------------------------------------------
 -- 1. INATIVAÇÃO OU EXCLUSÃO SEGURA DE CLIENTES
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.inativar_ou_excluir_cliente(UUID);
 CREATE OR REPLACE FUNCTION public.inativar_ou_excluir_cliente(p_cliente_id UUID)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -119,6 +120,7 @@ GRANT EXECUTE ON FUNCTION public.inativar_ou_excluir_cliente(UUID) TO authentica
 -- ------------------------------------------------------------------------------
 -- 2. EXCLUSÃO RESILIENTE DE ORÇAMENTOS
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.excluir_orcamento(uuid);
 CREATE OR REPLACE FUNCTION public.excluir_orcamento(p_orcamento_id uuid)
 RETURNS void
 LANGUAGE plpgsql
@@ -278,13 +280,25 @@ BEGIN
     RAISE EXCEPTION 'Informe a data de realização do serviço.';
   END IF;
 
-  -- Determina categoria do veículo ou primeira cadastrada na oficina
+  -- Determina categoria do veículo ou primeira cadastrada na oficina com validações de integridade
   IF p_veiculo_id IS NOT NULL THEN
-    SELECT categoria_id INTO v_categoria_id FROM public.veiculos WHERE id = p_veiculo_id;
+    IF NOT EXISTS (SELECT 1 FROM public.veiculos WHERE id = p_veiculo_id AND tenant_id = v_tenant_id) THEN
+      p_veiculo_id := NULL;
+    ELSE
+      SELECT categoria_id INTO v_categoria_id FROM public.veiculos WHERE id = p_veiculo_id;
+    END IF;
   END IF;
+
+  IF v_categoria_id IS NOT NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM public.categorias_veiculo WHERE id = v_categoria_id AND tenant_id = v_tenant_id) THEN
+      v_categoria_id := NULL;
+    END IF;
+  END IF;
+
   IF v_categoria_id IS NULL THEN
     SELECT id INTO v_categoria_id FROM public.categorias_veiculo WHERE tenant_id = v_tenant_id ORDER BY ordem ASC LIMIT 1;
   END IF;
+
   IF v_categoria_id IS NULL THEN
     RAISE EXCEPTION 'Nenhuma categoria de veículo cadastrada para esta oficina.';
   END IF;
@@ -293,14 +307,18 @@ BEGIN
   v_hoje := (v_now AT TIME ZONE v_fuso)::date;
   v_data_servico := (p_data_realizacao AT TIME ZONE v_fuso)::date;
 
-  -- Calcula totais dos serviços informados
+  -- Calcula totais dos serviços informados com validação de pertencimento à oficina
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_servicos) LOOP
+    v_srv_id := (v_item->>'servico_id')::uuid;
+    IF NOT EXISTS (SELECT 1 FROM public.servicos WHERE id = v_srv_id AND tenant_id = v_tenant_id) THEN
+      RAISE EXCEPTION 'O serviço informado não pertence a esta oficina ou foi desativado.';
+    END IF;
     v_srv_duracao := COALESCE((v_item->>'duracao_minutos')::integer, (v_item->>'duracao')::integer, 60);
     v_srv_valor := COALESCE((v_item->>'valor')::numeric, (v_item->>'preco')::numeric, 0.00);
     v_duracao_total := v_duracao_total + v_srv_duracao;
     v_valor_total := v_valor_total + v_srv_valor;
     IF v_servico_principal_id IS NULL THEN
-      v_servico_principal_id := (v_item->>'servico_id')::uuid;
+      v_servico_principal_id := v_srv_id;
     END IF;
   END LOOP;
 
@@ -445,36 +463,40 @@ BEGIN
 
   -- 4. Executor da Equipe e Comissão Automática (se informado)
   IF p_executor_id IS NOT NULL THEN
-    SELECT tipo, valor INTO v_comissao_tipo, v_comissao_val
-    FROM public.comissao_regras
-    WHERE tenant_id = v_tenant_id
-      AND member_id = p_executor_id
-      AND vigencia_inicio <= v_data_servico
-      AND (vigencia_fim IS NULL OR vigencia_fim >= v_data_servico)
-    ORDER BY vigencia_inicio DESC, created_at DESC
-    LIMIT 1;
+    IF NOT EXISTS (SELECT 1 FROM public.tenant_members WHERE id = p_executor_id AND tenant_id = v_tenant_id) THEN
+      p_executor_id := NULL;
+    ELSE
+      SELECT tipo, valor INTO v_comissao_tipo, v_comissao_val
+      FROM public.comissao_regras
+      WHERE tenant_id = v_tenant_id
+        AND member_id = p_executor_id
+        AND vigencia_inicio <= v_data_servico
+        AND (vigencia_fim IS NULL OR vigencia_fim >= v_data_servico)
+      ORDER BY vigencia_inicio DESC, created_at DESC
+      LIMIT 1;
 
-    IF v_comissao_tipo = 'percentual' AND v_comissao_val > 0 THEN
-      v_comissao_calc := round((v_valor_total * v_comissao_val / 100.0), 2);
-    ELSIF v_comissao_tipo = 'valor_fixo' AND v_comissao_val > 0 THEN
-      v_comissao_calc := v_comissao_val;
+      IF v_comissao_tipo = 'percentual' AND v_comissao_val > 0 THEN
+        v_comissao_calc := round((v_valor_total * v_comissao_val / 100.0), 2);
+      ELSIF v_comissao_tipo = 'valor_fixo' AND v_comissao_val > 0 THEN
+        v_comissao_calc := v_comissao_val;
+      END IF;
+
+      INSERT INTO public.execucao_executores (
+        tenant_id,
+        execucao_id,
+        member_id,
+        comissao_tipo,
+        comissao_valor,
+        comissao_calculada
+      ) VALUES (
+        v_tenant_id,
+        v_execucao_id,
+        p_executor_id,
+        COALESCE(v_comissao_tipo, 'nenhuma'::public.comissao_tipo),
+        COALESCE(v_comissao_val, 0),
+        v_comissao_calc
+      );
     END IF;
-
-    INSERT INTO public.execucao_executores (
-      tenant_id,
-      execucao_id,
-      member_id,
-      comissao_tipo,
-      comissao_valor,
-      comissao_calculada
-    ) VALUES (
-      v_tenant_id,
-      v_execucao_id,
-      p_executor_id,
-      COALESCE(v_comissao_tipo, 'nenhuma'::public.comissao_tipo),
-      COALESCE(v_comissao_val, 0),
-      v_comissao_calc
-    );
   END IF;
 
   -- 5. Consumos de Produtos / Insumos do Estoque (se informados)
@@ -487,6 +509,10 @@ BEGIN
         SELECT custo_unitario INTO v_prod_custo
         FROM public.produtos
         WHERE id = v_prod_id AND tenant_id = v_tenant_id;
+
+        IF NOT FOUND THEN
+          CONTINUE;
+        END IF;
 
         v_prod_custo := COALESCE(v_prod_custo, 0.00);
         v_prod_custo_total := round(v_prod_qtd * v_prod_custo, 2);
@@ -509,7 +535,10 @@ BEGIN
           v_prod_custo_total,
           auth.uid(),
           p_data_realizacao
-        );
+        )
+        ON CONFLICT (execucao_id, produto_id) DO UPDATE
+        SET quantidade = public.execucao_consumos.quantidade + EXCLUDED.quantidade,
+            custo_total = round((public.execucao_consumos.quantidade + EXCLUDED.quantidade) * EXCLUDED.custo_unitario, 2);
 
         INSERT INTO public.estoque_movimentos (
           tenant_id,
@@ -573,8 +602,14 @@ BEGIN
       );
 
       IF v_forma_id IS NOT NULL AND v_pgto_valor > 0 THEN
-        SELECT tipo INTO v_forma_tipo FROM public.tenant_formas_pagamento WHERE id = v_forma_id;
-        
+        SELECT tipo INTO v_forma_tipo FROM public.tenant_formas_pagamento WHERE id = v_forma_id AND tenant_id = v_tenant_id;
+        IF NOT FOUND THEN
+          SELECT id, tipo INTO v_forma_id, v_forma_tipo 
+          FROM public.tenant_formas_pagamento 
+          WHERE tenant_id = v_tenant_id AND ativo = true 
+          LIMIT 1;
+        END IF;
+
         IF v_forma_tipo IN ('dinheiro', 'pix') OR v_pgto_previsto <= v_hoje THEN
           v_pgto_status := 'recebido';
           v_pgto_recebido_em := p_data_realizacao;

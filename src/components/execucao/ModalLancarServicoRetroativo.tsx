@@ -625,7 +625,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
       onClose();
     } catch (err: any) {
       console.error('[ModalLancarServicoRetroativo] Erro:', err);
-      showError(err.message || 'Erro ao lançar serviço retroativo.');
+      showError(err.message || 'Erro ao lançar serviço retroativo.', err);
     } finally {
       setSalvando(false);
     }
