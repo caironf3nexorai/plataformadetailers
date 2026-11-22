@@ -193,6 +193,9 @@ GRANT EXECUTE ON FUNCTION public.excluir_orcamento(uuid) TO authenticated;
 -- ------------------------------------------------------------------------------
 -- 3. LANÇAMENTO DE ATENDIMENTO RETROATIVO CONCLUÍDO
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT);
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER);
+
 CREATE OR REPLACE FUNCTION public.lancar_atendimento_retroativo(
   p_cliente_id UUID,
   p_veiculo_id UUID,
@@ -200,7 +203,8 @@ CREATE OR REPLACE FUNCTION public.lancar_atendimento_retroativo(
   p_servicos JSONB,
   p_pagamentos JSONB DEFAULT '[]'::jsonb,
   p_executor_id UUID DEFAULT NULL,
-  p_observacoes TEXT DEFAULT NULL
+  p_observacoes TEXT DEFAULT NULL,
+  p_tempo_execucao_minutos INTEGER DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -295,6 +299,11 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- Se foi informado tempo de execução explícito (em minutos), utiliza ele para o cálculo do DRE e término
+  IF p_tempo_execucao_minutos IS NOT NULL AND p_tempo_execucao_minutos > 0 THEN
+    v_duracao_total := p_tempo_execucao_minutos;
+  END IF;
+
   IF v_duracao_total <= 0 THEN v_duracao_total := 60; END IF;
   v_fim := p_data_realizacao + (v_duracao_total || ' minutes')::interval;
 
@@ -359,6 +368,7 @@ BEGIN
     valor_definido_por,
     valor_definido_em,
     observacoes_saida,
+    ajuste_manual,
     created_at,
     updated_at
   ) VALUES (
@@ -373,6 +383,7 @@ BEGIN
     auth.uid(),
     p_data_realizacao,
     p_observacoes,
+    true,
     p_data_realizacao,
     p_data_realizacao
   ) RETURNING id INTO v_execucao_id;
@@ -549,8 +560,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER) TO authenticated;
 
 
 -- ------------------------------------------------------------------------------

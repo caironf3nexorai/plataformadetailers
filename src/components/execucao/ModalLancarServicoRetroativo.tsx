@@ -79,11 +79,21 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   const [veiculoId, setVeiculoId] = useState<string>('');
   const [servicosSelecionados, setServicosSelecionados] = useState<ServicoSelecionado[]>([]);
   const [servicoParaAdicionar, setServicoParaAdicionar] = useState<string>('');
+  const [tempoExecucaoMinutos, setTempoExecucaoMinutos] = useState<number>(60);
+  const [duracaoCustomizada, setDuracaoCustomizada] = useState<boolean>(false);
   const [executorId, setExecutorId] = useState<string>('');
   const [formaPagamentoId, setFormaPagamentoId] = useState<string>('');
   const [parcelas, setParcelas] = useState<number>(1);
   const [observacoes, setObservacoes] = useState<string>('');
   const [salvando, setSalvando] = useState(false);
+
+  // Sincroniza tempo total com a soma dos serviços se o usuário não tiver customizado manualmente
+  useEffect(() => {
+    if (!duracaoCustomizada && servicosSelecionados.length > 0) {
+      const soma = servicosSelecionados.reduce((acc, s) => acc + (Number(s.duracao_minutos) || 60), 0);
+      setTempoExecucaoMinutos(soma > 0 ? soma : 60);
+    }
+  }, [servicosSelecionados, duracaoCustomizada]);
 
   // Carrega dados iniciais ao abrir o modal
   useEffect(() => {
@@ -209,9 +219,63 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     );
   };
 
+  const handleAlterarDuracaoServico = (servicoIdAlvo: string, novaDuracao: number) => {
+    const min = Math.max(1, Math.round(novaDuracao) || 1);
+    setServicosSelecionados((prev) =>
+      prev.map((s) => (s.servico_id === servicoIdAlvo ? { ...s, duracao_minutos: min } : s))
+    );
+  };
+
   // Cálculos de totais
   const valorTotalServicos = servicosSelecionados.reduce((acc, s) => acc + (Number(s.valor) || 0), 0);
-  const duracaoTotalMinutos = servicosSelecionados.reduce((acc, s) => acc + (Number(s.duracao_minutos) || 60), 0);
+  const somaDuracaoServicos = servicosSelecionados.reduce((acc, s) => acc + (Number(s.duracao_minutos) || 60), 0);
+
+  const horasExecucao = Math.floor(tempoExecucaoMinutos / 60);
+  const minutosExecucao = tempoExecucaoMinutos % 60;
+
+  const handleMudarHoras = (novasHoras: number) => {
+    setDuracaoCustomizada(true);
+    const h = Math.max(0, Math.floor(novasHoras) || 0);
+    const novoTotal = h * 60 + minutosExecucao;
+    setTempoExecucaoMinutos(novoTotal > 0 ? novoTotal : 1);
+  };
+
+  const handleMudarMinutos = (novosMin: number) => {
+    setDuracaoCustomizada(true);
+    const m = Math.max(0, Math.min(59, Math.floor(novosMin) || 0));
+    const novoTotal = horasExecucao * 60 + m;
+    setTempoExecucaoMinutos(novoTotal > 0 ? novoTotal : 1);
+  };
+
+  const atalhosDuracao = [
+    { label: '30m', minutos: 30 },
+    { label: '45m', minutos: 45 },
+    { label: '1h', minutos: 60 },
+    { label: '1h 30m', minutos: 90 },
+    { label: '2h', minutos: 120 },
+    { label: '2h 30m', minutos: 150 },
+    { label: '3h', minutos: 180 },
+    { label: '4h', minutos: 240 },
+    { label: '6h', minutos: 360 },
+    { label: '8h (Dia todo)', minutos: 480 },
+  ];
+
+  const calcularHorarioTermino = () => {
+    try {
+      const dInicio = new Date(dataHora);
+      if (isNaN(dInicio.getTime())) return null;
+      const dFim = new Date(dInicio.getTime() + tempoExecucaoMinutos * 60 * 1000);
+      return {
+        inicioHora: dInicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        inicioData: dInicio.toLocaleDateString('pt-BR'),
+        fimHora: dFim.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        fimData: dFim.toLocaleDateString('pt-BR'),
+      };
+    } catch {
+      return null;
+    }
+  };
+  const previewHorario = calcularHorarioTermino();
 
   // Submissão do lançamento retroativo
   const handleSubmit = async (e: React.FormEvent) => {
@@ -264,6 +328,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
         p_pagamentos: pagamentosPayload,
         p_executor_id: executorId || null,
         p_observacoes: observacoes.trim() || null,
+        p_tempo_execucao_minutos: tempoExecucaoMinutos,
       });
 
       if (error) throw error;
@@ -407,7 +472,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
             </label>
             <span className="text-xs text-vapor-400 font-mono">
               Total: <strong className="text-emerald-400">{formatarMoeda(valorTotalServicos)}</strong>
-              {duracaoTotalMinutos > 0 && ` • ~${duracaoTotalMinutos} min`}
+              {somaDuracaoServicos > 0 && ` • ~${somaDuracaoServicos} min catálogo`}
             </span>
           </div>
 
@@ -447,13 +512,29 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
               {servicosSelecionados.map((srv) => (
                 <div
                   key={srv.servico_id}
-                  className="flex items-center justify-between gap-3 p-2.5 bg-graphite-950 rounded-lg border border-graphite-800"
+                  className="flex flex-wrap items-center justify-between gap-3 p-2.5 bg-graphite-950 rounded-lg border border-graphite-800"
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-[140px] flex-1">
                     <p className="text-xs font-bold text-vapor-100 truncate">{srv.nome}</p>
-                    <p className="text-[11px] text-vapor-400">{srv.duracao_minutos} minutos</p>
+                    <span className="text-[11px] text-vapor-400">Tempo estimado por serviço</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Duração individual do serviço */}
+                    <div className="flex items-center gap-1 bg-graphite-900 border border-graphite-700 rounded-lg px-2 py-1">
+                      <Clock size={12} className="text-amber-400 shrink-0" />
+                      <input
+                        type="number"
+                        min="1"
+                        max="999"
+                        value={srv.duracao_minutos}
+                        onChange={(e) => handleAlterarDuracaoServico(srv.servico_id, Number(e.target.value) || 1)}
+                        className="w-12 bg-transparent text-xs font-semibold text-vapor-200 text-center outline-none"
+                        title="Duração deste serviço específico (em minutos)"
+                      />
+                      <span className="text-[10px] text-vapor-400">min</span>
+                    </div>
+
+                    {/* Preço em R$ */}
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-vapor-400">R$</span>
                       <CampoNumerico
@@ -479,7 +560,106 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
           )}
         </div>
 
-        {/* 4. Executor & Pagamento */}
+        {/* 4. Tempo Real de Execução (Duração do Atendimento pro DRE) */}
+        <div className="p-3.5 bg-graphite-900/80 border border-amber-500/30 rounded-xl flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+              <Clock size={15} className="text-amber-400" />
+              Tempo Real de Execução (Duração do Atendimento) *
+            </label>
+            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+              {horasExecucao > 0 ? `${horasExecucao}h ` : ''}{minutosExecucao}min ({tempoExecucaoMinutos} min total)
+            </span>
+          </div>
+
+          {/* Chips de Seleção Rápida */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-vapor-400 font-medium mr-1">Atalhos:</span>
+            {atalhosDuracao.map((at) => (
+              <button
+                key={at.minutos}
+                type="button"
+                onClick={() => {
+                  setDuracaoCustomizada(true);
+                  setTempoExecucaoMinutos(at.minutos);
+                }}
+                className={`px-2.5 py-1 text-xs rounded-lg transition-colors border ${
+                  tempoExecucaoMinutos === at.minutos
+                    ? 'bg-amber-500 text-graphite-950 border-amber-400 font-bold shadow-sm'
+                    : 'bg-graphite-950 text-vapor-300 border-graphite-800 hover:border-amber-500/50 hover:text-amber-300'
+                }`}
+              >
+                {at.label}
+              </button>
+            ))}
+            {duracaoCustomizada && somaDuracaoServicos > 0 && tempoExecucaoMinutos !== somaDuracaoServicos && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDuracaoCustomizada(false);
+                  setTempoExecucaoMinutos(somaDuracaoServicos);
+                }}
+                className="px-2 py-1 text-xs rounded-lg bg-graphite-800 text-amber-300 border border-amber-500/30 hover:bg-amber-500/10 font-semibold transition-colors flex items-center gap-1"
+                title="Restaurar soma do tempo dos serviços cadastrados"
+              >
+                ↺ Soma do catálogo ({somaDuracaoServicos}m)
+              </button>
+            )}
+          </div>
+
+          {/* Inputs Horas e Minutos + Card de Resumo DRE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex flex-col gap-1">
+                <span className="text-[11px] text-vapor-400 font-medium">Horas:</span>
+                <div className="flex items-center bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    value={horasExecucao}
+                    onChange={(e) => handleMudarHoras(Number(e.target.value) || 0)}
+                    className="w-full bg-transparent text-sm font-bold text-vapor-100 outline-none text-center"
+                  />
+                  <span className="text-xs text-vapor-400 font-bold ml-1">h</span>
+                </div>
+              </div>
+              <div className="flex-1 flex flex-col gap-1">
+                <span className="text-[11px] text-vapor-400 font-medium">Minutos:</span>
+                <div className="flex items-center bg-graphite-950 border border-graphite-700 rounded-lg px-3 py-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    step="5"
+                    value={minutosExecucao}
+                    onChange={(e) => handleMudarMinutos(Number(e.target.value) || 0)}
+                    className="w-full bg-transparent text-sm font-bold text-vapor-100 outline-none text-center"
+                  />
+                  <span className="text-xs text-vapor-400 font-bold ml-1">min</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview de Término e Explicação DRE */}
+            <div className="p-2.5 bg-graphite-950 rounded-lg border border-graphite-800 flex flex-col justify-center text-xs">
+              {previewHorario ? (
+                <div className="flex items-center justify-between text-vapor-200">
+                  <span>Início: <strong className="text-vapor-100">{previewHorario.inicioHora}</strong></span>
+                  <span className="text-vapor-500">➔</span>
+                  <span>Término: <strong className="text-amber-400">{previewHorario.fimHora}</strong></span>
+                </div>
+              ) : (
+                <span className="text-vapor-400">Informe a data de início acima</span>
+              )}
+              <p className="text-[10px] text-vapor-400 mt-1.5 leading-tight">
+                💡 Este tempo é computado no <strong>DRE</strong> multiplicando pelo custo-hora fixo da sua estrutura (aluguel, equipe, energia) para apurar o lucro real do serviço.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* 5. Executor & Pagamento */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {/* Executor / Equipe */}
           <div className="flex flex-col gap-1.5">
