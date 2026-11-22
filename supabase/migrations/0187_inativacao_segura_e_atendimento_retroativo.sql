@@ -188,8 +188,12 @@ GRANT EXECUTE ON FUNCTION public.excluir_orcamento(uuid) TO authenticated;
 -- ------------------------------------------------------------------------------
 -- 3. LANÇAMENTO DE ATENDIMENTO RETROATIVO CONCLUÍDO
 -- ------------------------------------------------------------------------------
-DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT);
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER, JSONB);
 DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER);
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT);
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID);
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB);
+DROP FUNCTION IF EXISTS public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB);
 
 CREATE OR REPLACE FUNCTION public.lancar_atendimento_retroativo(
   p_cliente_id UUID,
@@ -199,7 +203,8 @@ CREATE OR REPLACE FUNCTION public.lancar_atendimento_retroativo(
   p_pagamentos JSONB DEFAULT '[]'::jsonb,
   p_executor_id UUID DEFAULT NULL,
   p_observacoes TEXT DEFAULT NULL,
-  p_tempo_execucao_minutos INTEGER DEFAULT NULL
+  p_tempo_execucao_minutos INTEGER DEFAULT NULL,
+  p_consumos JSONB DEFAULT '[]'::jsonb
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -240,6 +245,11 @@ DECLARE
   v_comissao_tipo public.comissao_tipo;
   v_comissao_val NUMERIC(10,2);
   v_comissao_calc NUMERIC(10,2) := 0.00;
+  v_item_c JSONB;
+  v_prod_id UUID;
+  v_prod_qtd NUMERIC(12,2);
+  v_prod_custo NUMERIC(12,6);
+  v_prod_custo_total NUMERIC(12,2);
   v_now TIMESTAMPTZ := now();
   v_fim TIMESTAMPTZ;
 BEGIN
@@ -467,7 +477,79 @@ BEGIN
     );
   END IF;
 
-  -- 5. Lançamentos Financeiros em Contas a Receber (se houver)
+  -- 5. Consumos de Produtos / Insumos do Estoque (se informados)
+  IF p_consumos IS NOT NULL AND jsonb_array_length(p_consumos) > 0 THEN
+    FOR v_item_c IN SELECT * FROM jsonb_array_elements(p_consumos) LOOP
+      v_prod_id := (v_item_c->>'produto_id')::uuid;
+      v_prod_qtd := (v_item_c->>'quantidade')::numeric;
+
+      IF v_prod_id IS NOT NULL AND v_prod_qtd > 0 THEN
+        SELECT custo_unitario INTO v_prod_custo
+        FROM public.produtos
+        WHERE id = v_prod_id AND tenant_id = v_tenant_id;
+
+        v_prod_custo := COALESCE(v_prod_custo, 0.00);
+        v_prod_custo_total := round(v_prod_qtd * v_prod_custo, 2);
+
+        INSERT INTO public.execucao_consumos (
+          tenant_id,
+          execucao_id,
+          produto_id,
+          quantidade,
+          custo_unitario,
+          custo_total,
+          registrado_por,
+          created_at
+        ) VALUES (
+          v_tenant_id,
+          v_execucao_id,
+          v_prod_id,
+          v_prod_qtd,
+          v_prod_custo,
+          v_prod_custo_total,
+          auth.uid(),
+          p_data_realizacao
+        );
+
+        INSERT INTO public.estoque_movimentos (
+          tenant_id,
+          produto_id,
+          tipo,
+          quantidade,
+          custo_unitario,
+          custo_total,
+          execucao_id,
+          criado_por,
+          created_at
+        ) VALUES (
+          v_tenant_id,
+          v_prod_id,
+          'consumo',
+          -v_prod_qtd,
+          v_prod_custo,
+          v_prod_custo_total,
+          v_execucao_id,
+          auth.uid(),
+          p_data_realizacao
+        );
+
+        UPDATE public.produtos
+        SET estoque_atual = estoque_atual - v_prod_qtd,
+            updated_at = now()
+        WHERE id = v_prod_id;
+      END IF;
+    END LOOP;
+
+    UPDATE public.execucoes
+    SET custo_produtos = (
+      SELECT coalesce(sum(custo_total), 0)
+      FROM public.execucao_consumos
+      WHERE execucao_id = v_execucao_id
+    )
+    WHERE id = v_execucao_id;
+  END IF;
+
+  -- 6. Lançamentos Financeiros em Contas a Receber (se houver)
   IF p_pagamentos IS NOT NULL AND jsonb_array_length(p_pagamentos) > 0 THEN
     FOR v_pgto IN SELECT * FROM jsonb_array_elements(p_pagamentos) LOOP
       v_forma_id := (v_pgto->>'forma_id')::uuid;
@@ -542,7 +624,7 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- 6. Consolidação Financeira (DRE / Fechamento de Resultado)
+  -- 7. Consolidação Financeira (DRE / Fechamento de Resultado)
   PERFORM public.fechar_resultado_execucao(v_execucao_id);
 
   RETURN jsonb_build_object(
@@ -555,8 +637,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER) TO authenticated;
+REVOKE ALL ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.lancar_atendimento_retroativo(UUID, UUID, TIMESTAMPTZ, JSONB, JSONB, UUID, TEXT, INTEGER, JSONB) TO authenticated;
 
 
 -- ------------------------------------------------------------------------------

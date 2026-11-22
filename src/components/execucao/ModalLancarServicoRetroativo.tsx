@@ -4,11 +4,13 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { CampoNumerico } from '../ui/CampoNumerico';
 import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
+import { ModalProduto } from '../estoque/ModalProduto';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { formatarMoeda } from '../../utils/formatters';
 import type { Cliente, Veiculo } from '../../types/clientes';
+import type { Produto, UnidadeUso } from '../../types/estoque';
 import {
   Calendar,
   Clock,
@@ -20,6 +22,7 @@ import {
   CreditCard,
   Sparkles,
   Wrench,
+  Package,
 } from 'lucide-react';
 
 interface ServicoItem {
@@ -54,6 +57,15 @@ interface FormaPagamento {
   permite_parcelar?: boolean;
 }
 
+interface ProdutoItemConsumo {
+  produto_id: string;
+  nome: string;
+  marca?: string;
+  unidade_uso: string;
+  quantidade: string;
+  custo_unitario: number;
+}
+
 interface ModalLancarServicoRetroativoProps {
   isOpen: boolean;
   onClose: () => void;
@@ -72,10 +84,12 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [servicosCatalogo, setServicosCatalogo] = useState<ServicoItem[]>([]);
+  const [produtosCatalogo, setProdutosCatalogo] = useState<Produto[]>([]);
   const [membrosEquipe, setMembrosEquipe] = useState<MembroEquipe[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
   const [carregandoDados, setCarregandoDados] = useState(false);
   const [showModalServicoRapido, setShowModalServicoRapido] = useState(false);
+  const [showModalProduto, setShowModalProduto] = useState(false);
 
   // Estados do formulário
   const [dataHora, setDataHora] = useState<string>(() => {
@@ -87,6 +101,9 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   const [veiculoId, setVeiculoId] = useState<string>('');
   const [servicosSelecionados, setServicosSelecionados] = useState<ServicoSelecionado[]>([]);
   const [servicoParaAdicionar, setServicoParaAdicionar] = useState<string>('');
+  const [produtosConsumidos, setProdutosConsumidos] = useState<ProdutoItemConsumo[]>([]);
+  const [produtoParaConsumo, setProdutoParaConsumo] = useState<string>('');
+  const [qtdProdutoParaConsumo, setQtdProdutoParaConsumo] = useState<string>('');
   const [tempoExecucaoMinutos, setTempoExecucaoMinutos] = useState<number>(60);
   const [duracaoCustomizada, setDuracaoCustomizada] = useState<boolean>(false);
   const [executorId, setExecutorId] = useState<string>('');
@@ -196,6 +213,27 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     }
   };
 
+  // Carrega catálogo de produtos para consumo
+  const carregarProdutos = async () => {
+    if (!tenant) return;
+    try {
+      const { data, error } = await supabase
+        .from('produtos')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('ativo', true)
+        .order('categoria', { ascending: true })
+        .order('nome', { ascending: true });
+
+      if (error) throw error;
+      if (data) {
+        setProdutosCatalogo(data as Produto[]);
+      }
+    } catch (err: any) {
+      console.error('[ModalLancarServicoRetroativo] Erro ao carregar produtos:', err);
+    }
+  };
+
   // Carrega dados iniciais ao abrir o modal
   useEffect(() => {
     if (!isOpen || !tenant) return;
@@ -214,6 +252,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
             if (data) setClientes(data as any);
           })(),
           carregarCatalogoServicos(),
+          carregarProdutos(),
           carregarMembrosEquipe(),
           (async () => {
             const { data } = await supabase
@@ -342,6 +381,124 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     );
   };
 
+  // Manipulação de Produtos e Consumos
+  const handleSelecionarProdutoParaConsumo = (prodId: string) => {
+    setProdutoParaConsumo(prodId);
+    if (!prodId) {
+      setQtdProdutoParaConsumo('');
+      return;
+    }
+    const prod = produtosCatalogo.find((p) => p.id === prodId);
+    if (prod) {
+      if (prod.unidade_uso === 'ml') setQtdProdutoParaConsumo('90');
+      else if (prod.unidade_uso === 'g') setQtdProdutoParaConsumo('50');
+      else setQtdProdutoParaConsumo('1');
+    }
+  };
+
+  const handleAdicionarProdutoConsumo = (idProdCustom?: string, qtdCustom?: string) => {
+    const pId = idProdCustom || produtoParaConsumo;
+    if (!pId) return;
+
+    if (produtosConsumidos.some((c) => c.produto_id === pId)) {
+      showError('Este produto já foi adicionado ao atendimento.');
+      return;
+    }
+
+    const prod = produtosCatalogo.find((p) => p.id === pId);
+    if (!prod) return;
+
+    const qtdStr = qtdCustom || qtdProdutoParaConsumo || (prod.unidade_uso === 'ml' ? '90' : '1');
+    const qtdNum = Number(qtdStr.replace(',', '.')) || 1;
+
+    setProdutosConsumidos((prev) => [
+      ...prev,
+      {
+        produto_id: prod.id,
+        nome: prod.nome,
+        marca: prod.marca,
+        unidade_uso: prod.unidade_uso,
+        quantidade: String(qtdNum),
+        custo_unitario: Number(prod.custo_unitario) || 0,
+      },
+    ]);
+
+    setProdutoParaConsumo('');
+    setQtdProdutoParaConsumo('');
+  };
+
+  const handleRemoverProdutoConsumo = (produtoIdParaRemover: string) => {
+    setProdutosConsumidos((prev) => prev.filter((p) => p.produto_id !== produtoIdParaRemover));
+  };
+
+  const handleAlterarQtdProduto = (produtoIdAlvo: string, novaQtdStr: string) => {
+    setProdutosConsumidos((prev) =>
+      prev.map((p) => (p.produto_id === produtoIdAlvo ? { ...p, quantidade: novaQtdStr } : p))
+    );
+  };
+
+  const handleSalvarNovoProduto = async (data: {
+    nome: string;
+    marca?: string;
+    categoria: string;
+    unidade_uso: UnidadeUso;
+    tamanho_compra: number;
+    preco_compra: number;
+    estoque_minimo: number;
+    estoque_atual?: number;
+  }) => {
+    if (!tenant) return;
+    try {
+      const calcCusto = data.tamanho_compra > 0 ? (data.preco_compra || 0) / data.tamanho_compra : 0;
+      const { data: novoProd, error } = await supabase
+        .from('produtos')
+        .insert({
+          tenant_id: tenant.id,
+          nome: data.nome,
+          marca: data.marca || null,
+          categoria: data.categoria,
+          unidade_uso: data.unidade_uso,
+          tamanho_compra: data.tamanho_compra,
+          preco_compra: data.preco_compra,
+          custo_unitario: calcCusto,
+          estoque_minimo: data.estoque_minimo,
+          estoque_atual: data.estoque_atual || 0,
+          ativo: true,
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      showSuccess('Produto cadastrado com sucesso!');
+      setShowModalProduto(false);
+      await carregarProdutos();
+
+      if (novoProd) {
+        setProdutosCatalogo((prev) => [novoProd as Produto, ...prev]);
+        setProdutosConsumidos((prev) => [
+          ...prev,
+          {
+            produto_id: novoProd.id,
+            nome: novoProd.nome,
+            marca: novoProd.marca,
+            unidade_uso: novoProd.unidade_uso,
+            quantidade: novoProd.unidade_uso === 'ml' ? '90' : '1',
+            custo_unitario: Number(novoProd.custo_unitario) || calcCusto,
+          },
+        ]);
+      }
+    } catch (err: any) {
+      console.error('[ModalLancarServicoRetroativo] Erro ao cadastrar produto:', err);
+      showError(err.message || 'Erro ao cadastrar produto.');
+    }
+  };
+
+  const custoTotalProdutos = produtosConsumidos.reduce((acc, p) => {
+    const qtd = Number(p.quantidade.replace(',', '.')) || 0;
+    return acc + qtd * (p.custo_unitario || 0);
+  }, 0);
+
   // Cálculos de totais
   const valorTotalServicos = servicosSelecionados.reduce((acc, s) => acc + (Number(s.valor) || 0), 0);
   const somaDuracaoServicos = servicosSelecionados.reduce((acc, s) => acc + (Number(s.duracao_minutos) || 60), 0);
@@ -436,6 +593,13 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
           ]
         : [];
 
+      const consumosPayload = produtosConsumidos
+        .filter((c) => (Number(c.quantidade.replace(',', '.')) || 0) > 0)
+        .map((c) => ({
+          produto_id: c.produto_id,
+          quantidade: Number(c.quantidade.replace(',', '.')) || 0,
+        }));
+
       const { data, error } = await supabase.rpc('lancar_atendimento_retroativo', {
         p_cliente_id: clienteId,
         p_veiculo_id: veiculoId || null,
@@ -445,6 +609,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
         p_executor_id: executorId || null,
         p_observacoes: observacoes.trim() || null,
         p_tempo_execucao_minutos: tempoExecucaoMinutos,
+        p_consumos: consumosPayload,
       });
 
       if (error) throw error;
@@ -804,6 +969,136 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
           </div>
         </div>
 
+        {/* 4. PRODUTOS E INSUMOS UTILIZADOS (BAIXA DE ESTOQUE E DRE) */}
+        <div className="p-3.5 sm:p-4 bg-graphite-900 border border-graphite-800 rounded-xl flex flex-col gap-3">
+          <div className="flex items-center justify-between border-b border-graphite-800 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Package size={16} className="text-amber-400" />
+              <label className="text-xs font-bold uppercase tracking-wider text-vapor-200">
+                Insumos & Produtos Utilizados (Opcional)
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              {custoTotalProdutos > 0 && (
+                <span className="text-xs font-mono font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  CMV: {formatarMoeda(custoTotalProdutos)}
+                </span>
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowModalProduto(true)}
+                className="text-xs h-7 px-2.5 border-amber-500/40 text-amber-300 hover:bg-amber-500/10"
+              >
+                <Plus size={13} className="text-amber-400" />
+                + Novo Produto
+              </Button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-vapor-400">
+            Adicione os químicos e insumos gastos neste atendimento para dar baixa automática no estoque e apurar o custo exato dos produtos (CMV) no seu DRE.
+          </p>
+
+          {/* Seletor de Produto + Quantidade + Botão Adicionar */}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={produtoParaConsumo}
+              onChange={(e) => handleSelecionarProdutoParaConsumo(e.target.value)}
+              className="flex-1 min-w-[200px] min-h-[42px] bg-graphite-950 border border-graphite-700 rounded-lg px-3 text-xs text-vapor-100 outline-none focus:border-amber-500"
+            >
+              <option value="">
+                {produtosCatalogo.length === 0
+                  ? 'Nenhum produto cadastrado no estoque...'
+                  : 'Selecione um produto para adicionar...'}
+              </option>
+              {produtosCatalogo.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} {p.marca ? `(${p.marca})` : ''} — Estoque: {p.estoque_atual} {p.unidade_uso}
+                </option>
+              ))}
+            </select>
+
+            {produtoParaConsumo && (
+              <div className="flex items-center gap-1 bg-graphite-950 border border-graphite-700 rounded-lg px-2.5 min-h-[42px]">
+                <input
+                  type="text"
+                  placeholder="Qtd"
+                  value={qtdProdutoParaConsumo}
+                  onChange={(e) => setQtdProdutoParaConsumo(e.target.value)}
+                  className="w-16 bg-transparent text-xs text-right text-vapor-100 font-mono outline-none"
+                />
+                <span className="text-[11px] text-vapor-400 font-bold">
+                  {produtosCatalogo.find((p) => p.id === produtoParaConsumo)?.unidade_uso || 'un'}
+                </span>
+              </div>
+            )}
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => handleAdicionarProdutoConsumo()}
+              disabled={!produtoParaConsumo}
+              className="min-h-[42px] px-3.5 text-xs font-semibold"
+            >
+              <Plus size={15} />
+              Adicionar
+            </Button>
+          </div>
+
+          {/* Lista de Produtos Adicionados */}
+          {produtosConsumidos.length === 0 ? (
+            <div className="py-3 text-center text-xs text-vapor-400 border border-dashed border-graphite-800 rounded-lg">
+              Nenhum produto adicionado (se não informar, o atendimento será lançado sem consumo de químicos).
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {produtosConsumidos.map((prod) => {
+                const qtdNum = Number(prod.quantidade.replace(',', '.')) || 0;
+                const custoItem = qtdNum * (prod.custo_unitario || 0);
+
+                return (
+                  <div
+                    key={prod.produto_id}
+                    className="flex items-center justify-between gap-3 p-2.5 bg-graphite-950 rounded-lg border border-graphite-800"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-white text-xs truncate">
+                        {prod.nome} {prod.marca && <span className="text-vapor-400 font-normal">({prod.marca})</span>}
+                      </div>
+                      <div className="text-[10px] text-vapor-400 font-mono">
+                        {custoItem > 0 ? `Custo: ${formatarMoeda(custoItem)}` : 'Sem custo unitário cadastrado'}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center bg-graphite-900 border border-graphite-700 rounded px-2 py-1">
+                        <input
+                          type="text"
+                          value={prod.quantidade}
+                          onChange={(e) => handleAlterarQtdProduto(prod.produto_id, e.target.value)}
+                          className="w-14 bg-transparent text-xs text-right text-vapor-100 font-mono outline-none"
+                        />
+                        <span className="text-[10px] text-vapor-400 ml-1 font-semibold">{prod.unidade_uso}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoverProdutoConsumo(prod.produto_id)}
+                        className="p-1.5 text-vapor-400 hover:text-rose-400 transition"
+                        title="Remover produto"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* 5. Executor & Pagamento */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {/* Executor / Equipe */}
@@ -911,6 +1206,12 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
           handleAdicionarServico(novoServico.id);
         }
       }}
+    />
+
+    <ModalProduto
+      isOpen={showModalProduto}
+      onClose={() => setShowModalProduto(false)}
+      onSave={handleSalvarNovoProduto}
     />
   </>
   );
