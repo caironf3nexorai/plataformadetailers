@@ -5,6 +5,7 @@ import { Input } from '../ui/Input';
 import { CampoNumerico } from '../ui/CampoNumerico';
 import { ModalServicoRapido } from '../orcamentos/ModalServicoRapido';
 import { ModalProduto } from '../estoque/ModalProduto';
+import { CadastroRapidoModal } from '../clientes/CadastroRapidoModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
@@ -90,6 +91,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
   const [carregandoDados, setCarregandoDados] = useState(false);
   const [showModalServicoRapido, setShowModalServicoRapido] = useState(false);
   const [showModalProduto, setShowModalProduto] = useState(false);
+  const [showCadastroClienteModal, setShowCadastroClienteModal] = useState(false);
 
   // Estados do formulário
   const [dataHora, setDataHora] = useState<string>(() => {
@@ -234,6 +236,43 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
     }
   };
 
+  // Carrega catálogo de clientes e seus veículos
+  const carregarClientes = async () => {
+    if (!tenant) return [];
+    try {
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('id, nome, telefone, veiculos:veiculos(*)')
+        .eq('tenant_id', tenant.id)
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+      if (error) throw error;
+      if (data) {
+        setClientes(data as any);
+        return data as any[];
+      }
+    } catch (err: any) {
+      console.error('[ModalLancarServicoRetroativo] Erro ao carregar clientes:', err);
+    }
+    return [];
+  };
+
+  const handleClienteCadastrado = async (novoClienteId: string, novoVeiculoId?: string) => {
+    setShowCadastroClienteModal(false);
+    showSuccess('Cliente cadastrado com sucesso!');
+    const lista = await carregarClientes();
+    setClienteId(novoClienteId);
+    if (novoVeiculoId) {
+      setVeiculoId(novoVeiculoId);
+    } else {
+      const cli = lista?.find((c: any) => c.id === novoClienteId);
+      if (cli && (cli as any).veiculos?.length > 0) {
+        setVeiculoId((cli as any).veiculos[0].id);
+      }
+    }
+  };
+
   // Carrega dados iniciais ao abrir o modal
   useEffect(() => {
     if (!isOpen || !tenant) return;
@@ -242,15 +281,7 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
       setCarregandoDados(true);
       try {
         await Promise.all([
-          (async () => {
-            const { data } = await supabase
-              .from('clientes')
-              .select('id, nome, telefone, veiculos:veiculos(*)')
-              .eq('tenant_id', tenant.id)
-              .eq('ativo', true)
-              .order('nome', { ascending: true });
-            if (data) setClientes(data as any);
-          })(),
+          carregarClientes(),
           carregarCatalogoServicos(),
           carregarProdutos(),
           carregarMembrosEquipe(),
@@ -698,10 +729,21 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {/* Seletor de Cliente */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-vapor-200 flex items-center gap-1.5">
-              <User size={14} className="text-amber-400" />
-              Cliente *
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold uppercase tracking-wider text-vapor-200 flex items-center gap-1.5">
+                <User size={14} className="text-amber-400" />
+                Cliente *
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowCadastroClienteModal(true)}
+                className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                title="Cadastrar um novo cliente rapidamente"
+              >
+                <Plus size={12} />
+                + Novo Cliente
+              </button>
+            </div>
             <select
               value={clienteId}
               onChange={(e) => setClienteId(e.target.value)}
@@ -1212,6 +1254,12 @@ export const ModalLancarServicoRetroativo: React.FC<ModalLancarServicoRetroativo
       isOpen={showModalProduto}
       onClose={() => setShowModalProduto(false)}
       onSave={handleSalvarNovoProduto}
+    />
+
+    <CadastroRapidoModal
+      isOpen={showCadastroClienteModal}
+      onClose={() => setShowCadastroClienteModal(false)}
+      onSuccess={handleClienteCadastrado}
     />
   </>
   );
