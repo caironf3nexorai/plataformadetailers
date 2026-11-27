@@ -81,12 +81,15 @@ serve(async (req) => {
       payload,
     });
 
-    if (insertErr && insertErr.code === '23505') {
-      // Evento já processado
-      return new Response(JSON.stringify({ status: 'already_processed' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    if (insertErr) {
+      if (insertErr.code === '23505') {
+        // Evento já processado
+        return new Response(JSON.stringify({ status: 'already_processed' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      console.error('[asaas-webhook] Aviso ao gravar assinatura_eventos:', insertErr);
     }
 
     // 3. Processamento dos Eventos do Asaas

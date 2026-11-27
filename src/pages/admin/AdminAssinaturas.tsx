@@ -8,6 +8,7 @@ import {
   formatarDataSegura,
   obterResumoStatusAssinatura,
 } from '../../utils/assinatura';
+import { MonitorWebhookAsaas } from '../../components/admin/MonitorWebhookAsaas';
 
 interface MetricasAssinaturas {
   mrr_centavos: number;
@@ -214,6 +215,9 @@ export const AdminAssinaturas: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Monitoramento de Saúde do Webhook Asaas & Reconciliação */}
+      <MonitorWebhookAsaas onReconciliado={carregarDados} />
 
       {/* Cards de Métricas MRR (Somente ativas não-cortesia contam no MRR) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">

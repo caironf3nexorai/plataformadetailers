@@ -6,13 +6,28 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
 };
 
-function safeCompare(a: string, b: string): boolean {
+async function safeCompare(a: string, b: string): Promise<boolean> {
   if (!a || !b) return false;
   const enc = new TextEncoder();
-  const bufA = enc.encode(a);
-  const bufB = enc.encode(b);
-  if (bufA.byteLength !== bufB.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(bufA, bufB);
+  // Comparação em tempo constante via HMAC-SHA256 (Web Crypto API nativa do Deno)
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode('expurgo-cron-compare-key'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const [sigA, sigB] = await Promise.all([
+    crypto.subtle.sign('HMAC', key, enc.encode(a)),
+    crypto.subtle.sign('HMAC', key, enc.encode(b)),
+  ]);
+  const arrA = new Uint8Array(sigA);
+  const arrB = new Uint8Array(sigB);
+  let diff = 0;
+  for (let i = 0; i < arrA.length; i++) {
+    diff |= arrA[i] ^ arrB[i];
+  }
+  return diff === 0;
 }
 
 serve(async (req: Request) => {
@@ -28,7 +43,11 @@ serve(async (req: Request) => {
 
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    if (!cronSecret || (!safeCompare(token, cronSecret) && !safeCompare(cronHeader, cronSecret))) {
+    const tokenValido = cronSecret
+      ? ((await safeCompare(token, cronSecret)) || (await safeCompare(cronHeader, cronSecret)))
+      : false;
+
+    if (!tokenValido) {
       return new Response(JSON.stringify({ error: 'Não autorizado: Secret do CRON inválido ou ausente.' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
