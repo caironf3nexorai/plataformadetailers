@@ -202,6 +202,60 @@ $$;
 
 REVOKE ALL ON FUNCTION public.disparar_monitoramento_asaas_cron() FROM PUBLIC, anon, authenticated;
 
+-- 3.1. Função de disparo diário autenticado do expurgo de fotos (corrige job antigo que enviava headers vazios)
+DROP FUNCTION IF EXISTS public.disparar_expurgo_fotos_cron();
+CREATE OR REPLACE FUNCTION public.disparar_expurgo_fotos_cron()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_url TEXT := 'https://oamwsqlszahyjkaksouh.supabase.co/functions/v1/expurgo-fotos';
+  v_cron_secret TEXT;
+  v_req_id BIGINT;
+BEGIN
+  IF to_regnamespace('net') IS NULL THEN
+    RETURN jsonb_build_object('disparado', false, 'motivo', 'extensao_pg_net_indisponivel');
+  END IF;
+
+  IF to_regclass('vault.decrypted_secrets') IS NOT NULL THEN
+    EXECUTE $q$
+      SELECT decrypted_secret FROM vault.decrypted_secrets
+      WHERE name IN ('cron_secret', 'CRON_SECRET')
+      LIMIT 1
+    $q$ INTO v_cron_secret;
+  END IF;
+
+  IF COALESCE(v_cron_secret, '') = '' THEN
+    v_cron_secret := current_setting('app.settings.cron_secret', true);
+  END IF;
+
+  IF COALESCE(v_cron_secret, '') = '' THEN
+    RETURN jsonb_build_object('disparado', false, 'motivo', 'cron_secret_nao_configurado_no_vault');
+  END IF;
+
+  EXECUTE $q$
+    SELECT net.http_post(
+      url := $1,
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'x-cron-secret', $2
+      ),
+      body := '{}'::jsonb,
+      timeout_milliseconds := 10000
+    )
+  $q$ INTO v_req_id USING v_url, v_cron_secret;
+
+  RETURN jsonb_build_object('disparado', true, 'request_id', v_req_id, 'url', v_url);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('disparado', false, 'erro', SQLERRM);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.disparar_expurgo_fotos_cron() FROM PUBLIC, anon, authenticated;
+
 -- 4. Agendamento diário no pg_cron (06:15 UTC = 03:15 Brasília, após rotina-diaria-assinaturas)
 DO $$
 BEGIN
@@ -214,6 +268,17 @@ BEGIN
       'monitoramento-diario-webhook-asaas',
       '15 6 * * *',
       'SELECT public.disparar_monitoramento_asaas_cron();'
+    );
+
+    -- Atualiza também o cron de expurgo-fotos-diario para enviar x-cron-secret via Vault
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'expurgo-fotos-diario') THEN
+      PERFORM cron.unschedule('expurgo-fotos-diario');
+    END IF;
+
+    PERFORM cron.schedule(
+      'expurgo-fotos-diario',
+      '0 6 * * *',
+      'SELECT public.disparar_expurgo_fotos_cron();'
     );
   END IF;
 END;
