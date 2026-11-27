@@ -14,20 +14,36 @@ function getHojeSaoPauloIso(): string {
   }).format(new Date());
 }
 
-function safeCompare(a: string, b: string): boolean {
+async function safeCompare(a: string, b: string): Promise<boolean> {
   if (!a || !b) return false;
   const enc = new TextEncoder();
-  const bufA = enc.encode(a);
-  const bufB = enc.encode(b);
-  if (bufA.byteLength !== bufB.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(bufA, bufB);
+  // Usa HMAC-SHA256 para comparação em tempo constante, compatível com Deno
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode('webhook-compare-key'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const [sigA, sigB] = await Promise.all([
+    crypto.subtle.sign('HMAC', key, enc.encode(a)),
+    crypto.subtle.sign('HMAC', key, enc.encode(b)),
+  ]);
+  // ArrayBuffer para Uint8Array para comparação byte a byte
+  const arrA = new Uint8Array(sigA);
+  const arrB = new Uint8Array(sigB);
+  let diff = 0;
+  for (let i = 0; i < arrA.length; i++) {
+    diff |= arrA[i] ^ arrB[i];
+  }
+  return diff === 0;
 }
 
 serve(async (req) => {
   try {
     // 1. Validação de Token no Cabeçalho em Tempo Constante (Anti Timing-Attack)
     const tokenHeader = req.headers.get('asaas-access-token') || '';
-    if (!ASAAS_WEBHOOK_SECRET || !safeCompare(tokenHeader, ASAAS_WEBHOOK_SECRET)) {
+    if (!ASAAS_WEBHOOK_SECRET || !(await safeCompare(tokenHeader, ASAAS_WEBHOOK_SECRET))) {
       return new Response(JSON.stringify({ error: 'Não autorizado' }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
